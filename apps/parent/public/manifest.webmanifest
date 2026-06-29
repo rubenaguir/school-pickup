@@ -1,0 +1,10 @@
+{
+  "name": "CasiLlego — App del padre",
+  "short_name": "CasiLlego",
+  "description": "Avisa que vas en camino a recoger a tu alumno.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b5cff",
+  "icons": []
+}

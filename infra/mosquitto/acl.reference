@@ -1,0 +1,23 @@
+# ACL de Mosquitto — REFERENCIA para el broker MQTT externo/compartido.
+#
+# CasiLlego NO levanta su propio broker: usa un Mosquitto existente compartido con
+# otras aplicaciones. Por eso todos los topics cuelgan del prefijo raíz
+# "school-pickup/". Este archivo documenta las reglas de ACL que el operador del
+# broker debe aplicar para aislar a CasiLlego y a cada institución (tenant).
+#
+# Aislamiento multi-tenant: cada cliente solo puede publicar/suscribirse a los
+# topics de SU institución, todos bajo el prefijo raíz "school-pickup/".
+#
+# Los usuarios reales y sus reglas por institución los emite/gestiona el api en
+# fases posteriores. Patrón objetivo (ejemplo):
+#
+#   user staff_<institutionId>
+#   topic readwrite school-pickup/institution/<institutionId>/#
+#
+#   user guardian_<userId>
+#   topic write school-pickup/institution/<institutionId>/pickup/+/location
+#   topic read  school-pickup/institution/<institutionId>/board
+#
+# El broker debe estar configurado con allow_anonymous false. Crear usuarios en
+# el host del broker con:
+#   mosquitto_passwd -b /etc/mosquitto/passwd <user> <pass>
