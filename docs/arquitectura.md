@@ -24,7 +24,9 @@ Proceso de larga duración suscrito al broker MQTT. Responsabilidades:
 - Recalcular el ETA con throttling (no en cada tick del GPS) llamando a la API
   de mapas con tráfico en vivo.
 - Persistir la última posición y el ETA en `pickup_request`.
-- Publicar el estado actualizado al topic del tablero de la institución.
+- Publicar el estado actualizado al topic agregado del tablero y, cuando el
+  `pickup_request` tiene `delivery_point_id` asignado, también al topic
+  específico de esa cola de puerta.
 
 > En Node este patrón es natural (modelo orientado a eventos). Se ejecuta como
 > servicio bajo el orquestador (Docker / systemd).
@@ -33,8 +35,9 @@ Proceso de larga duración suscrito al broker MQTT. Responsabilidades:
 Portal administrativo web. Tres roles conviven en el mismo SPA:
 - **super-admin** (operador de la plataforma): aprueba instituciones, métricas.
 - **admin / staff de institución**: aprueba alumnos, configura geocerca y
-  horarios, gestiona el personal del tablero.
-- **tutor**: alta de alumnos, asociación a instituciones, tutores autorizados.
+  horarios, gestiona el personal, los puntos de entrega y la consola de puerta.
+- **tutor**: alta de alumnos, asociación a instituciones, tutores autorizados,
+  catálogo de vehículos, preferencias de notificación.
 
 ### 4. `parent` (PWA React) — "Camino A"
 App del padre como PWA instalable. No usa background tracking nativo. En su lugar:
@@ -51,7 +54,8 @@ el plugin de background sin tocar el resto. Ver `docs/decisiones.md`.
 ### 5. `board` (PWA React, modo kiosko)
 Pantalla grande dentro de la institución. Muestra el listado de alumnos próximos
 a ser recogidos, estilo "llegadas de aeropuerto". Se suscribe por MQTT.js al
-topic de su institución y usa la Web Speech API (TTS) para el voceo automático.
+topic **agregado** de su institución y usa la Web Speech API (TTS) para el
+voceo automático.
 
 ### 6. Broker MQTT (Mosquitto)
 Transporte de tiempo real. Expone un listener WSS para los navegadores. El `api`
@@ -61,29 +65,95 @@ y el `worker` se conectan con la librería `mqtt` de Node.
 Persistencia. PostGIS habilita geocercas y consultas de distancia (detectar
 arribo, ordenar por cercanía). Ver `docs/modelo-datos.md`.
 
+## Arquitectura de capas y convenciones de módulos
+
+No se aplica Clean Architecture completa (sin casos de uso separados, sin
+entidades de dominio desacopladas del ORM, sin interfaz de repositorio
+genérica): el costo de ceremonia no se justifica en un proyecto de un solo
+desarrollador con ORM y base de datos ya fijados (ADR-006) y con NestJS, que
+ya aporta modularidad e inyección de dependencias. Ver ADR-017 para el
+razonamiento completo.
+
+**Capas por módulo NestJS:** Controller → Service → Entidad de TypeORM, sin
+capas intermedias. Un módulo por contexto de dominio (`institutions`,
+`students`, `enrollments`, `pickups`, `delivery-points`, `vehicles`, …).
+Ejemplo ilustrativo para el módulo `institutions`:
+```
+institutions/
+  institutions.controller.ts
+  institutions.service.ts
+  institution.entity.ts
+```
+
+**Inversión de dependencias solo en integraciones volátiles.** Se definen
+interfaces (ports) con implementación concreta inyectada por NestJS
+únicamente donde el proveedor externo es genuinamente propenso a cambiar:
+- `MapsProvider` — cálculo de ETA con tráfico en vivo. Implementación
+  concreta pendiente de elegir (Google Maps o Mapbox). Vive en el `worker`.
+- `EmailProvider` — envío de correo transaccional. Implementación concreta
+  actual: `ResendEmailProvider` (ver ADR-009).
+- `MqttClient` — wrapper del cliente MQTT usado por `api` y `worker`, para
+  poder testear sin un broker real.
+
+`LocationProvider` (ver sección de `parent` arriba y ADR-002) es parte de la
+misma familia de decisión, aunque vive en el frontend y no en el backend.
+
+**Máquina de estados de `pickup_request` en `packages/shared`.** Las
+transiciones válidas del ciclo de vida (`en_route → arriving → arrived →
+delivered/cancelled`, ver ADR-013 y `docs/modelo-datos.md`) se implementan
+como función pura, sin dependencia de TypeORM ni de NestJS, en
+`packages/shared/pickup-request-status-machine.ts` (nombre sugerido), con
+funciones tipo `canTransition(from, to): boolean` y
+`nextValidStates(from): Status[]`. Es la única pieza de lógica de dominio
+aislada explícitamente, consumida tanto por `api` como por `worker` para
+evitar que ambos procesos diverjan en su validación. Ver ADR-017.
+
 ## Flujo de tiempo real (recogida)
 
 1. El tutor toca "voy en camino" y elige la institución (el alumno asiste a
-   varias). Se crea un `pickup_request`.
+   varias). Se crea un `pickup_request` y, al crearlo, se resuelve
+   automáticamente su `delivery_point_id` matcheando
+   `enrollments.grade_or_group` contra `delivery_points.assigned_groups` (ver
+   ADR-012).
 2. La app `parent` publica su ubicación a
    `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`.
 3. El `worker`, suscrito, recibe la ubicación, recalcula el ETA (con throttling)
    y persiste la última posición y `estimated_arrival_at`.
-4. El `worker` publica el estado a `school-pickup/institution/{institutionId}/board`.
-5. El `board`, suscrito a ese topic, refresca el listado en vivo.
-6. Cuando el alumno está en el área de entrega, el staff lo marca; ese estado
-   viaja por el mismo canal y la app del padre lo recibe al instante (sin push).
+4. El `worker` publica el estado actualizado:
+   - Siempre al feed agregado del tablero:
+     `school-pickup/institution/{institutionId}/board`.
+   - Cuando el `pickup_request` tiene `delivery_point_id`, también al topic
+     específico de esa puerta:
+     `school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue`.
+5. El `board`, suscrito al agregado, refresca el listado en vivo. Cada consola
+   de puerta, suscrita a su cola específica, ve solo los alumnos asignados a
+   ese punto de entrega.
+6. Cuando el alumno está en el área de entrega, el staff lo marca en la consola
+   de puerta y verifica el `delivery_code` que el tutor muestra en su app;
+   esa transición viaja por los mismos canales y la app del padre la recibe al
+   instante (sin push).
 
 ## Estructura de topics MQTT y seguridad
 
 - **Prefijo raíz de proyecto**: todos los topics cuelgan de `school-pickup/`. El
   broker (Mosquitto) es compartido con otras aplicaciones, así que este prefijo
   aísla el namespace de CasiLlego y evita colisiones con otros sistemas.
-- Dentro de ese prefijo, segmentado siempre por institución:
-  `school-pickup/institution/{institutionId}/...`.
+- Segmentación por institución (base multi-tenant) y, cuando aplica, por punto
+  de entrega:
+  ```
+  school-pickup/institution/{institutionId}/board
+      # feed agregado del tablero de la institución
+  school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
+      # cola específica de cada punto de entrega (para su consola)
+  school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
+      # ubicación publicada por la app del padre
+  ```
 - **ACL por tenant** en el broker: cada cliente solo puede publicar/suscribirse
   a los topics de la institución a la que pertenece. Un tutor de una institución
-  NO debe poder suscribirse a los topics de otra.
+  NO debe poder suscribirse a los topics de otra. Cualquier `institution_member`
+  de la institución puede suscribirse a cualquiera de los topics de
+  delivery-point de su institución (consistente con ADR-011: el acceso a la
+  consola de puerta no está restringido por rol dentro del mismo tenant).
 - TLS obligatorio (WSS). Autenticación por usuario/token en el broker, nunca
   anónimo. Tokens emitidos por el `api` tras el login.
 
@@ -108,5 +178,10 @@ arribo, ordenar por cercanía). Ver `docs/modelo-datos.md`.
 La asociación alumno–institución requiere aprobación de la institución, y cada
 alumno tiene una lista de **tutores autorizados**. El `pickup_request` registra
 qué tutor va en camino, de modo que la institución pueda verificar que quien
-recoge es alguien autorizado. (Mecanismo de confirmación en el punto de entrega
-—QR/PIN— es una mejora prevista, no parte del MVP mínimo.)
+recoge es alguien autorizado.
+
+Como capa adicional de verificación, cada `pickup_request` incluye un
+**código de entrega de 4 dígitos** (`delivery_code`) que el tutor ve en su
+app al alcanzar el estado "En puerta". El staff lo verifica en la consola de
+puerta contra el valor del `pickup_request` antes de confirmar la entrega y
+disparar la transición a `delivered`. Ver ADR-013.

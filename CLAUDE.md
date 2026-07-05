@@ -44,6 +44,7 @@ DENTRO:
 - Asociación alumno–institución con aprobación por parte de la institución.
 - Tracking en primer plano + ETA con throttling.
 - Tablero en vivo vía MQTT.
+- Consola de puerta con verificación por código de entrega de 4 dígitos.
 
 FUERA (por ahora):
 - Carpool / un tutor recogiendo varios alumnos a la vez.
@@ -72,15 +73,22 @@ docs/         Documentación (español)
 - `snake_case` en base de datos; `camelCase` en TypeScript. Las entidades de
   TypeORM hacen el mapeo entre ambos.
 - Identificadores de dominio en inglés: `institution`, `student`, `guardian`,
-  `enrollment`, `pickup_request`, `location_update`.
+  `enrollment`, `pickup_request`, `location_update`, `delivery_point`, `vehicle`.
 - Todos los topics MQTT cuelgan del prefijo raíz de proyecto `school-pickup/`
   (el broker es compartido con otras aplicaciones; así se evita la colisión de
-  namespaces). Dentro de ese prefijo, segmentados por institución:
-  `school-pickup/institution/{institutionId}/...`, con ACL por tenant en el
-  broker. Un cliente NUNCA debe poder suscribirse a topics de otra institución.
+  namespaces). Dentro de ese prefijo, segmentados por institución y, cuando
+  aplica, por punto de entrega (ver `docs/arquitectura.md`). ACL por tenant
+  en el broker. Un cliente NUNCA debe poder suscribirse a topics de otra
+  institución.
 - Toda acción sensible (aprobaciones, alta/baja de tutores) se registra en
   `audit_log`.
 - Comunicación TLS en todo (HTTPS y WSS). MQTT con autenticación, nunca anónimo.
+- Backend en capas simples por módulo NestJS (Controller → Service → Entidad
+  TypeORM), sin Clean Architecture completa. Interfaces (ports) solo para
+  integraciones volátiles: `MapsProvider`, `EmailProvider`, `MqttClient`. La
+  máquina de estados de `pickup_request` es la única lógica de dominio
+  aislada, como función pura compartida en `packages/shared`. Detalle
+  completo en `docs/arquitectura.md` y ADR-017.
 
 ## Documentos de referencia
 
