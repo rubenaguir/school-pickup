@@ -12,7 +12,7 @@ existencia de filas en `student_guardian`.
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `email` | `varchar(255)` | NOT NULL, único | login |
-| `password_hash` | `varchar(255)` | NOT NULL | hash Argon2 |
+| `password_hash` | `varchar(255)` | nullable | hash Argon2; `NULL` mientras el usuario está `invited` sin haber definido contraseña. Ver ADR-022 |
 | `full_name` | `varchar(255)` | NOT NULL | |
 | `phone` | `varchar(30)` | nullable | |
 | `status` | `enum` (`active`, `invited`, `suspended`) | NOT NULL, default `invited` | |
@@ -47,6 +47,7 @@ existencia de filas en `student_guardian`.
 - La condición de "tutor" no es un flag en `user`: se deriva de tener al menos una fila en `student_guardian` como `guardian_user_id`.
 - La autenticación biométrica ("inicio con huella") es responsabilidad exclusiva del cliente (WebAuthn/plataforma) y no tiene representación en esta tabla. Ver ADR-016.
 - La mayoría de los FK hacia `user` en el resto del modelo asumen borrado lógico (`status = suspended`), no borrado físico — de ahí que la mayoría de relaciones entrantes usen `ON DELETE RESTRICT`/`SET NULL` en vez de `CASCADE`.
+- `password_hash` es nullable: es `NULL` para un `user` invitado por un admin (`institution_member`) o por otro tutor (`student_guardian`) que aún no define contraseña. Invariante: un `user` con `status = active` debe tener `password_hash` no nulo. No se implementa como `CHECK` constraint; se valida en la capa de servicio al activar la cuenta (auto-registro con contraseña de entrada, o aceptación de invitación que la define por primera vez), consistente con ADR-017. Ver ADR-022.
 
 ## Enums
 
@@ -57,3 +58,4 @@ existencia de filas en `student_guardian`.
 - ADR-016 (preferencias de notificación inline, biometría solo cliente).
 - ADR-011 (el rol operativo vive en `institution_member`, no aquí).
 - ADR-018 (transiciones válidas de `status`).
+- ADR-022 (`password_hash` nullable; invariante `active` ⇒ `password_hash` no nulo).

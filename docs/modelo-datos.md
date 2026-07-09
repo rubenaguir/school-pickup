@@ -33,7 +33,7 @@ Cuenta de autenticación para todos los roles.
 |---|---|---|
 | `id` | uuid (PK) | |
 | `email` | varchar | único |
-| `password_hash` | varchar | Argon2 |
+| `password_hash` | varchar | nullable; Argon2. `NULL` mientras `status = invited` sin contraseña definida — ver ADR-022 |
 | `full_name` | varchar | |
 | `phone` | varchar | nullable |
 | `status` | enum | `active`, `invited`, `suspended` |

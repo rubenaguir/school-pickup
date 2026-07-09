@@ -28,10 +28,13 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–021 (`docs/decisiones.md`): stack, dominio, arquitectura de
+- [x] ADRs 001–023 (`docs/decisiones.md`): stack, dominio, arquitectura de
       capas (ADR-017), reglas de negocio de entidades (ADR-018), resolución
       de preguntas abiertas del slice auth/enrollment (ADR-019), versiones de
-      frontend (ADR-020), compuerta de calidad (ADR-021)
+      frontend (ADR-020), compuerta de calidad (ADR-021), resolución de
+      preguntas abiertas del slice de configuración de institución (ADR-022),
+      resolución de preguntas abiertas del slice de vehículos y tutores
+      autorizados (ADR-023)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
       relaciones, índices, invariantes y enums
@@ -67,11 +70,41 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
       límite de tasa de reenvío (3/hora por email) decidido directamente
       contigo al trabajar la spec
 - [x] Slice auth/enrollment **cerrado** (sin preguntas abiertas pendientes)
+- [x] `specs/features/008-013-*.md` — slice de configuración de institución:
+      editar perfil/geocerca, gestionar puntos de entrega, horarios
+      recurrentes, días especiales, invitar personal, aceptar invitación
+- [x] `specs/api-contracts/{institutions,delivery-points,dismissal-windows,`
+      `dismissal-exceptions,institution-members}.md` correspondientes
+- [x] **Resolver 5 preguntas abiertas** del slice (ADR-022): rol `admin` para
+      las acciones de configuración, `users.password_hash` nullable (usuario
+      invitado sin contraseña) con invariante `active` ⇒ no nulo, activación
+      por token unificada entre 007 y 013, `InstitutionMembershipGuard` para
+      el aislamiento multi-tenant, y convenciones (422 para validaciones
+      cruzadas, protección del último admin, reenvío de invitación vía
+      re-invitación)
+- [x] `specs/entities/user.md` y `docs/modelo-datos.md` actualizados:
+      `password_hash` pasa a nullable (ADR-022, punto 2)
+- [x] Slice de configuración de institución **cerrado** (sin preguntas
+      abiertas pendientes)
+- [x] `specs/features/014-017-*.md` — slice de vehículos y tutores autorizados:
+      gestionar catálogo de vehículos, invitar tutor autorizado, aceptar
+      invitación de tutor, gestionar tutores autorizados (revocar/reasignar
+      primariedad)
+- [x] `specs/api-contracts/{vehicles,student-guardians}.md` correspondientes
+- [x] **Resolver 5 preguntas abiertas** del slice (ADR-023): promoción del
+      principal al borrar un vehículo (seleccionada por el tutor), solo el
+      guardián `is_primary` invita/revoca/reasigna, aceptación obligatoria en
+      ambas ramas (incl. `user` ya activo, sin contraseña), reuso del endpoint
+      compartido `POST /invitations/:token/accept`, y protección del principal
+      (reasignar primariedad antes de revocar)
+- [x] Slice de vehículos y tutores autorizados **cerrado** (sin preguntas
+      abiertas pendientes); sin cambios de entidad (`is_primary`/`status` ya
+      existían)
 - [ ] Especificar los slices restantes antes de dar Fase 1 por completa
       (los módulos de Fase 5/6 los necesitan primero):
-      - [ ] Configuración de institución (geocerca, radios, horarios,
+      - [x] Configuración de institución (geocerca, radios, horarios,
             puntos de entrega, personal)
-      - [ ] Catálogo de vehículos + tutores autorizados (`student_guardian`)
+      - [x] Catálogo de vehículos + tutores autorizados (`student_guardian`)
       - [ ] Flujo completo `pickup_request` (ADR-012, ADR-013, ADR-014) +
             topics MQTT (`MqttClient`, ver ADR-017)
 

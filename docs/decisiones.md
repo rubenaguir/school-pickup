@@ -590,3 +590,172 @@ en un backend NestJS con mucho async.
 - Cada "Invariante de negocio" de una spec deberá respaldarse con un test o
   un constraint de BD (Nivel 2, al escribir cada módulo): así la compuerta
   cubre también corrección de negocio, no solo tipos.
+
+## ADR-022 — Resolución de preguntas abiertas del vertical slice de configuración de institución
+
+**Contexto.** Al construir el segundo vertical slice de SDD
+(`specs/features/008`–`013` y `specs/api-contracts/institutions.md`,
+`delivery-points.md`, `dismissal-windows.md`, `dismissal-exceptions.md`,
+`institution-members.md` — configuración operativa de una institución ya
+aprobada) se identificaron 5 preguntas abiertas de negocio/implementación.
+Se resuelven aquí.
+
+**Decisión.**
+1. **Autorización de las acciones de configuración.** Toda acción de
+   configuración/identidad de una institución —editar el perfil (feature 008),
+   regenerar `join_code`, gestionar puntos de entrega (009), horarios
+   recurrentes (010), días especiales (011), invitar personal (012) y cambiar
+   el `role` de un miembro— requiere que el usuario autenticado sea
+   `institution_member` de esa institución **y** tenga `role = admin`. Es la
+   misma restricción, y por la misma razón, que aprobar/rechazar un
+   `enrollment` (ADR-019, punto 5): son decisiones de control de acceso e
+   identidad, de mayor sensibilidad que la cobertura operativa de la consola de
+   puerta (ADR-011, sin restricción de rol). La lectura (`GET`) de estos
+   recursos está disponible para cualquier `institution_member` de la
+   institución. Nota: una institución nunca nace sin admin — su primer `admin`
+   se crea junto con ella en el alta (feature 001); los admins adicionales se
+   crean por invitación (feature 012) de un admin ya existente. No se
+   especifica en este slice un flujo de super-admin creando admins directamente;
+   si se requiere, será una feature aparte.
+2. **`users.password_hash` pasa a nullable.** El flujo de invitación de personal
+   (feature 012, caso de correo nuevo) crea un `user` con `status = invited`
+   antes de que esa persona defina una contraseña; esta la establece al aceptar
+   la invitación (feature 013). Para representarlo sin hashes placeholder ni
+   tablas auxiliares, `password_hash` se vuelve **nullable**: es `NULL` mientras
+   el usuario está `invited` sin haber definido contraseña, y se llena al
+   activarse. Invariante asociada: un `user` con `status = active` debe tener
+   `password_hash` no nulo (se valida en la capa de servicio al activar, no con
+   CHECK en BD, consistente con ADR-017). El auto-registro (features 001/002)
+   sigue definiendo la contraseña de entrada, así que en ese camino
+   `password_hash` nunca es nulo.
+3. **Activación de cuenta por token, parametrizada.** La verificación de correo
+   (feature 007) y la aceptación de invitación (feature 013) comparten mecanismo
+   —JWT firmado de corta duración, sin persistencia, que lleva `user.status` de
+   `invited` a `active`— y difieren solo en si el paso incluye definir la
+   contraseña por primera vez. Se unifican en un único mecanismo de activación
+   por token parametrizado por ese detalle (verificación: no fija contraseña;
+   invitación: fija contraseña). Evita dos implementaciones divergentes del
+   mismo flujo.
+4. **Aislamiento multi-tenant vía `InstitutionMembershipGuard` (NestJS).** El
+   aislamiento multi-tenant a nivel API se implementa con un guard de NestJS que
+   corre después del guard de JWT y exige que exista un `institution_member`
+   `(userId, institutionId)` antes de dejar pasar el request. Para rutas
+   anidadas (`/institutions/:institutionId/...`) el guard lee el `institutionId`
+   del parámetro de ruta; para rutas por recurso (ej. `PATCH /delivery-points/:id`)
+   resuelve la institución del recurso con una consulta mínima al repositorio
+   antes de comparar contra las membresías. Complemento obligatorio: los
+   services filtran siempre por el `institutionId` del contexto autenticado,
+   nunca por uno recibido en el body. **No se usa Row-Level Security de
+   Postgres**: es ceremonia innecesaria dado ADR-017 (capas simples, lógica de
+   negocio en la aplicación, base de datos simple).
+5. **Convenciones puntuales.**
+   - **Código HTTP para validaciones cruzadas entre entidades:** convención de
+     proyecto — una petición bien formada que viola una regla de negocio que
+     cruza entidades devuelve **422 Unprocessable Entity** (no 400, reservado
+     para peticiones mal formadas: falta de campo, tipo incorrecto). Aplica a
+     `operator_user_id` que no es miembro de la institución (ADR-018, punto 11),
+     y en general a toda validación cruzada del API.
+   - **Protección del último admin:** el cambio de `role`
+     (`PATCH /institution-members/:id`) y cualquier baja de personal deben
+     rechazarse con **422** si el miembro afectado es el único con `role = admin`
+     de esa institución. Sin esta regla una institución puede quedar sin nadie
+     capaz de aprobar enrollments, gestionar personal o editar la configuración
+     — un estado irrecuperable sin intervención manual en la base de datos.
+   - **Re-invitación:** no hay endpoint de reenvío separado para invitaciones de
+     personal. Volver a llamar `POST /institutions/:id/members/invite` con un
+     correo cuyo `user` sigue en `status = invited` (y cuyo `institution_member`
+     ya existe desde la primera invitación) se comporta como reenvío: genera un
+     token nuevo, reenvía el correo y **no** crea un `institution_member`
+     duplicado (respeta el único `(institution_id, user_id)`). Si el `user` ya
+     está `active` (aceptó, o el correo era de un usuario existente), la
+     invitación repetida se rechaza con conflicto. Difiere del auto-registro
+     (que sí necesita `POST /auth/resend-verification`) porque allí el registro
+     ya dejó una contraseña puesta y no puede reejecutarse.
+
+**Consecuencias.**
+- `users.password_hash` cambia de `NOT NULL` a nullable (actualiza
+  `specs/entities/user.md` y `docs/modelo-datos.md`); nueva invariante
+  "`status = active` ⇒ `password_hash` no nulo" validada en capa de servicio.
+- Las 11 specs del slice dejan de marcar como "pregunta abierta" el rol de
+  configuración (resuelto: `admin`), el mecanismo multi-tenant (resuelto:
+  `InstitutionMembershipGuard`) y las convenciones del punto 5.
+- Nuevo componente transversal a implementar: `InstitutionMembershipGuard`.
+- Regla de negocio nueva a forzar por test (ADR-021): protección del último
+  admin; e invariante de `password_hash` no nulo cuando `active`.
+- No se agregan entidades nuevas al modelo de datos. La feature 007 y la 013
+  comparten un mismo servicio de activación por token.
+
+## ADR-023 — Resolución de preguntas abiertas del vertical slice de vehículos y tutores autorizados
+
+**Contexto.** Al construir el tercer vertical slice de SDD
+(`specs/features/014`–`017` y `specs/api-contracts/vehicles.md`,
+`student-guardians.md` — catálogo de vehículos del tutor y gestión de tutores
+autorizados adicionales por alumno) se identificaron 5 preguntas abiertas de
+negocio. Se resuelven aquí. Ninguna requiere cambios de esquema: `is_primary` y
+`status` ya existen en `vehicles` y `student_guardians`.
+
+**Decisión.**
+1. **Borrado del vehículo principal.** Al eliminar un `vehicle` con
+   `is_primary = true`, si el tutor tiene otros vehículos en el catálogo se
+   promueve otro a principal, **seleccionado por el tutor** (no una promoción
+   automática arbitraria): la operación de borrado indica cuál de los vehículos
+   restantes queda como nuevo principal. Si el vehículo principal era el único
+   del catálogo, el borrado procede y el catálogo simplemente queda vacío, sin
+   principal.
+2. **Autorización para invitar tutores: solo el principal.** Solo el
+   `student_guardian` con `is_primary = true` (y `status = active`) de un alumno
+   puede invitar tutores autorizados adicionales. Los guardianes no principales
+   (aunque estén `active`) no invitan. Es la misma clase de decisión de
+   control de identidad que motivó restringir acciones al `admin` en ADR-019
+   (punto 5) y ADR-022 (punto 1): aquí el "dueño" del alumno es el guardián
+   principal.
+3. **La invitación de tutor siempre requiere aceptación.** La fila
+   `student_guardian` nace en `status = invited` en ambas ramas de la invitación
+   (correo de `user` nuevo y correo de `user` ya existente y `active`), y en
+   todos los casos la persona invitada debe **aceptar** para que su
+   `student_guardian` pase a `active` — es un consentimiento explícito a quedar
+   autorizada sobre un alumno ajeno. Para un `user` que ya está `active`, la
+   aceptación no define contraseña ni verifica correo: solo transiciona el
+   `student_guardian` de `invited` a `active`. El mecanismo único de activación
+   por token (ADR-022, punto 3) se parametriza también por si el `user` ya está
+   activo (en cuyo caso omite el paso de contraseña).
+4. **La aceptación reutiliza el endpoint compartido.** La aceptación de
+   invitación de tutor usa el mismo endpoint que la de personal,
+   `POST /invitations/:token/accept` (ver
+   `specs/api-contracts/institution-members.md`), distinguiendo el tipo de
+   invitación por el payload del token y aplicando el efecto secundario que
+   corresponda: para tutor, `student_guardian.status → active` (y, solo si el
+   `user` estaba `invited` sin contraseña, además `user.status → active` con
+   definición de contraseña). Consistente con ADR-022 (punto 3).
+5. **Revocación de tutores.**
+   - **Autorización:** solo el `student_guardian` con `is_primary = true` (y
+     `status = active`) puede revocar a otros guardianes del alumno (misma
+     autoridad que para invitar, punto 2).
+   - **Protección del principal / último guardián activo:** no se puede revocar a
+     un `student_guardian` con `is_primary = true` sin **reasignar antes** la
+     primariedad a otro guardián `active`. Esto incluye la auto-revocación del
+     propio principal: para retirarse, primero debe reasignar `is_primary` a otro
+     guardián activo. Evita que un alumno quede sin ningún guardián activo (mismo
+     patrón de riesgo que la protección del último admin, ADR-022 punto 5).
+   - **Reasignación de la primariedad:** se hace vía
+     `PATCH /student-guardians/:id` fijando `isPrimary = true` sobre el nuevo
+     principal, lo que desmarca al anterior (índice único parcial de Postgres,
+     ADR-018 punto 6). Esta reasignación está reservada al `is_primary` actual.
+
+**Consecuencias.**
+- No se agregan ni modifican entidades: las decisiones se apoyan en columnas ya
+  existentes (`vehicles.is_primary`, `student_guardians.is_primary`,
+  `student_guardians.status`).
+- `DELETE /vehicles/:id` acepta la designación del nuevo principal cuando se
+  borra el vehículo principal y existen otros.
+- `PATCH /student-guardians/:id` cubre dos operaciones: revocar
+  (`status = revoked`) y reasignar la primariedad (`isPrimary = true`).
+- Las 6 specs del slice dejan de marcar preguntas abiertas: quedan resueltas la
+  promoción al borrar el principal, la autorización de invitación/revocación
+  (solo `is_primary`), la aceptación obligatoria (incl. para `user` ya activo),
+  el reuso del endpoint de aceptación y la protección del principal.
+- El servicio de activación por token (ADR-022 punto 3) gana un caso más:
+  aceptación sin definición de contraseña (para el `user` ya `active`).
+- Reglas de negocio nuevas a forzar por test (ADR-021): solo el principal invita
+  y revoca; no se revoca al principal sin reasignar primero; promoción del
+  principal al borrar un vehículo principal.
