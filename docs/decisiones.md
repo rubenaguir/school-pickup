@@ -344,6 +344,59 @@ general.
 - La biometría no contamina el esquema del backend.
 - Los folios/matrículas escalan naturalmente al modelo multi-institución.
 
+## ADR-017 — Arquitectura de capas simple (no Clean Architecture completa)
+
+**Contexto.** El backend (`api` y `worker`) necesita una arquitectura de capas
+clara antes de empezar a implementar los módulos de dominio. Se evaluó Clean
+Architecture completa (casos de uso, entidades de dominio desacopladas del
+ORM, interfaces de repositorio) y se descartó por el costo de ceremonia
+(boilerplate de interfaces, mappers entre capas) frente al beneficio real en
+un proyecto de un solo desarrollador que ya fijó su ORM y base de datos
+(ADR-006) y que usa NestJS, cuyo sistema de módulos e inyección de
+dependencias ya cubre gran parte del valor de esa separación.
+
+**Decisión.**
+1. **Arquitectura en capas simple por módulo de NestJS:** Controller →
+   Service → Entidad de TypeORM. Sin capa de casos de uso separada, sin
+   entidades de dominio distintas de las entidades de TypeORM, sin interfaz
+   de repositorio genérica. Un módulo de NestJS por contexto de dominio:
+   `auth`, `institutions`, `students`, `enrollments`, `pickups`,
+   `delivery-points`, `vehicles`, entre otros que surjan al detallar
+   `specs/features/`.
+2. **Inversión de dependencias solo en integraciones volátiles**, mediante
+   interfaces (ports) con implementación concreta inyectada por NestJS:
+   - `MapsProvider`: cálculo de ETA con tráfico en vivo. Implementación
+     concreta pendiente de elegir (Google Maps o Mapbox, ver
+     `arquitectura.md`). Vive en el `worker`.
+   - `EmailProvider`: envío de correo transaccional. Implementación concreta
+     `ResendEmailProvider` ahora, con migración futura a `SesEmailProvider`
+     ya prevista en ADR-009.
+   - `MqttClient`: wrapper del cliente MQTT usado por `api` y `worker`, para
+     poder testear sin un broker real.
+   - `LocationProvider` (ya definido en ADR-002 para `apps/parent`) sigue el
+     mismo patrón; se documenta aquí como parte de la misma familia de
+     decisión, no como caso aislado.
+3. **Lógica de estado de `pickup_request` como módulo puro compartido.** Las
+   transiciones válidas del ciclo de vida (`en_route → arriving → arrived →
+   delivered/cancelled`, ver `docs/modelo-datos.md`) se implementan como
+   función pura en `packages/shared` (sin dependencia de TypeORM ni de
+   NestJS), consumida tanto por `api` como por `worker` para validar
+   transiciones antes de persistir un cambio de estado. Es la única pieza de
+   lógica de dominio que se aísla explícitamente, por ser la regla de
+   negocio central del proyecto y estar duplicada entre dos procesos.
+
+**Consecuencias.**
+- Menos boilerplate en los módulos CRUD simples (la mayoría del dominio).
+- Los puntos genuinamente propensos a cambiar (proveedor de mapas, de
+  correo, cliente MQTT) quedan mockeables para pruebas y sustituibles sin
+  tocar el resto del código.
+- La regla de negocio más importante del dominio (transiciones de
+  `pickup_request`) vive en un solo lugar, compartida por los dos procesos
+  que la necesitan, evitando que `api` y `worker` diverjan en su validación.
+- Decisión documentada y defendible: se optó conscientemente por no aplicar
+  Clean Architecture completa, en vez de aplicarla por defecto y asumir su
+  fricción sin cuestionarla.
+
 ## ADR-018 — Resolución de reglas de negocio pendientes de `specs/entities/`
 
 **Contexto.** Al construir `specs/entities/` (ver ADR-anterior de SDD) se
@@ -413,59 +466,6 @@ a `specs/features/`.
 - Ninguna de estas decisiones introduce triggers de base de datos; las
   validaciones cruzadas (punto 10 y 11) se resuelven en la capa de servicio,
   consistente con ADR-017.
-
-## ADR-017 — Arquitectura de capas simple (no Clean Architecture completa)
-
-**Contexto.** El backend (`api` y `worker`) necesita una arquitectura de capas
-clara antes de empezar a implementar los módulos de dominio. Se evaluó Clean
-Architecture completa (casos de uso, entidades de dominio desacopladas del
-ORM, interfaces de repositorio) y se descartó por el costo de ceremonia
-(boilerplate de interfaces, mappers entre capas) frente al beneficio real en
-un proyecto de un solo desarrollador que ya fijó su ORM y base de datos
-(ADR-006) y que usa NestJS, cuyo sistema de módulos e inyección de
-dependencias ya cubre gran parte del valor de esa separación.
-
-**Decisión.**
-1. **Arquitectura en capas simple por módulo de NestJS:** Controller →
-   Service → Entidad de TypeORM. Sin capa de casos de uso separada, sin
-   entidades de dominio distintas de las entidades de TypeORM, sin interfaz
-   de repositorio genérica. Un módulo de NestJS por contexto de dominio:
-   `auth`, `institutions`, `students`, `enrollments`, `pickups`,
-   `delivery-points`, `vehicles`, entre otros que surjan al detallar
-   `specs/features/`.
-2. **Inversión de dependencias solo en integraciones volátiles**, mediante
-   interfaces (ports) con implementación concreta inyectada por NestJS:
-   - `MapsProvider`: cálculo de ETA con tráfico en vivo. Implementación
-     concreta pendiente de elegir (Google Maps o Mapbox, ver
-     `arquitectura.md`). Vive en el `worker`.
-   - `EmailProvider`: envío de correo transaccional. Implementación concreta
-     `ResendEmailProvider` ahora, con migración futura a `SesEmailProvider`
-     ya prevista en ADR-009.
-   - `MqttClient`: wrapper del cliente MQTT usado por `api` y `worker`, para
-     poder testear sin un broker real.
-   - `LocationProvider` (ya definido en ADR-002 para `apps/parent`) sigue el
-     mismo patrón; se documenta aquí como parte de la misma familia de
-     decisión, no como caso aislado.
-3. **Lógica de estado de `pickup_request` como módulo puro compartido.** Las
-   transiciones válidas del ciclo de vida (`en_route → arriving → arrived →
-   delivered/cancelled`, ver `docs/modelo-datos.md`) se implementan como
-   función pura en `packages/shared` (sin dependencia de TypeORM ni de
-   NestJS), consumida tanto por `api` como por `worker` para validar
-   transiciones antes de persistir un cambio de estado. Es la única pieza de
-   lógica de dominio que se aísla explícitamente, por ser la regla de
-   negocio central del proyecto y estar duplicada entre dos procesos.
-
-**Consecuencias.**
-- Menos boilerplate en los módulos CRUD simples (la mayoría del dominio).
-- Los puntos genuinamente propensos a cambiar (proveedor de mapas, de
-  correo, cliente MQTT) quedan mockeables para pruebas y sustituibles sin
-  tocar el resto del código.
-- La regla de negocio más importante del dominio (transiciones de
-  `pickup_request`) vive en un solo lugar, compartida por los dos procesos
-  que la necesitan, evitando que `api` y `worker` diverjan en su validación.
-- Decisión documentada y defendible: se optó conscientemente por no aplicar
-  Clean Architecture completa, en vez de aplicarla por defecto y asumir su
-  fricción sin cuestionarla.
 
 ## ADR-019 — Resolución de preguntas abiertas del vertical slice auth/enrollment
 
@@ -584,8 +584,9 @@ en un backend NestJS con mucho async.
 - La regla de proceso complementaria (spec como fuente de verdad, no
   implementar lo que no esté especificado) vive en `CLAUDE.md` §"Reglas de
   implementación".
-- Pendiente al llegar a Fase 3/4: subir NestJS 10→11 y, para TypeORM 1.0
-  (que exige Node ≥24.11), subir el runtime; hoy se corre Node 24.7.
+- Pendiente al llegar a Fase 3/4: subir NestJS 10→11. TypeORM 1.0 (que exige
+  Node ≥24.11) queda desbloqueado al correr Node 24.18; el `engines` del
+  monorepo se fija en `>=24.11` para reflejar ese piso.
 - Cada "Invariante de negocio" de una spec deberá respaldarse con un test o
   un constraint de BD (Nivel 2, al escribir cada módulo): así la compuerta
   cubre también corrección de negocio, no solo tipos.
