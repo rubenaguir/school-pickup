@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+package-lock.json
+
+# La documentacion (docs/, specs/, *.md) es prosa hecha a mano y fuente de
+# verdad del proyecto: Prettier gobierna codigo, no documentos. Ver ADR-021.
+**/*.md

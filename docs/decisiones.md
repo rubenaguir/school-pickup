@@ -466,3 +466,126 @@ dependencias ya cubre gran parte del valor de esa separación.
 - Decisión documentada y defendible: se optó conscientemente por no aplicar
   Clean Architecture completa, en vez de aplicarla por defecto y asumir su
   fricción sin cuestionarla.
+
+## ADR-019 — Resolución de preguntas abiertas del vertical slice auth/enrollment
+
+**Contexto.** Al construir `specs/features/001` a `006` y
+`specs/api-contracts/auth.md`, `students.md` y `enrollments.md` (primer
+vertical slice de SDD) se identificaron 5 preguntas abiertas de negocio/
+implementación. Se resuelven aquí.
+
+**Decisión.**
+1. **`institutions.join_code`.** Se autogenera al crear la institución (no
+   lo captura el admin en el formulario de alta). Algoritmo: iniciales del
+   nombre de la institución + año actual (ej. "CSB-2024"), con verificación
+   de unicidad y sufijo aleatorio en caso de colisión. El admin de la
+   institución puede regenerarlo después desde la configuración, pero no lo
+   escribe a mano en el alta inicial.
+2. **`users.status` en auto-registro.** Cuando un usuario se auto-registra
+   (alta de institución o alta de tutor, NO cuando alguien más lo invita —
+   ver distinción con `institution_members` invitados por un admin o
+   `student_guardians` invitados por otro tutor), su cuenta queda en
+   `status = invited` hasta verificar su correo electrónico. La
+   verificación se resuelve con un token firmado (JWT) de corta duración
+   (24h), sin persistencia en base de datos — no requiere tabla nueva
+   porque no necesita revocación, solo expiración. Al verificar, `status`
+   pasa a `active`. Un usuario en `invited` no puede iniciar sesión hasta
+   completar la verificación (ver `specs/features/003-login.md` y la nueva
+   `specs/features/007-verificacion-correo.md`).
+3. **Refresh token stateless.** Se acepta conscientemente como limitación
+   del MVP. JWT firmado (access + refresh) sin tabla de revocación — no se
+   puede invalidar un token robado antes de que expire. Queda como ítem de
+   backlog: agregar una entidad de revocación (ej. `revoked_tokens` o lista
+   de sesiones activas) en una ronda futura si se requiere endurecer la
+   seguridad antes de producción.
+4. **Visibilidad de instituciones no aprobadas.** Solo instituciones con
+   `status = approved` son buscables por nombre o aceptan su `join_code`
+   para iniciar una solicitud de `enrollment`. Instituciones en `pending` o
+   `suspended` no aparecen en la búsqueda ni aceptan solicitudes nuevas. Es
+   una extensión de la regla ya existente en ADR-018 (no se puede *aprobar*
+   un enrollment si la institución no está aprobada): aquí se evita que la
+   solicitud pueda *iniciarse* siquiera.
+5. **Autorización para aprobar/rechazar `enrollment`.** Restringido a
+   `institution_members.role = 'admin'` de la institución dueña del
+   `enrollment`. A diferencia de la consola de puerta (ADR-011, sin
+   restricción de rol — es cobertura operativa), aprobar un `enrollment` es
+   una decisión de control de acceso/identidad (quién queda autorizado a
+   operar sobre un alumno específico), de mayor sensibilidad, y se
+   restringe deliberadamente al rol `admin`. `coordinator`, `teacher` y
+   `gate_operator` no pueden aprobar ni rechazar.
+
+**Consecuencias.**
+- Nueva feature: verificación de correo (ver
+  `specs/features/007-verificacion-correo.md`).
+- `specs/api-contracts/auth.md` gana un endpoint de verificación (y uno de
+  reenvío).
+- `specs/api-contracts/enrollments.md` documenta la regla de autorización
+  del punto 5.
+- No se agregan entidades nuevas al modelo de datos: ni el token de
+  verificación ni el de refresh requieren tabla propia bajo las decisiones
+  tomadas aquí.
+
+## ADR-020 — Frontends en React 19 + Vite 8
+
+**Contexto.** El scaffolding inicial de los tres frontends (`portal`, `parent`,
+`board`) declaraba React 18.3 y Vite 5.4. Antes de escribir componentes se
+revisó si convenía fijar versiones más recientes. Los tres frontends estaban
+vacíos (Fase 7+ del plan, sin componentes), por lo que el costo de migración
+en este momento es cero y solo crecería al empezar a escribir UI.
+
+**Decisión.** Subir los tres frontends a **React 19.2** y **Vite 8.1** (con
+`@vitejs/plugin-react` 6 y `@types/react` 19). React 19 es estable desde
+diciembre 2024, maduro y sin blockers de ecosistema. Vite 8 (motor Rolldown)
+es la línea actual.
+
+**Consecuencias.**
+- Se aprovechan mejoras de React 19 directamente relevantes al producto:
+  Suspense/async y `use()` para la PWA del padre, form actions para los
+  formularios del portal.
+- Se evita una migración 18→19 futura con las tres PWAs ya construidas.
+- Los peers opcionales de `@vitejs/plugin-react` 6 (React Compiler,
+  `@rolldown/plugin-babel`) no se instalan; se pueden habilitar más adelante
+  sin cambiar de versión.
+- `@types/node` se alinea a la línea 24 (mismo major que el runtime, Node 24),
+  no se adelanta a 26.
+
+## ADR-021 — Compuerta de calidad (lint + formato + build + test) y TypeScript 5.9
+
+**Contexto.** Con el dominio ya especificado en `specs/` (fuente de verdad),
+el riesgo al implementar no es falta de documentación sino que el código se
+desvíe de la spec en silencio (campos/endpoints/códigos de error inventados,
+invariantes no forzadas). Las specs son la defensa conceptual; faltaba una
+defensa **mecánica** que impida que el código compile desviándose. El
+repositorio no tenía ESLint, Prettier ni runner de tests.
+
+Al elegir versiones surgió un conflicto duro: `typescript-eslint` declara
+`peer typescript >=4.8.4 <6.1.0`, por lo que **TypeScript 7** (compilador
+nativo en Go) deja el linting sin información de tipos —degradado a solo
+sintaxis— y se pierde `no-floating-promises`, justo el valor de la compuerta
+en un backend NestJS con mucho async.
+
+**Decisión.**
+- Compuerta única `npm run check` = `lint` (ESLint 10 + typescript-eslint 8,
+  type-aware sobre los fuentes reales) → `format:check` (Prettier 3) →
+  `build` (typecheck real de los 5 workspaces) → `test` (Vitest 4).
+- **TypeScript 5.9.3**: la línea más madura que conserva el linting type-aware
+  completo, sin warnings de deprecación. Se pospone TS 7 hasta que el
+  ecosistema de linting lo soporte; migrar desde 5.9 costará lo mismo.
+- Prettier gobierna **código, no prosa**: `docs/`, `specs/` y todo `*.md`
+  quedan fuera (`.prettierignore`). La documentación SDD, hecha a mano, es
+  fuente de verdad y no se deja a merced de un formateador.
+- El linting type-aware se limita a `apps/*/src` y `packages/*/src` (fuentes
+  dentro de un `tsconfig include`); los archivos de configuración usan reglas
+  sin tipos para no romper por "archivo fuera del proyecto".
+
+**Consecuencias.**
+- Un import o símbolo inventado no compila; una promesa sin `await` en NestJS
+  es error de lint. La deriva mecánica se atrapa antes de correr nada.
+- La regla de proceso complementaria (spec como fuente de verdad, no
+  implementar lo que no esté especificado) vive en `CLAUDE.md` §"Reglas de
+  implementación".
+- Pendiente al llegar a Fase 3/4: subir NestJS 10→11 y, para TypeORM 1.0
+  (que exige Node ≥24.11), subir el runtime; hoy se corre Node 24.7.
+- Cada "Invariante de negocio" de una spec deberá respaldarse con un test o
+  un constraint de BD (Nivel 2, al escribir cada módulo): así la compuerta
+  cubre también corrección de negocio, no solo tipos.

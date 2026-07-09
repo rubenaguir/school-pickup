@@ -17,9 +17,22 @@
     "dev:worker": "npm run start:dev -w @casillego/worker",
     "dev:portal": "npm run dev -w @casillego/portal",
     "dev:parent": "npm run dev -w @casillego/parent",
-    "dev:board": "npm run dev -w @casillego/board"
+    "dev:board": "npm run dev -w @casillego/board",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "check": "npm run lint && npm run format:check && npm run build && npm run test"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
   }
 }

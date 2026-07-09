@@ -18,29 +18,62 @@ Orden general: **documentación de dominio → specs → código**. Nunca se sal
 directo a código sin spec, salvo scaffolding trivial (configuración de
 proyecto, tooling).
 
+La compuerta de calidad (`npm run check`, ver ADR-021) es la defensa mecánica
+de esta regla: `CLAUDE.md` §"Reglas de implementación" exige que ningún campo,
+endpoint o invariante se implemente sin estar en su spec, y que toda
+"Invariante de negocio" quede respaldada por un test o un constraint de BD.
+
 ---
 
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–018 (`docs/decisiones.md`): stack, dominio, arquitectura de
-      capas (ADR-017), reglas de negocio de entidades (ADR-018)
+- [x] ADRs 001–021 (`docs/decisiones.md`): stack, dominio, arquitectura de
+      capas (ADR-017), reglas de negocio de entidades (ADR-018), resolución
+      de preguntas abiertas del slice auth/enrollment (ADR-019), versiones de
+      frontend (ADR-020), compuerta de calidad (ADR-021)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
       relaciones, índices, invariantes y enums
 
-## Fase 1 — Specs de features y contratos de API ⏳ siguiente paso
+### Tooling y compuerta de calidad ✅ completo (ADR-020, ADR-021)
 
-Esta fase está **bloqueada por una decisión pendiente**: con qué feature
-arrancar el primer vertical slice. Opciones ya discutidas:
-- Auth + aprobación de alumno (`enrollment`)
-- Auth + flujo completo "voy en camino" (`pickup_request`)
+- [x] Frontends (`portal`, `parent`, `board`) en React 19.2 + Vite 8.1
+- [x] Compuerta `npm run check`: ESLint 10 + typescript-eslint 8 (type-aware)
+      → Prettier 3 (`format:check`) → build (typecheck real) → Vitest 4
+- [x] TypeScript fijado en 5.9.3 (TS 7 rompe el linting type-aware por
+      conflicto de peer dependency con `typescript-eslint`, ver ADR-021)
+- [x] `.prettierignore`: Prettier formatea código, no `docs/`, `specs/` ni
+      markdown en general
+- [x] `CLAUDE.md` §"Reglas de implementación": spec como fuente de verdad,
+      spec antes que código, invariante de negocio → test o constraint,
+      verificar dependencias antes de importarlas
 
-- [ ] Decidir la feature de arranque
-- [ ] `specs/features/001-{nombre}.md` — primera feature (Given/When/Then,
-      entidades involucradas, referencia a ports si aplica — ver ADR-017)
-- [ ] `specs/api-contracts/{recurso}.md` correspondiente
-- [ ] Repetir para cada feature del vertical slice antes de tocar código
+## Fase 1 — Specs de features y contratos de API ⏳ en progreso
+
+- [x] Decidir la feature de arranque → **Auth + aprobación de `enrollment`**
+      (se pospuso el flujo completo de `pickup_request` para un slice
+      posterior)
+- [x] `specs/features/001-006-*.md` — slice auth/enrollment: registro de
+      institución, registro de tutor, login, alta de alumno, asociar
+      institución, aprobación de enrollment
+- [x] `specs/api-contracts/{auth,students,enrollments}.md` correspondientes
+- [x] **Resolver 5 preguntas abiertas** del slice (ADR-019): generación de
+      `join_code`, `user.status = invited` hasta verificar correo, refresh
+      token stateless (aceptado), visibilidad de instituciones no aprobadas,
+      restricción de `role = admin` para aprobar/rechazar `enrollment`
+- [x] `specs/features/007-verificacion-correo.md` — feature nueva derivada
+      de ADR-019 (verificación de correo tras auto-registro), incluyendo
+      límite de tasa de reenvío (3/hora por email) decidido directamente
+      contigo al trabajar la spec
+- [x] Slice auth/enrollment **cerrado** (sin preguntas abiertas pendientes)
+- [ ] Especificar los slices restantes antes de dar Fase 1 por completa
+      (los módulos de Fase 5/6 los necesitan primero):
+      - [ ] Configuración de institución (geocerca, radios, horarios,
+            puntos de entrega, personal)
+      - [ ] Catálogo de vehículos + tutores autorizados (`student_guardian`)
+      - [ ] Flujo completo `pickup_request` (ADR-012, ADR-013, ADR-014) +
+            topics MQTT (`MqttClient`, ver ADR-017)
 
 ## Fase 2 — Fundamentos de código compartido (`packages/shared`)
 
@@ -70,6 +103,8 @@ dismissal_exceptions → audit_log).
       ver ADR-018
 - [ ] Verificar conexión a Postgres+PostGIS local (sin contenedor, ver
       `CLAUDE.md`)
+- [ ] Nota de compatibilidad (ADR-021): TypeORM 1.0 exige Node ≥24.11; hoy se
+      corre Node 24.7 — subir el runtime si se adopta esa versión de TypeORM
 
 ## Fase 4 — Módulo de autenticación
 
@@ -77,8 +112,8 @@ dismissal_exceptions → audit_log).
       del stack original)
 - [ ] Endpoints de registro/login diferenciados institución vs. tutor (ver
       `docs/design-brief.md`, sección "Acceso")
-- [ ] Implementación concreta de `EmailProvider` (Resend) para
-      recuperación de contraseña / invitaciones (ADR-009)
+- [ ] Implementación concreta de `EmailProvider` (Resend) para verificación
+      de correo (ADR-019), recuperación de contraseña e invitaciones (ADR-009)
 
 ## Fase 5 — Módulos CRUD core
 
@@ -141,6 +176,8 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de
       `location_updates` (ADR-018)
+- [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
+      documentar explícitamente por qué se deja fuera del alcance final
 - [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md` (los ADRs
       documentan el "por qué" de cada decisión técnica)
 
@@ -153,6 +190,14 @@ se decida:
 
 | Pendiente | Bloquea | Estado |
 |---|---|---|
-| Vertical slice de arranque (Fase 1) | Fase 1 en adelante | Abierto |
 | Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
+
+## Backlog técnico (no bloquea, pero no debe olvidarse)
+
+Decisiones aceptadas conscientemente como limitación del MVP, con una mejora
+futura ya identificada. Revisar antes de producción o antes de la Fase 10.
+
+| Ítem | Origen | Mejora futura si se requiere |
+|---|---|---|
+| Refresh token stateless (JWT sin tabla de revocación) | ADR-019, punto 3 | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado antes de que expire |

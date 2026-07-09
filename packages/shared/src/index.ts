@@ -29,10 +29,7 @@ export function institutionTopic(institutionId: string): string {
  * Location stream published by the parent app for a pickup request:
  * `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`.
  */
-export function pickupLocationTopic(
-  institutionId: string,
-  pickupRequestId: string,
-): string {
+export function pickupLocationTopic(institutionId: string, pickupRequestId: string): string {
   return `${institutionTopic(institutionId)}/pickup/${pickupRequestId}/location`;
 }
 

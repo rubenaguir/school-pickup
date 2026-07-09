@@ -90,6 +90,29 @@ docs/         Documentación (español)
   aislada, como función pura compartida en `packages/shared`. Detalle
   completo en `docs/arquitectura.md` y ADR-017.
 
+## Reglas de implementación (IMPORTANTE)
+
+Guardrails para que el código no se desvíe de las specs. Ver ADR-021.
+
+- **La spec es la fuente de verdad.** No implementar ningún campo, endpoint,
+  código de error, valor de enum, índice ni invariante que no esté en su spec
+  (`specs/entities`, `specs/features`, `specs/api-contracts`). Si algo no está
+  especificado, no se inventa.
+- **Spec antes que código.** Si al implementar se descubre que la spec está
+  incompleta o equivocada, PARAR: actualizar primero la spec (y el ADR
+  correspondiente si es una decisión de fondo), y solo entonces escribir el
+  código. Nunca al revés, nunca "sobre la marcha".
+- **Cada invariante de negocio → un test o un constraint de BD.** Las reglas de
+  la sección "Invariantes de negocio" de cada spec de entidad deben quedar
+  forzadas por el esquema o por una prueba; el compilador no las atrapa.
+- **Dependencias:** antes de importar un paquete, confirmar que está en el
+  `package.json` correspondiente. No asumir que una librería o API existe;
+  verificarlo. Versiones fijadas y compatibles (ver ADR-020/021).
+- **La compuerta manda.** Antes de dar por terminado un cambio no trivial,
+  `npm run check` debe pasar (lint type-aware + formato + build + tests).
+  TypeScript en 5.9.x (no 7 todavía; rompe el lint type-aware). Prettier
+  formatea código, no la documentación en markdown.
+
 ## Documentos de referencia
 
 - `docs/arquitectura.md` — arquitectura y flujo de tiempo real.
@@ -102,5 +125,7 @@ docs/         Documentación (español)
 - Compilar tipos compartidos: `npm run build:shared`
 - Desarrollo: `npm run dev:api` · `dev:worker` · `dev:portal` · `dev:parent` · `dev:board`
 - Build de todo: `npm run build`
+- Compuerta de calidad: `npm run check` (lint + formato + build + tests). Ver ADR-021.
+- Lint / formato / tests por separado: `npm run lint` · `npm run format` · `npm run test`
 - Requiere Postgres+PostGIS y broker MQTT externos (config en `.env`, ver `.env.example`).
-- Migraciones / tests / lint: _(TODO al crear los módulos de dominio)_
+- Migraciones: _(TODO al crear las entidades TypeORM — Fase 3)_
