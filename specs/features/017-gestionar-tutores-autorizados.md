@@ -10,27 +10,27 @@ autorizado a operar sobre un alumno, complementario a la invitación (feature
 
 ## Entidades involucradas
 
-- `student_guardian` (leído; actualizado al revocar)
-- `student` (leído, para autorización: quien gestiona debe ser guardián del
+- `student_guardians` (leído; actualizado al revocar)
+- `students` (leído, para autorización: quien gestiona debe ser guardián del
   alumno)
 
 ## Precondiciones
 
-- **Listar:** quien consulta debe ser `student_guardian` del `student`
+- **Listar:** quien consulta debe ser `student_guardians` del `students`
   correspondiente (autorización por relación de datos, ver
   `specs/api-contracts/students.md`).
-- **Revocar y reasignar primariedad:** reservado al `student_guardian` con
+- **Revocar y reasignar primariedad:** reservado al `student_guardians` con
   `is_primary = true` y `status = active` del alumno (ADR-023, punto 5): solo el
   guardián principal administra a los demás. Es la misma autoridad que para
   invitar (ADR-023 punto 2).
-- Revocar solo aplica a un `student_guardian` que no esté ya en `status =
+- Revocar solo aplica a un `student_guardians` que no esté ya en `status =
   revoked`: `revoked` es **terminal** (ADR-018, punto 7), no se reactiva
   in-place. Para restablecer el vínculo se envía una nueva invitación (feature
   015), que crea una **fila nueva** — no reactiva la fila `revoked` (el índice
   único parcial la excluye, ADR-026 punto 1). No existe una acción de
   "reactivar".
 - **Protección del principal / último guardián activo (ADR-023, punto 5):** no se
-  puede revocar a un `student_guardian` con `is_primary = true` sin **reasignar
+  puede revocar a un `student_guardians` con `is_primary = true` sin **reasignar
   antes** la primariedad a otro guardián `active`. Esto incluye la
   auto-revocación del propio principal: para retirarse, primero reasigna
   `is_primary` a otro guardián activo. Evita que el alumno quede sin ningún
@@ -43,13 +43,13 @@ autorizado a operar sobre un alumno, complementario a la invitación (feature
   `is_primary` y `status` (`active | invited | revoked`).
 
 ### Al revocar
-- El `student_guardian` indicado pasa a `status = revoked`. A partir de ahí esa
+- El `student_guardians` indicado pasa a `status = revoked`. A partir de ahí esa
   persona deja de estar autorizada a operar sobre el alumno (solo `status =
   active` autoriza — ver `specs/entities/student_guardian.md`). La transición es
   terminal: no puede volver a `active` desde `revoked` (ADR-018 punto 7).
 
 ### Al reasignar la primariedad
-- Fijar `is_primary = true` sobre otro `student_guardian` `active` desmarca al
+- Fijar `is_primary = true` sobre otro `student_guardians` `active` desmarca al
   principal anterior, de modo que nunca coexistan dos principales (índice único
   parcial, ADR-018 punto 6). Es el paso previo obligatorio para poder revocar al
   principal actual (ADR-023 punto 5).

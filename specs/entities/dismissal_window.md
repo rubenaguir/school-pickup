@@ -1,16 +1,16 @@
-# DismissalWindow
+# DismissalWindows
 
 ## Propósito
 Horario recurrente de salida de una institución (ej. "Salida vespertina"),
 usado para calcular recordatorios de anticipación y validar la ventana en la
-que un `pickup_request` tiene sentido. Ver ADR-015.
+que un `pickup_requests` tiene sentido. Ver ADR-015.
 
 ## Campos
 
 | Campo | Tipo TypeORM/PostgreSQL | Constraints | Notas |
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
-| `institution_id` | `uuid` | NOT NULL, FK → `institution.id`, `ON DELETE CASCADE` | |
+| `institution_id` | `uuid` | NOT NULL, FK → `institutions.id`, `ON DELETE CASCADE` | |
 | `weekday` | `smallint` | NOT NULL | 0–6 |
 | `start_time` | `time` | NOT NULL | |
 | `end_time` | `time` | NOT NULL | |
@@ -20,11 +20,11 @@ que un `pickup_request` tiene sentido. Ver ADR-015.
 
 ## Relaciones
 
-- `belongsTo Institution` (`institution`) — vía `institution_id`.
+- `belongsTo Institution` (`institutions`) — vía `institution_id`.
 
 ## Índices
 
-- Índice en `(institution_id, weekday, status)` para resolver rápido "ventanas activas de hoy para esta institución" (usado por `advance_notice_minutes` y por la validación de horario al crear un `pickup_request`).
+- Índice en `(institution_id, weekday, status)` para resolver rápido "ventanas activas de hoy para esta institución" (usado por `advance_notice_minutes` y por la validación de horario al crear un `pickup_requests`).
 
 ## Invariantes de negocio
 

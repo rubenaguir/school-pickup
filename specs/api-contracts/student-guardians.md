@@ -11,17 +11,17 @@ guardián (el creador del alumno) vive en `specs/features/004-alta-alumno.md` /
 
 `GET /students/:id/guardians`, `POST /students/:id/guardians/invite` y
 `PATCH /student-guardians/:id` requieren access token válido. No hay restricción
-por rol ("tutor" no es un flag en `user`, ver `specs/entities/user.md`).
+por rol ("tutor" no es un flag en `users`, ver `specs/entities/user.md`).
 
 ## Reglas de autorización
 
 La autorización es por relación de datos (patrón de
 `specs/api-contracts/students.md`):
-- **Listar** (`GET`): cualquier `student_guardian` del alumno (cualquier
+- **Listar** (`GET`): cualquier `student_guardians` del alumno (cualquier
   `status`... salvo lo que se resuelva en features futuras; en este slice basta
   ser guardián del alumno).
 - **Invitar, revocar y reasignar primariedad** (`POST .../invite` y
-  `PATCH /student-guardians/:id`): reservado al `student_guardian` con
+  `PATCH /student-guardians/:id`): reservado al `student_guardians` con
   `is_primary = true` y `status = active` del alumno (ADR-023, puntos 2 y 5).
   Solo el guardián principal administra a los demás; un guardián no principal, o
   uno `invited`/`revoked`, recibe 403.
@@ -49,27 +49,27 @@ Lista los tutores autorizados del alumno. Ver feature 017.
 }
 ```
 
-`fullName` y `email` provienen del `user` vinculado (join); el resto, de la fila
-`student_guardian`.
+`fullName` y `email` provienen del `users` vinculado (join); el resto, de la fila
+`student_guardians`.
 
 **Errores**
 | Código | Caso |
 |---|---|
 | 401 | no autenticado |
-| 403 | el usuario autenticado no es `student_guardian` de ese `:id` |
-| 404 | el `student` no existe |
+| 403 | el usuario autenticado no es `student_guardians` de ese `:id` |
+| 404 | el `students` no existe |
 
 ## `POST /students/:id/guardians/invite`
 
 Invita a una persona por correo a ser tutor autorizado del alumno, con un
 `relationship`. Ver feature 015. Solo el guardián `is_primary` invita (ADR-023
-punto 2). El comportamiento depende de si el correo ya corresponde a un `user`;
-en **ambos casos** la fila `student_guardian` nace en `status = invited`, se
+punto 2). El comportamiento depende de si el correo ya corresponde a un `users`;
+en **ambos casos** la fila `student_guardians` nace en `status = invited`, se
 envía correo de invitación y la persona debe aceptar para pasar a `active`
 (ADR-023 punto 3):
-- correo de un `user` existente y `active`: se crea solo la fila
-  `student_guardian`; la aceptación no define contraseña (ver feature 016);
-- correo nuevo: se crea un `user` con `status = invited` y `password_hash = NULL`
+- correo de un `users` existente y `active`: se crea solo la fila
+  `student_guardians`; la aceptación no define contraseña (ver feature 016);
+- correo nuevo: se crea un `users` con `status = invited` y `password_hash = NULL`
   (nullable, ADR-022 punto 2); la aceptación define su contraseña (feature 016).
 
 **Request**
@@ -96,10 +96,10 @@ envía correo de invitación y la persona debe aceptar para pasar a `active`
 }
 ```
 
-`userStatus` distingue si se creó un `user` nuevo (`invited`) o si el correo era
-de un `user` ya existente (`active`). `invitationSent = true` en ambas ramas: la
+`userStatus` distingue si se creó un `users` nuevo (`invited`) o si el correo era
+de un `users` ya existente (`active`). `invitationSent = true` en ambas ramas: la
 invitación siempre se envía y siempre requiere aceptación (ADR-023 punto 3). La
-fila `student_guardian` nace siempre en `status = invited`.
+fila `student_guardians` nace siempre en `status = invited`.
 
 **Auditoría.** La invitación registra una fila en `audit_log` con
 `action = student_guardian.added` (alta de tutor = acción sensible según
@@ -111,9 +111,9 @@ fila `student_guardian` nace siempre en `status = invited`.
 |---|---|
 | 400 | payload inválido (`email` mal formado, `relationship` fuera del enum) |
 | 401 | no autenticado |
-| 403 | el usuario autenticado no es el `student_guardian` `is_primary` y activo de ese `:id` (ADR-023 punto 2) |
-| 404 | el `student` no existe |
-| 409 | el `user` invitado ya es `student_guardian` **no terminal** (`invited` o `active`) de ese alumno (índice único parcial `(student_id, guardian_user_id) WHERE status IN ('invited', 'active')`; duplicidad genuina → 409). Un vínculo previo `revoked` no bloquea: la invitación crea una fila nueva (ADR-026 punto 1) |
+| 403 | el usuario autenticado no es el `student_guardians` `is_primary` y activo de ese `:id` (ADR-023 punto 2) |
+| 404 | el `students` no existe |
+| 409 | el `users` invitado ya es `student_guardians` **no terminal** (`invited` o `active`) de ese alumno (índice único parcial `(student_id, guardian_user_id) WHERE status IN ('invited', 'active')`; duplicidad genuina → 409). Un vínculo previo `revoked` no bloquea: la invitación crea una fila nueva (ADR-026 punto 1) |
 
 ## `PATCH /student-guardians/:id`
 
@@ -155,11 +155,11 @@ Ver feature 017. Un solo campo por request (`status` o `isPrimary`). No se edita
 |---|---|
 | 400 | body inválido (ni `status = revoked` ni `isPrimary = true`; o `isPrimary = false`, que no se soporta — la primariedad se mueve fijándola en otro) |
 | 401 | no autenticado |
-| 403 | el usuario autenticado no es el `student_guardian` `is_primary` y activo de ese alumno (ADR-023 punto 5) |
-| 404 | el `student_guardian` no existe |
-| 422 | se intenta revocar a un `student_guardian` con `is_primary = true` sin reasignar antes la primariedad (obliga a reasignar la primariedad a otra fila `student_guardian`; misma clase de riesgo que la protección del último admin, que es 422; ADR-023 punto 5, corregido de 409 a 422 en ADR-026 punto 3) |
-| 422 | se intenta reasignar la primariedad a un `student_guardian` que no está `active` (regla que cruza hacia el estado de otra fila `student_guardian`; corregido de 409 a 422 en ADR-026 punto 3) |
-| 409 | el `student_guardian` ya está en `status = revoked` (conflicto del recurso con su propio estado: transición terminal, ADR-018 punto 7; 409 correcto bajo ADR-022 punto 5 ampliado por ADR-026 punto 2) |
+| 403 | el usuario autenticado no es el `student_guardians` `is_primary` y activo de ese alumno (ADR-023 punto 5) |
+| 404 | el `student_guardians` no existe |
+| 422 | se intenta revocar a un `student_guardians` con `is_primary = true` sin reasignar antes la primariedad (obliga a reasignar la primariedad a otra fila `student_guardians`; misma clase de riesgo que la protección del último admin, que es 422; ADR-023 punto 5, corregido de 409 a 422 en ADR-026 punto 3) |
+| 422 | se intenta reasignar la primariedad a un `student_guardians` que no está `active` (regla que cruza hacia el estado de otra fila `student_guardians`; corregido de 409 a 422 en ADR-026 punto 3) |
+| 409 | el `student_guardians` ya está en `status = revoked` (conflicto del recurso con su propio estado: transición terminal, ADR-018 punto 7; 409 correcto bajo ADR-022 punto 5 ampliado por ADR-026 punto 2) |
 
 **Auditoría.** Cada operación registra una fila en `audit_log`: la revocación con
 `action = student_guardian.revoked` y la reasignación de primariedad con
@@ -173,10 +173,10 @@ La aceptación (feature 016) **reutiliza el endpoint compartido**
 `POST /invitations/:token/accept` (definido en
 `specs/api-contracts/institution-members.md`), que distingue el tipo de
 invitación por el payload del token (ADR-023, punto 4). Efecto según la rama:
-- `user` nuevo (estaba `invited` sin contraseña): define contraseña,
-  `user.status → active` y `student_guardian.status → active`;
-- `user` ya `active`: solo `student_guardian.status → active` (sin tocar el
-  `user`).
+- `users` nuevo (estaba `invited` sin contraseña): define contraseña,
+  `users.status → active` y `student_guardians.status → active`;
+- `users` ya `active`: solo `student_guardians.status → active` (sin tocar el
+  `users`).
 Ver `specs/features/016-aceptar-invitacion-tutor.md`.
 
 **Auditoría.** La aceptación registra una fila en `audit_log` con
@@ -210,6 +210,6 @@ Ver `specs/features/016-aceptar-invitacion-tutor.md`.
 ## Preguntas abiertas
 
 Ninguna: quién puede invitar/revocar (solo el guardián `is_primary`), la
-aceptación obligatoria también para el `user` ya activo, el reuso del endpoint
+aceptación obligatoria también para el `users` ya activo, el reuso del endpoint
 `POST /invitations/:token/accept` y la protección del principal (reasignar antes
 de revocar) se resolvieron en ADR-023 (puntos 2–5).

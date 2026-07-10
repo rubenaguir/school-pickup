@@ -5,23 +5,23 @@
 Completa la invitación de la feature 015: una persona invitada a ser tutor
 autorizado de un alumno recibe un correo con un link para aceptar. **La
 aceptación es obligatoria en ambas ramas** (ADR-023, punto 3) y su efecto
-depende del estado del `user`:
-- **rama (b), `user` nuevo:** define su contraseña por primera vez, su cuenta
-  pasa a `active` y su `student_guardian` pasa de `invited` a `active`;
-- **rama (a), `user` ya `active`:** no define contraseña ni verifica correo;
-  solo su `student_guardian` pasa de `invited` a `active` (consentimiento
+depende del estado del `users`:
+- **rama (b), `users` nuevo:** define su contraseña por primera vez, su cuenta
+  pasa a `active` y su `student_guardians` pasa de `invited` a `active`;
+- **rama (a), `users` ya `active`:** no define contraseña ni verifica correo;
+  solo su `student_guardians` pasa de `invited` a `active` (consentimiento
   explícito a quedar autorizada sobre ese alumno).
 
 ## Entidades involucradas
 
-- `user` (leído y actualizado: se fija la contraseña y `status` pasa a `active`)
-- `student_guardian` (leído y actualizado: `status` pasa de `invited` a `active`)
+- `users` (leído y actualizado: se fija la contraseña y `status` pasa a `active`)
+- `student_guardians` (leído y actualizado: `status` pasa de `invited` a `active`)
 
 ## Precondiciones
 
-- Existe la fila `student_guardian` con `status = invited` para ese
+- Existe la fila `student_guardians` con `status = invited` para ese
   `guardian_user_id` y `student_id`, creada por la feature 015.
-- El `user` existe: en `status = invited` sin contraseña (rama (b)) o ya en
+- El `users` existe: en `status = invited` sin contraseña (rama (b)) o ya en
   `status = active` (rama (a)).
 - El invitado presenta un token de invitación válido: JWT firmado de corta
   duración, sin persistencia en base de datos, que identifica la invitación
@@ -33,17 +33,17 @@ depende del estado del `user`:
 
 ## Postcondiciones
 
-- Al aceptar exitosamente, en **ambas ramas** el `student_guardian`
+- Al aceptar exitosamente, en **ambas ramas** el `student_guardians`
   correspondiente pasa de `status = invited` a `status = active`: la persona
   queda autorizada a operar sobre ese alumno (solo `status = active` autoriza —
   ver `specs/entities/student_guardian.md`).
-- Además, **solo en la rama (b)** (`user` estaba `invited` sin contraseña): se
-  establece por primera vez la contraseña del `user` (se guarda su hash en
-  `password_hash`, hasta ahora `NULL` — ADR-022 punto 2) y `user.status` pasa de
-  `invited` a `active`, satisfaciendo la invariante "un `user` `active` tiene
+- Además, **solo en la rama (b)** (`users` estaba `invited` sin contraseña): se
+  establece por primera vez la contraseña del `users` (se guarda su hash en
+  `password_hash`, hasta ahora `NULL` — ADR-022 punto 2) y `users.status` pasa de
+  `invited` a `active`, satisfaciendo la invariante "un `users` `active` tiene
   `password_hash` no nulo".
-- En la **rama (a)** (`user` ya `active`): no se toca el `user` (no define
-  contraseña ni cambia su `status`); solo se transiciona el `student_guardian`.
+- En la **rama (a)** (`users` ya `active`): no se toca el `users` (no define
+  contraseña ni cambia su `status`); solo se transiciona el `student_guardians`.
 - La validez del token se resuelve verificando firma y expiración, sin tabla que
   lo almacene ni lo revoque.
 
@@ -51,13 +51,13 @@ depende del estado del `user`:
 
 Ambas usan el mismo mecanismo de token, pero difieren en el efecto secundario
 específico del vínculo que se acepta:
-- **Feature 013:** solo activa el `user`; el `institution_member` no tiene
+- **Feature 013:** solo activa el `users`; el `institution_members` no tiene
   `status` propio, así que no hay una segunda transición, y su rama de "correo
   ya existente y activo" no requiere aceptación (el miembro queda activo de
   inmediato).
-- **Feature 016:** transiciona el `student_guardian` de `invited` a `active`
+- **Feature 016:** transiciona el `student_guardians` de `invited` a `active`
   (esta entidad sí tiene su propio `status`) — **siempre**, incluso cuando el
-  `user` ya estaba `active` y no hay que tocar su cuenta (ADR-023 punto 3).
+  `users` ya estaba `active` y no hay que tocar su cuenta (ADR-023 punto 3).
 
 ## Casos Given/When/Then
 
@@ -117,10 +117,10 @@ Then la operación es idempotente/segura: no reactiva ni redefine credenciales
 ```
 
 > **Importante:** el chequeo de "ya aceptada" para una invitación de tutor se
-> resuelve contra `student_guardian.status`, **no** contra `user.status` (ADR-025
-> punto 7). El `user` puede estar `active` desde antes —por ejemplo, ya es tutor de
+> resuelve contra `student_guardians.status`, **no** contra `users.status` (ADR-025
+> punto 7). El `users` puede estar `active` desde antes —por ejemplo, ya es tutor de
 > otro alumno o en otra institución— mientras su vínculo con **este** alumno sigue
-> `invited`; mirar `user.status` rechazaría por error una primera aceptación
+> `invited`; mirar `users.status` rechazaría por error una primera aceptación
 > legítima (rama (a)). El endpoint compartido distingue el tipo de invitación por el
 > payload del token (ADR-023 punto 4).
 
@@ -141,15 +141,15 @@ por MQTT.
 
 - ADR-017 (`EmailProvider` como port).
 - ADR-018 (punto 7: `status = revoked` terminal — contexto del ciclo de vida de
-  `student_guardian`).
+  `student_guardians`).
 - ADR-019 (punto 2: `status = invited` para cuentas no verificadas; token JWT de
   corta duración sin persistencia).
 - ADR-022 (punto 2: `password_hash` nullable e invariante `active` ⇒ no nulo;
   punto 3: mecanismo único de activación por token parametrizado).
 - ADR-023 (punto 3: aceptación obligatoria en ambas ramas, sin contraseña para
-  el `user` ya activo; punto 4: reutiliza el endpoint compartido de aceptación).
+  el `users` ya activo; punto 4: reutiliza el endpoint compartido de aceptación).
 - ADR-025 (punto 7: el chequeo de "invitación ya aceptada" se resuelve contra
-  `student_guardian.status`, no contra `user.status`).
+  `student_guardians.status`, no contra `users.status`).
 - `specs/entities/user.md`, `specs/entities/student_guardian.md`.
 - `specs/features/015-invitar-tutor-autorizado.md` (genera este flujo),
   `specs/features/013-aceptar-invitacion-personal.md` (flujo análogo para
@@ -162,5 +162,5 @@ por MQTT.
 ## Preguntas abiertas
 
 Ninguna: el endpoint de aceptación (reutilizar `POST /invitations/:token/accept`)
-y la aceptación obligatoria también para el `user` ya activo (sin contraseña) se
+y la aceptación obligatoria también para el `users` ya activo (sin contraseña) se
 resolvieron en ADR-023 (puntos 3 y 4).

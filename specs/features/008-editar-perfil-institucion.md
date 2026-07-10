@@ -12,16 +12,16 @@ es la que permite completarlos y mantenerlos después.
 
 ## Entidades involucradas
 
-- `institution` (actualizada)
-- `institution_member` (leído, para autorización)
+- `institutions` (actualizada)
+- `institution_members` (leído, para autorización)
 
 ## Precondiciones
 
-- Quien edita debe ser `institution_member` de la misma `institution_id` que se
+- Quien edita debe ser `institution_members` de la misma `institution_id` que se
   edita (aislamiento multi-tenant, ver `docs/arquitectura.md`).
 - Editar el perfil está **restringido a `role = admin`** de esa misma
   institución (ADR-022, punto 1): es una acción de configuración/identidad, de
-  la misma sensibilidad que aprobar un `enrollment` (ADR-019, punto 5) y
+  la misma sensibilidad que aprobar un `enrollments` (ADR-019, punto 5) y
   deliberadamente más restringida que la cobertura operativa de la consola de
   puerta (ADR-011, sin restricción de rol). `coordinator`, `teacher` y
   `gate_operator` no pueden editar el perfil.
@@ -33,7 +33,7 @@ es la que permite completarlos y mantenerlos después.
 
 ## Postcondiciones
 
-- Se actualizan, para la `institution` indicada, cualquiera de los campos
+- Se actualizan, para la `institutions` indicada, cualquiera de los campos
   editables: `name`, `address`, `location` (geography(Point,4326)),
   `geofence_radius_meters` (radio de arribo) y `activation_radius_meters` (radio
   de activación del botón "ya voy") — **dos campos independientes que no deben
@@ -121,7 +121,7 @@ MQTT.
   `activation_radius_meters` de activación; dos campos independientes).
 - ADR-015 (campos operativos de `institutions`: `cct_code`, `levels`,
   `category`, `arrival_tolerance_minutes`, `advance_notice_minutes`).
-- ADR-018 (transiciones de `institution.status` son acción de super-admin, no
+- ADR-018 (transiciones de `institutions.status` son acción de super-admin, no
   se editan aquí).
 - ADR-024 (punto 3: `arriving_lead_minutes` como campo de configuración
   editable).

@@ -9,9 +9,9 @@ institución vive en `specs/api-contracts/auth.md`
 
 Ver `docs/arquitectura.md` ("cada institución solo ve y gestiona lo suyo").
 Todos los endpoints de este documento exigen que el usuario autenticado sea
-`institution_member` de la `:id` indicada. Se implementa con
+`institution_members` de la `:id` indicada. Se implementa con
 `InstitutionMembershipGuard` (ADR-022, punto 4): tras el guard de JWT, verifica
-que exista un `institution_member` `(userId, institutionId)`; para estas rutas
+que exista un `institution_members` `(userId, institutionId)`; para estas rutas
 lee el `institutionId` del parámetro de ruta (el access token no fija
 `institutionId` ni `role` — ver `specs/api-contracts/auth.md`). Un usuario de
 otra institución recibe 403.
@@ -19,7 +19,7 @@ otra institución recibe 403.
 Rol requerido para las operaciones de escritura (`PATCH`,
 `regenerate-join-code`): **`role = admin`** (ADR-022, punto 1; la regeneración
 del `join_code` también por ADR-019 punto 1). La lectura (`GET`) está disponible
-para cualquier `institution_member` de la institución.
+para cualquier `institution_members` de la institución.
 
 ## `GET /institutions/:id`
 
@@ -52,7 +52,7 @@ Devuelve la configuración de la institución. Ver feature 008.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 404 | la institución no existe |
 
 ## `PATCH /institutions/:id`
@@ -108,11 +108,11 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
 | Código | Caso |
 |---|---|
 | 400 | payload inválido (tipos incorrectos, radios no enteros, etc.) |
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la institución no existe |
 | 409 | se envió `category` no nula en una institución con `type = school` (invariante intra-entidad de `specs/entities/institution.md`; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
-| 409 | `institution.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
+| 409 | `institutions.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
 
 ## `POST /institutions/:id/regenerate-join-code`
 
@@ -130,8 +130,8 @@ aleatorio ante colisión) es el mismo que en el alta.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-019 punto 1 atribuye la regeneración al admin) |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-019 punto 1 atribuye la regeneración al admin) |
 | 404 | la institución no existe |
 
 ## Referencias

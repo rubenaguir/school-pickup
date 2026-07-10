@@ -28,7 +28,7 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–026 (`docs/decisiones.md`)
+- [x] ADRs 001–027 (`docs/decisiones.md`)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
       el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
@@ -197,6 +197,10 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 - [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
       documentar explícitamente por qué se deja fuera del alcance final
 - [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md`
+- [ ] Pasada de limpieza de prosa en `specs/` — la corrección de nomenclatura
+      de tablas (ADR-027, singular→plural) dejó algunas oraciones en español
+      con concordancia gramatical rota (ej. "un `users` invitado..."); no
+      afecta funcionalidad ni trazabilidad, es puramente de redacción
 
 ---
 

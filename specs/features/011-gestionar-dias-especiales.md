@@ -11,13 +11,13 @@ crear, editar y borrar excepciones.
 
 ## Entidades involucradas
 
-- `dismissal_exception` (creado, actualizado, borrado)
-- `institution_member` (leído, para autorización)
-- `institution` (leído, para autorización multi-tenant)
+- `dismissal_exceptions` (creado, actualizado, borrado)
+- `institution_members` (leído, para autorización)
+- `institutions` (leído, para autorización multi-tenant)
 
 ## Precondiciones
 
-- Quien gestiona debe ser `institution_member` de la misma `institution_id`
+- Quien gestiona debe ser `institution_members` de la misma `institution_id`
   a la que pertenece (o pertenecerá) la excepción (aislamiento multi-tenant, ver
   `docs/arquitectura.md`).
 - Gestionar días especiales está **restringido a `role = admin`** de esa
@@ -27,7 +27,7 @@ crear, editar y borrar excepciones.
 ## Postcondiciones
 
 ### Al crear
-- Se crea una fila en `dismissal_exception` con `institution_id`, `date`, `name`,
+- Se crea una fila en `dismissal_exceptions` con `institution_id`, `date`, `name`,
   `time` (hora de salida especial) y `level` (opcional; `NULL` significa "todos
   los niveles").
 - Aplica la restricción única `(institution_id, date, level)`: no puede haber
@@ -45,12 +45,12 @@ crear, editar y borrar excepciones.
   `level = NULL` descrita arriba.
 
 ### Al borrar
-- Se elimina físicamente la fila de `dismissal_exception`. A diferencia de
-  `delivery_point` (feature 009) y `dismissal_window` (feature 010), que se
+- Se elimina físicamente la fila de `dismissal_exceptions`. A diferencia de
+  `delivery_points` (feature 009) y `dismissal_windows` (feature 010), que se
   desactivan/pausan sin borrado, una excepción puntual sí admite borrado: es un
   evento de calendario que puede cancelarse por completo, y la entidad no define
   un `status` para "apagarla". El horario recurrente de fondo
-  (`dismissal_window`) vuelve a regir esa fecha una vez borrada la excepción.
+  (`dismissal_windows`) vuelve a regir esa fecha una vez borrada la excepción.
 
 ## Casos Given/When/Then
 

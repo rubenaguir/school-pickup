@@ -4,18 +4,18 @@
 
 El tutor cancela un trayecto de recogida en curso. Cubre el caso en que el tutor
 ya no va a recoger (imprevisto, error al iniciar, cambio de planes): el
-`pickup_request` pasa a `cancelled` y se retira del tablero y de la cola de
+`pickup_requests` pasa a `cancelled` y se retira del tablero y de la cola de
 puerta en tiempo real.
 
 ## Entidades involucradas
 
-- `pickup_request` (actualizado: `status` a `cancelled`; `completed_at`)
+- `pickup_requests` (actualizado: `status` a `cancelled`; `completed_at`)
 - `pickup_request_status_history` (creada una fila, `status = cancelled`)
 
 ## Precondiciones
 
-- Solo el `guardian_user_id` **dueño** del `pickup_request` puede cancelarlo.
-- El `pickup_request` está en un estado **no terminal** (`en_route`, `arriving` o
+- Solo el `guardian_user_id` **dueño** del `pickup_requests` puede cancelarlo.
+- El `pickup_requests` está en un estado **no terminal** (`en_route`, `arriving` o
   `arrived`): `cancelled` es alcanzable desde cualquiera de esos tres, pero no
   desde `delivered` ni desde otro `cancelled`. La validez de la transición se
   resuelve contra la máquina de estados compartida en `packages/shared`
@@ -24,7 +24,7 @@ puerta en tiempo real.
 
 ## Postcondiciones
 
-- `pickup_request.status` pasa a `cancelled` y se fija `completed_at = now()`
+- `pickup_requests.status` pasa a `cancelled` y se fija `completed_at = now()`
   (igual que `delivered`, es un estado terminal que cierra la ventana de
   recogida; a partir de aquí corre la retención de `location_updates`, feature
   023).

@@ -50,7 +50,7 @@ punto 1).
 }
 ```
 
-La respuesta indica `user.status = invited`: se envió un correo de
+La respuesta indica `users.status = invited`: se envió un correo de
 verificación (ver `POST /auth/verify-email` abajo).
 
 **Errores**
@@ -80,7 +80,7 @@ Registra un tutor. Ver feature 002.
 }
 ```
 
-La respuesta indica `user.status = invited`: se envió un correo de
+La respuesta indica `users.status = invited`: se envió un correo de
 verificación (ver `POST /auth/verify-email` abajo).
 
 **Errores**
@@ -110,20 +110,20 @@ Ver feature 003.
 
 | Claim | Tipo | Notas |
 |---|---|---|
-| `sub` | `string` (uuid) | `user.id` |
+| `sub` | `string` (uuid) | `users.id` |
 | `email` | `string` | |
-| `isSuperAdmin` | `boolean` | copia de `user.is_super_admin` |
+| `isSuperAdmin` | `boolean` | copia de `users.is_super_admin` |
 
 No incluye `institutionId` ni `role`: se resuelven por request contra
-`institution_member` (ver `specs/api-contracts/enrollments.md` y la
+`institution_members` (ver `specs/api-contracts/enrollments.md` y la
 justificación en `specs/features/003-login.md`).
 
 **Errores**
 | Código | Caso |
 |---|---|
 | 401 | credenciales inválidas (email no existe o password incorrecto — mensaje genérico) |
-| 403 | `user.status = suspended` |
-| 403 | `user.status = invited` — mensaje específico indicando que falta verificar el correo (distinto del 401 genérico de credenciales), con referencia a `POST /auth/resend-verification` |
+| 403 | `users.status = suspended` |
+| 403 | `users.status = invited` — mensaje específico indicando que falta verificar el correo (distinto del 401 genérico de credenciales), con referencia a `POST /auth/resend-verification` |
 
 ## `POST /auth/refresh`
 
@@ -152,7 +152,7 @@ Ver feature 007. **Convención elegida: `POST` con el token en el body, no
 una ruta del frontend (ej. `app.casillego.com.mx/verificar-correo?token=...`
 — fuera de alcance de este contrato), que a su vez llama a este endpoint con
 el token extraído de la URL. Se evita así que la verificación (una
-operación con efecto secundario: cambia `user.status`) ocurra como
+operación con efecto secundario: cambia `users.status`) ocurra como
 consecuencia de un `GET`, y se evita también que el token quede expuesto en
 logs de servidor/proxy que registran URLs completas de requests `GET`.
 
@@ -166,7 +166,7 @@ logs de servidor/proxy que registran URLs completas de requests `GET`.
 { "status": "active" }
 ```
 
-Idempotente: si el `user` ya está `active`, responde 200 igual (ver caso
+Idempotente: si el `users` ya está `active`, responde 200 igual (ver caso
 "verificación repetida" en feature 007).
 
 **Errores**
@@ -177,7 +177,7 @@ Idempotente: si el `user` ya está `active`, responde 200 igual (ver caso
 
 ## `POST /auth/resend-verification`
 
-Reenvía el correo de verificación a un `user` en `status = invited`. Ver
+Reenvía el correo de verificación a un `users` en `status = invited`. Ver
 feature 007.
 
 **Límite de tasa: 3 solicitudes por hora por email**, con un cooldown
@@ -194,7 +194,7 @@ mínimo de 60 segundos entre solicitudes consecutivas para el mismo email
 { "message": "string" }
 ```
 
-Responde 200 genérico incluso si el email no existe o el `user` ya está
+Responde 200 genérico incluso si el email no existe o el `users` ya está
 `active` (para no filtrar qué correos están registrados, mismo criterio que
 `POST /auth/login`).
 
@@ -214,7 +214,7 @@ Responde 200 genérico incluso si el email no existe o el `user` ya está
 - `specs/entities/user.md`, `specs/entities/institution.md`,
   `specs/entities/institution_member.md`.
 - ADR-017 (`EmailProvider` como port).
-- ADR-019 (autogeneración de `join_code`; `user.status = invited` hasta
+- ADR-019 (autogeneración de `join_code`; `users.status = invited` hasta
   verificar correo; refresh token stateless aceptado).
 
 ## Preguntas abiertas

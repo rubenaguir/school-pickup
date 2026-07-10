@@ -2,31 +2,31 @@
 
 ## Propósito
 
-El tutor toca "voy en camino" y se crea un `pickup_request` en `status =
+El tutor toca "voy en camino" y se crea un `pickup_requests` en `status =
 en_route`: es el evento central del dominio, el inicio del trayecto de recogida.
 Al crearlo se resuelve su punto de entrega, se genera el código de entrega y se
 publica el estado inicial en tiempo real para el tablero y la consola de puerta.
 
 ## Entidades involucradas
 
-- `pickup_request` (creado)
+- `pickup_requests` (creado)
 - `pickup_request_status_history` (creada la primera fila, `status = en_route`)
-- `enrollment` (leído: precondición de `approved`; fuente de `institution_id` y
+- `enrollments` (leído: precondición de `approved`; fuente de `institution_id` y
   `grade_or_group`)
-- `student_guardian` (leído, para autorización)
-- `delivery_point` (leído, para resolver `delivery_point_id`)
-- `vehicle` (leído, si se selecciona uno del catálogo, para el snapshot)
+- `student_guardians` (leído, para autorización)
+- `delivery_points` (leído, para resolver `delivery_point_id`)
+- `vehicles` (leído, si se selecciona uno del catálogo, para el snapshot)
 
 ## Precondiciones
 
-- Quien crea es un `user` autenticado y debe ser `student_guardian` en
-  `status = active` del alumno del `enrollment` indicado (solo un guardián activo
+- Quien crea es un `users` autenticado y debe ser `student_guardians` en
+  `status = active` del alumno del `enrollments` indicado (solo un guardián activo
   puede operar sobre el alumno — invariante de
   `specs/entities/student_guardian.md`). Un guardián `invited`/`revoked` no puede.
-- El `enrollment` debe estar en `status = approved` (ADR-018, punto 2): no se
+- El `enrollments` debe estar en `status = approved` (ADR-018, punto 2): no se
   puede iniciar una recogida sobre una asociación pendiente o rechazada.
-- El `guardian_user_id` del `pickup_request` es el usuario autenticado.
-- **No debe existir ya un `pickup_request` activo (no terminal:
+- El `guardian_user_id` del `pickup_requests` es el usuario autenticado.
+- **No debe existir ya un `pickup_requests` activo (no terminal:
   `en_route`/`arriving`/`arrived`) para el mismo `enrollment_id`** (ADR-024,
   punto 1): no se permiten dos recogidas en curso para la misma asociación.
 - No se valida la distancia del tutor al plantel al crear: `activation_radius_meters`
@@ -35,24 +35,24 @@ publica el estado inicial en tiempo real para el tablero y la consola de puerta.
 
 ## Postcondiciones
 
-- Se crea una fila en `pickup_request` con:
-  - `enrollment_id` = el `enrollment` indicado; `guardian_user_id` = usuario
+- Se crea una fila en `pickup_requests` con:
+  - `enrollment_id` = el `enrollments` indicado; `guardian_user_id` = usuario
     autenticado; `status = en_route`; `started_at = now()`.
-  - `institution_id` **denormalizado** desde `enrollment.institution_id`,
+  - `institution_id` **denormalizado** desde `enrollments.institution_id`,
     inmutable después (ADR-018, punto 4).
   - `delivery_point_id` **resuelto automáticamente** haciendo match entre
-    `enrollment.grade_or_group` y `delivery_point.assigned_groups` de la
+    `enrollments.grade_or_group` y `delivery_points.assigned_groups` de la
     institución (ADR-012). Queda `null` si la institución no tiene puntos
     configurados o no hay match; el tutor no lo elige ni lo cambia.
   - `delivery_code`: código de 4 dígitos generado en el servidor, **único solo
-    entre los `pickup_request` en `status` `en_route`/`arriving`/`arrived` de la
+    entre los `pickup_requests` en `status` `en_route`/`arriving`/`arrived` de la
     misma institución** (índice único parcial, ADR-018 punto 3). No es único
     global ni permanente: puede repetirse en el tiempo y entre instituciones.
   - Vehículo: se especifica por una de tres vías mutuamente excluyentes (ADR-014,
     ADR-025):
     - **Catálogo:** si se selecciona un `vehicle_id` del catálogo del tutor, se
       copian `vehicle_description` y `vehicle_plate` como **snapshot** al momento del
-      viaje (ADR-014); editar/borrar el `vehicle` después no altera estos campos.
+      viaje (ADR-014); editar/borrar el `vehicles` después no altera estos campos.
     - **Captura libre:** si el tutor indica `vehicle_description`/`vehicle_plate` sin
       `vehicle_id` (un vehículo prestado o un viaje puntual, no guardado en el
       catálogo), se toman tal cual como snapshot, sin crear una fila en `vehicles`
@@ -178,7 +178,7 @@ Ver `specs/api-contracts/pickup-realtime-mqtt.md` para el payload.
 - ADR-014 (snapshot de vehículo).
 - ADR-017 (máquina de estados compartida en `packages/shared`; `MqttClient`
   como port).
-- ADR-018 (punto 2: `enrollment` debe estar `approved`; punto 3: alcance de
+- ADR-018 (punto 2: `enrollments` debe estar `approved`; punto 3: alcance de
   unicidad de `delivery_code`; punto 4: `institution_id` denormalizado).
 - ADR-024 (punto 1: bloqueo de recogida activa duplicada; punto 7:
   `activation_radius_meters` solo afordance de cliente).

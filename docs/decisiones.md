@@ -1130,3 +1130,64 @@ registrada en las "Consecuencias".
 - Reglas de negocio a forzar por test/constraint (ADR-021): unicidad parcial de
   `enrollments` y `student_guardians` (excluyendo estados terminales); revocación
   de `UPDATE`/`DELETE` sobre `audit_log` para el rol de la aplicación.
+
+## ADR-027 — Corrección de nomenclatura de tablas: plural sin excepción
+
+**Contexto.** Al implementar las entidades de TypeORM (Fase 3, primer código
+que toca el esquema real), se detectó que 12 de las 14 `specs/entities/*.md`
+usaban el nombre de tabla en singular — en su encabezado H1 y en los
+fragmentos internos que referencian esa tabla (notación `FK → tabla.columna`,
+relaciones `vía tabla.columna`, descripciones de índices) — divergiendo
+silenciosamente de `docs/modelo-datos.md`, que documenta las 14 entidades en
+plural desde su origen (encabezados `### \`users\``, `### \`institutions\``,
+etc.), y de las referencias literales ya usadas en ADR-018, ADR-024, ADR-025 y
+ADR-026 (`vehicles.is_primary`, `pickup_requests (enrollment_id)`,
+`enrollments` y `student_guardians` como constraints). La divergencia no se
+había detectado antes porque ninguna implementación real había tocado el
+esquema hasta esta fase; las 12 specs afectadas eran internamente
+consistentes entre sí (mismo error repetido en cada una), lo que ocultó el
+desvío frente a su propia fuente.
+
+Las únicas dos entidades ya correctas eran `pickup_request_status_history` y
+`audit_log`: `docs/modelo-datos.md` tampoco las pluraliza (no es un desvío,
+es la convención correcta para esas dos).
+
+La revisión se extendió a `specs/api-contracts/*.md` (12 archivos) y
+`specs/features/*.md` (23 archivos), donde la misma tabla en singular
+aparecía de forma extensiva en prosa (reglas de autorización, tablas de
+errores, descripciones de payload) — 447 ocurrencias en total. Las rutas REST
+(`GET /institution-members/:id`, etc.) ya usaban su propia convención
+kebab-case plural y no se vieron afectadas. Se detectó además una convención
+distinta que coincide superficialmente en sintaxis: los valores de
+`audit_log.action` siguen el patrón `entity.verb` (ADR-018 punto 9, ADR-026
+punto 5) usando el nombre de entidad en **singular** deliberadamente (ej.
+`enrollment.approved`, `student_guardian.added`, `institution_member.removed`)
+— esto no es una referencia de tabla y se preserva sin cambio.
+
+**Decisión.** La convención de nomenclatura de tablas es **plural sin
+excepción** (salvo `pickup_request_status_history` y `audit_log`, que nunca
+se pluralizan, tal como los documenta `docs/modelo-datos.md` desde su
+origen), consistente con ADR-018, ADR-024, ADR-025, ADR-026 y
+`docs/modelo-datos.md`. Se corrige el desvío en:
+1. Las 14 entidades de TypeORM ya implementadas (12 con el nombre de tabla
+   corregido; las 2 restantes ya eran correctas).
+2. Las 12 `specs/entities/*.md` afectadas (encabezado H1 y toda referencia
+   interna literal a esa tabla).
+3. `specs/api-contracts/*.md` y `specs/features/*.md` donde aparecía la
+   misma tabla en singular en prosa — con la excepción explícita de los
+   valores de `audit_log.action` en convención `entity.verb`, que
+   permanecen en singular por diseño.
+
+**Consecuencias.**
+- `specs/entities/*.md` vuelve a ser fiel a `docs/modelo-datos.md`,
+  restaurando su rol de fuente de verdad sin contradicción interna
+  (`CLAUDE.md` §"Reglas de implementación").
+- Ninguna migración se había escrito todavía (Fase 3 recién arrancando), así
+  que la corrección no tiene costo de migración de datos reales — es un
+  cambio de texto en specs y en clases de TypeORM aún no desplegadas.
+- `pickup_request_status_history` y `audit_log` no requirieron cambio: nunca
+  estuvieron en plural en `docs/modelo-datos.md`.
+- Los valores de `audit_log.action` (`entity.verb`, ej.
+  `student_guardian.added`) permanecen explícitamente en singular — no se
+  confunden con la nomenclatura de tablas pese a la coincidencia sintáctica
+  superficial (`tabla.columna` vs. `entidad.verbo`).

@@ -3,22 +3,22 @@
 ## Propósito
 
 Un tutor solicita asociar uno de sus alumnos a una institución. Esto crea un
-`enrollment` en estado `pending`, que la institución deberá aprobar o
+`enrollments` en estado `pending`, que la institución deberá aprobar o
 rechazar (feature 006) antes de que el alumno pueda tener recogidas
-(`pickup_request`, fuera de este slice) en esa institución.
+(`pickup_requests`, fuera de este slice) en esa institución.
 
 ## Entidades involucradas
 
-- `enrollment` (creado)
-- `institution` (leído, para resolver por nombre o `join_code`)
-- `student` (leído)
+- `enrollments` (creado)
+- `institutions` (leído, para resolver por nombre o `join_code`)
+- `students` (leído)
 
 ## Precondiciones
 
-- El tutor debe estar autenticado y ser `student_guardian` (`status =
-  active`) del `student` que intenta asociar — un tutor no puede asociar un
+- El tutor debe estar autenticado y ser `student_guardians` (`status =
+  active`) del `students` que intenta asociar — un tutor no puede asociar un
   alumno que no es suyo.
-- No debe existir ya un `enrollment` **no terminal** (`pending` o `approved`)
+- No debe existir ya un `enrollments` **no terminal** (`pending` o `approved`)
   para ese `(student_id, institution_id)` — índice único parcial documentado en
   `docs/modelo-datos.md` y `specs/entities/enrollment.md`. Una fila `rejected`
   previa (terminal) NO bloquea una solicitud nueva: se crea una fila nueva. Ver
@@ -32,10 +32,10 @@ rechazar (feature 006) antes de que el alumno pueda tener recogidas
 
 ## Postcondiciones
 
-- Se crea una fila en `enrollment` con `status = pending`,
+- Se crea una fila en `enrollments` con `status = pending`,
   `requested_by_user_id` = el tutor autenticado, `requested_at = now()`.
 - `grade_or_group` se captura en el mismo formulario si la institución lo
-  requiere (usado después para resolver `delivery_point`, fuera de este
+  requiere (usado después para resolver `delivery_points`, fuera de este
   slice).
 - `enrollment_code` se genera en este paso (único globalmente, ver ADR-016)
   — su algoritmo de generación no está definido en ningún ADR ni spec de
@@ -117,10 +117,10 @@ No aplica.
 
 - `specs/entities/enrollment.md`, `specs/entities/institution.md`,
   `specs/entities/student.md`.
-- ADR-012 (`grade_or_group` alimenta la asignación de `delivery_point`, fuera
+- ADR-012 (`grade_or_group` alimenta la asignación de `delivery_points`, fuera
   de este slice).
-- ADR-016 (`enrollment_code` único, vive en `enrollment`).
-- ADR-018 (aprobación bloqueada si `institution.status != approved`).
+- ADR-016 (`enrollment_code` único, vive en `enrollments`).
+- ADR-018 (aprobación bloqueada si `institutions.status != approved`).
 - ADR-019 (visibilidad de instituciones no aprobadas en búsqueda/`join_code`).
 - ADR-026 (punto 1: índice único parcial que excluye `rejected`; una solicitud nueva tras un rechazo crea una fila nueva).
 

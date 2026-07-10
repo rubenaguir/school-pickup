@@ -9,20 +9,20 @@ institución: no existe un flujo separado de "crear cuenta" seguido de
 
 ## Entidades involucradas
 
-- `institution` (creada)
-- `institution_member` (creada, `role = admin`)
-- `user` (creado si quien registra no tiene ya una cuenta; ver precondiciones)
+- `institutions` (creada)
+- `institution_members` (creada, `role = admin`)
+- `users` (creado si quien registra no tiene ya una cuenta; ver precondiciones)
 
 ## Precondiciones
 
 - Quien registra no necesita tener una cuenta previa: este feature puede
-  crear el `user` administrador junto con la `institution` en la misma
+  crear el `users` administrador junto con la `institutions` en la misma
   operación.
 - `email` del administrador no debe existir ya en `users.email`.
 
 ## Postcondiciones
 
-- Se crea una fila en `institution` con `status = pending` (ver ADR-018: una
+- Se crea una fila en `institutions` con `status = pending` (ver ADR-018: una
   institución permanece en `pending` hasta que un super-admin decide
   aprobarla; no hay estado de rechazo explícito).
 - **`join_code` se autogenera** (ADR-019, punto 1): iniciales del nombre de
@@ -30,14 +30,14 @@ institución: no existe un flujo separado de "crear cuenta" seguido de
   unicidad y sufijo aleatorio en caso de colisión. El formulario de alta no
   captura este campo; el admin puede regenerarlo después desde la
   configuración de la institución (fuera de este slice).
-- Se crea (o reutiliza, si ya existía la cuenta) una fila en `user`.
-- **El `user` administrador queda en `status = invited`** (ADR-019, punto
+- Se crea (o reutiliza, si ya existía la cuenta) una fila en `users`.
+- **El `users` administrador queda en `status = invited`** (ADR-019, punto
   2), no `active`: al completar el registro se le envía un correo de
   verificación vía el port `EmailProvider` (ver ADR-017) con un token
   firmado de corta duración (24h). No puede iniciar sesión hasta verificar
   su correo — ver `specs/features/007-verificacion-correo.md`.
-- Se crea una fila en `institution_member` vinculando ese `user` con la
-  nueva `institution` y `role = admin` (ver ADR-011: el `role` es
+- Se crea una fila en `institution_members` vinculando ese `users` con la
+  nueva `institutions` y `role = admin` (ver ADR-011: el `role` es
   organizacional; `admin` es el rol correcto para quien da de alta el
   plantel).
 - Ningún otro dato operativo de la institución (geocerca, radios, horarios,
@@ -96,9 +96,9 @@ No aplica: este feature no publica ni consume ningún topic MQTT.
 - ADR-004 (modelo "institution").
 - ADR-011 (rol `admin` como rol organizacional del primer miembro).
 - ADR-017 (`EmailProvider` como port).
-- ADR-018 (transiciones de `institution.status`; permanece `pending` hasta
+- ADR-018 (transiciones de `institutions.status`; permanece `pending` hasta
   decisión de super-admin).
-- ADR-019 (autogeneración de `join_code`; `user.status = invited` en
+- ADR-019 (autogeneración de `join_code`; `users.status = invited` en
   auto-registro).
 - `specs/entities/institution.md`, `specs/entities/institution_member.md`,
   `specs/entities/user.md`.

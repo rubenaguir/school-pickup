@@ -23,7 +23,7 @@ seguridad"); este documento fija los topics y **una estimación** de los payload
   con otras apps; el prefijo aísla el namespace).
 - **ACL por tenant** en el broker: cada cliente solo publica/consume topics de su
   propia institución. Un tutor de una institución NO puede suscribirse a los de
-  otra. Cualquier `institution_member` puede suscribirse a cualquier topic de
+  otra. Cualquier `institution_members` puede suscribirse a cualquier topic de
   delivery-point de su institución (ADR-011).
 - TLS obligatorio (WSS). Autenticación por usuario/token en el broker, nunca
   anónimo; los tokens los emite el `api` tras el login.
@@ -36,9 +36,9 @@ school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
 
 - **Publica:** la app `parent` (el tutor en camino), vía MQTT.js sobre WSS.
 - **Consume:** el `worker` (feature 019), que persiste cada lectura en
-  `location_update` y recalcula el ETA con throttling vía `MapsProvider`.
+  `location_updates` y recalcula el ETA con throttling vía `MapsProvider`.
 
-**Payload** (una lectura de GPS; campos anclados a `location_update`)
+**Payload** (una lectura de GPS; campos anclados a `location_updates`)
 ```json
 {
   "lat": "number",
@@ -59,8 +59,8 @@ school-pickup/institution/{institutionId}/board
 - **Consume:** el `board` (kiosko) de la institución, que refresca el listado
   estilo "llegadas de aeropuerto".
 
-**Payload** (estado de un `pickup_request` para el tablero; los campos marcados
-"(join)" provienen de entidades relacionadas, no de columnas de `pickup_request`)
+**Payload** (estado de un `pickup_requests` para el tablero; los campos marcados
+"(join)" provienen de entidades relacionadas, no de columnas de `pickup_requests`)
 ```json
 {
   "pickupRequestId": "uuid",
@@ -86,10 +86,10 @@ la app del tutor).
 school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
 ```
 
-- **Publica:** el `api`/`worker`, **solo** cuando el `pickup_request` tiene
+- **Publica:** el `api`/`worker`, **solo** cuando el `pickup_requests` tiene
   `delivery_point_id` no nulo (mismas transiciones que el feed agregado).
-- **Consume:** la consola de puerta de ese `delivery_point` (cualquier
-  `institution_member` de la institución, ADR-011), que ve solo los alumnos
+- **Consume:** la consola de puerta de ese `delivery_points` (cualquier
+  `institution_members` de la institución, ADR-011), que ve solo los alumnos
   asignados a su punto.
 
 **Payload** (igual forma que el del tablero, acotado a la cola de ese punto)

@@ -3,33 +3,33 @@
 ## Propósito
 
 Completa el caso "correo nuevo" de la feature 012: una persona que fue invitada
-a una institución, y para la cual se creó un `user` con `status = invited` y sin
+a una institución, y para la cual se creó un `users` con `status = invited` y sin
 contraseña, recibe un correo con un link para aceptar la invitación. Al
 aceptarlo, define su contraseña por primera vez y su cuenta pasa a `active`,
 quedando en condiciones de iniciar sesión.
 
 ## Entidades involucradas
 
-- `user` (leído y actualizado: se fija la contraseña y `status` pasa a `active`)
+- `users` (leído y actualizado: se fija la contraseña y `status` pasa a `active`)
 
 ## Precondiciones
 
-- El `user` existe con `status = invited`, creado por la feature 012 en su caso
+- El `users` existe con `status = invited`, creado por la feature 012 en su caso
   de correo nuevo (nunca definió contraseña).
 - El invitado presenta un token de invitación válido: JWT firmado de corta
-  duración, sin persistencia en base de datos, que identifica al `user`
+  duración, sin persistencia en base de datos, que identifica al `users`
   invitado. Es el mismo mecanismo de activación por token que la verificación de
   correo (feature 007), unificado y parametrizado según si el paso define
   contraseña (ADR-022, punto 3; ver ADR-019 punto 2).
 
 ## Postcondiciones
 
-- Al aceptar exitosamente: se establece por primera vez la contraseña del `user`
+- Al aceptar exitosamente: se establece por primera vez la contraseña del `users`
   (se guarda su hash en `password_hash`, que hasta ahora era `NULL` — ADR-022
-  punto 2) y `user.status` pasa de `invited` a `active`. La persona puede
+  punto 2) y `users.status` pasa de `invited` a `active`. La persona puede
   iniciar sesión (feature 003) y operar en la institución según el `role` con el
-  que fue invitada (la fila de `institution_member` ya se creó en la feature
-  012). Con esto se satisface la invariante "un `user` `active` tiene
+  que fue invitada (la fila de `institution_members` ya se creó en la feature
+  012). Con esto se satisface la invariante "un `users` `active` tiene
   `password_hash` no nulo" (ADR-022, punto 2).
 - La validez del token se resuelve verificando firma y expiración, sin tabla que
   lo almacene ni lo revoque.

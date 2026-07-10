@@ -6,7 +6,7 @@ Recurso de horarios de salida recurrentes de una institución. Cubre
 ## Reglas de autorización (aislamiento multi-tenant)
 
 Ver `docs/arquitectura.md`. El usuario autenticado debe ser
-`institution_member` de la institución dueña de la ventana, verificado por
+`institution_members` de la institución dueña de la ventana, verificado por
 `InstitutionMembershipGuard` (ADR-022, punto 4). En los endpoints anidados bajo
 `/institutions/:id/...` el guard lee el `institutionId` de la ruta; en
 `PATCH /dismissal-windows/:id` resuelve la institución de la ventana con una
@@ -14,7 +14,7 @@ consulta mínima al repositorio y la compara contra las membresías del usuario.
 Un usuario de otra institución recibe 403.
 
 Rol requerido para escritura (`POST`, `PATCH`): **`role = admin`** (ADR-022,
-punto 1). La lectura (`GET`) está disponible para cualquier `institution_member`
+punto 1). La lectura (`GET`) está disponible para cualquier `institution_members`
 de la institución.
 
 ## `GET /institutions/:id/dismissal-windows`
@@ -49,7 +49,7 @@ Lista las ventanas de salida recurrentes de la institución. Ver feature 010.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 404 | la institución no existe |
 
 ## `POST /institutions/:id/dismissal-windows`
@@ -87,8 +87,8 @@ Crea una ventana de salida recurrente. Ver feature 010.
 | Código | Caso |
 |---|---|
 | 400 | payload inválido (`weekday` fuera de 0–6, `label` faltante, horas mal formadas) |
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la institución no existe |
 
 ## `PATCH /dismissal-windows/:id`
@@ -125,8 +125,8 @@ Edita una ventana, incluyendo pausar/activar vía `status`. Ver feature 010.
 | Código | Caso |
 |---|---|
 | 400 | payload inválido (`weekday` fuera de 0–6, horas mal formadas) |
-| 403 | el usuario autenticado no es `institution_member` de la institución de la ventana |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de la institución de la ventana |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la ventana no existe |
 
 ## Referencias

@@ -9,8 +9,8 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
 
 ## Entidades involucradas
 
-- `location_update` (creada una fila por cada lectura recibida)
-- `pickup_request` (actualizado: `last_location`, `estimated_arrival_at`,
+- `location_updates` (creada una fila por cada lectura recibida)
+- `pickup_requests` (actualizado: `last_location`, `estimated_arrival_at`,
   `eta_seconds`)
 
 ## Precondiciones
@@ -20,7 +20,7 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
   `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`
   (`docs/arquitectura.md`). La publicación la hace la app `parent`; el ACL por
   tenant del broker garantiza que solo clientes de esa institución publican ahí.
-- El `pickup_request` está en un `status` no terminal (`en_route`/`arriving`/
+- El `pickup_requests` está en un `status` no terminal (`en_route`/`arriving`/
   `arrived`): recibir ubicación de un trayecto ya `delivered`/`cancelled` no
   alimenta ni ETA ni tablero (principio de "rastrear solo durante la ventana de
   recogida", `docs/arquitectura.md` §Privacidad).
@@ -28,7 +28,7 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
 ## Postcondiciones
 
 ### Ingesta (sin throttling)
-- Por **cada** lectura de GPS recibida se inserta una fila en `location_update`
+- Por **cada** lectura de GPS recibida se inserta una fila en `location_updates`
   con `pickup_request_id`, `location` (geography Point 4326), `accuracy_meters`
   (si viene) y `recorded_at`. La escritura del histórico **no** se estrangula:
   el throttling aplica solo al recálculo de ETA, no a la ingesta (invariante de
@@ -40,7 +40,7 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
   (ADR-024, punto 2). El recálculo llama al port **`MapsProvider`** (ETA con
   tráfico en vivo); la implementación concreta (Google/Mapbox) está fuera de
   alcance y no se referencia aquí (ADR-017).
-- Al recalcular se actualiza en `pickup_request`: `last_location` (última
+- Al recalcular se actualiza en `pickup_requests`: `last_location` (última
   posición conocida, desnormalizada para lectura rápida del tablero),
   `estimated_arrival_at` y `eta_seconds`.
 - Tras actualizar, el `worker` publica el estado (ver feature 020 para la
@@ -97,7 +97,7 @@ publicación de estado está en `specs/api-contracts/pickup-realtime-mqtt.md`.
 
 ## Referencias
 
-- ADR-013 (ciclo de vida de `pickup_request`, del que depende esta telemetría).
+- ADR-013 (ciclo de vida de `pickup_requests`, del que depende esta telemetría).
 - ADR-017 (`MapsProvider` y `MqttClient` como ports; el `worker` no se acopla a
   implementaciones concretas).
 - ADR-018 (contexto de retención de `location_updates`, ver feature 023).

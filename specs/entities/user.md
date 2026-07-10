@@ -1,10 +1,10 @@
-# User
+# Users
 
 ## Propósito
 Cuenta de autenticación para todos los roles de la plataforma (tutor, personal
 de institución, super-admin). El rol operativo dentro de una institución vive
-en `institution_member`, no en `user`; la condición de tutor se deriva de la
-existencia de filas en `student_guardian`.
+en `institution_members`, no en `users`; la condición de tutor se deriva de la
+existencia de filas en `student_guardians`.
 
 ## Campos
 
@@ -26,14 +26,14 @@ existencia de filas en `student_guardian`.
 
 ## Relaciones
 
-- `hasMany InstitutionMember` (`institutionMembers`) — vía `institution_member.user_id`. Cascade: `ON DELETE RESTRICT` desde el hijo (no se borra un usuario con membresías activas).
-- `hasMany StudentGuardian` (`guardianOf`) — vía `student_guardian.guardian_user_id`. `ON DELETE RESTRICT`.
-- `hasMany Vehicle` (`vehicles`) — vía `vehicle.guardian_user_id`. `ON DELETE RESTRICT`.
-- `hasMany Student` (`studentsCreated`) — vía `student.created_by_user_id`. `ON DELETE RESTRICT`.
-- `hasMany Enrollment` (`enrollmentsRequested`, `enrollmentsReviewed`) — vía `enrollment.requested_by_user_id` / `enrollment.reviewed_by_user_id`. `ON DELETE RESTRICT` / `ON DELETE SET NULL` (reviewer es nullable).
-- `hasMany PickupRequest` (`pickupRequests`) — vía `pickup_request.guardian_user_id`. `ON DELETE RESTRICT`.
+- `hasMany InstitutionMember` (`institutionMembers`) — vía `institution_members.user_id`. Cascade: `ON DELETE RESTRICT` desde el hijo (no se borra un usuario con membresías activas).
+- `hasMany StudentGuardian` (`guardianOf`) — vía `student_guardians.guardian_user_id`. `ON DELETE RESTRICT`.
+- `hasMany Vehicle` (`vehicles`) — vía `vehicles.guardian_user_id`. `ON DELETE RESTRICT`.
+- `hasMany Student` (`studentsCreated`) — vía `students.created_by_user_id`. `ON DELETE RESTRICT`.
+- `hasMany Enrollment` (`enrollmentsRequested`, `enrollmentsReviewed`) — vía `enrollments.requested_by_user_id` / `enrollments.reviewed_by_user_id`. `ON DELETE RESTRICT` / `ON DELETE SET NULL` (reviewer es nullable).
+- `hasMany PickupRequest` (`pickupRequests`) — vía `pickup_requests.guardian_user_id`. `ON DELETE RESTRICT`.
 - `hasMany PickupRequestStatusHistory` (`statusChangesMade`) — vía `pickup_request_status_history.changed_by_user_id`. `ON DELETE SET NULL` (nullable: transición automática).
-- `hasMany DeliveryPoint` (`operatedDeliveryPoints`) — vía `delivery_point.operator_user_id`. `ON DELETE SET NULL`.
+- `hasMany DeliveryPoint` (`operatedDeliveryPoints`) — vía `delivery_points.operator_user_id`. `ON DELETE SET NULL`.
 - `hasMany AuditLog` (`auditLogEntries`) — vía `audit_log.actor_user_id`. `ON DELETE SET NULL`.
 
 ## Índices
@@ -43,11 +43,11 @@ existencia de filas en `student_guardian`.
 
 ## Invariantes de negocio
 
-- El rol dentro de una institución NO vive aquí: se resuelve consultando `institution_member`. `user` no tiene columna `role`.
-- La condición de "tutor" no es un flag en `user`: se deriva de tener al menos una fila en `student_guardian` como `guardian_user_id`.
+- El rol dentro de una institución NO vive aquí: se resuelve consultando `institution_members`. `users` no tiene columna `role`.
+- La condición de "tutor" no es un flag en `users`: se deriva de tener al menos una fila en `student_guardians` como `guardian_user_id`.
 - La autenticación biométrica ("inicio con huella") es responsabilidad exclusiva del cliente (WebAuthn/plataforma) y no tiene representación en esta tabla. Ver ADR-016.
-- La mayoría de los FK hacia `user` en el resto del modelo asumen borrado lógico (`status = suspended`), no borrado físico — de ahí que la mayoría de relaciones entrantes usen `ON DELETE RESTRICT`/`SET NULL` en vez de `CASCADE`.
-- `password_hash` es nullable: es `NULL` para un `user` invitado por un admin (`institution_member`) o por otro tutor (`student_guardian`) que aún no define contraseña. Invariante: un `user` con `status = active` debe tener `password_hash` no nulo. No se implementa como `CHECK` constraint; se valida en la capa de servicio al activar la cuenta (auto-registro con contraseña de entrada, o aceptación de invitación que la define por primera vez), consistente con ADR-017. Ver ADR-022.
+- La mayoría de los FK hacia `users` en el resto del modelo asumen borrado lógico (`status = suspended`), no borrado físico — de ahí que la mayoría de relaciones entrantes usen `ON DELETE RESTRICT`/`SET NULL` en vez de `CASCADE`.
+- `password_hash` es nullable: es `NULL` para un `users` invitado por un admin (`institution_members`) o por otro tutor (`student_guardians`) que aún no define contraseña. Invariante: un `users` con `status = active` debe tener `password_hash` no nulo. No se implementa como `CHECK` constraint; se valida en la capa de servicio al activar la cuenta (auto-registro con contraseña de entrada, o aceptación de invitación que la define por primera vez), consistente con ADR-017. Ver ADR-022.
 
 ## Enums
 
@@ -56,6 +56,6 @@ existencia de filas en `student_guardian`.
 ## Referencias
 
 - ADR-016 (preferencias de notificación inline, biometría solo cliente).
-- ADR-011 (el rol operativo vive en `institution_member`, no aquí).
+- ADR-011 (el rol operativo vive en `institution_members`, no aquí).
 - ADR-018 (transiciones válidas de `status`).
 - ADR-022 (`password_hash` nullable; invariante `active` ⇒ `password_hash` no nulo).

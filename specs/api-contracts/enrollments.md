@@ -10,16 +10,16 @@ Ver `docs/arquitectura.md`. Dos perspectivas distintas sobre el mismo
 recurso:
 - **Tutor**: solo puede crear/ver `enrollments` donde él sea
   `requested_by_user_id` (o, para ver, donde sea guardián activo del
-  `student` asociado).
+  `students` asociado).
 - **Miembro de institución**: solo puede **ver** `enrollments` cuya
-  `institution_id` coincida con alguna de sus filas de `institution_member`
+  `institution_id` coincida con alguna de sus filas de `institution_members`
   (`GET`, cualquier `role`). Para **aprobar/rechazar** aplica además una
   restricción de rol (ADR-019, punto 5): solo `role = admin` puede ejecutar
   `PATCH /enrollments/:id/approve` o `/reject`; `coordinator`, `teacher` y
   `gate_operator` pueden ver la bandeja pero no resolverla. Como el access
   token no fija `institutionId` (ver `specs/features/003-login.md`), cada
   endpoint institucional recibe el `institutionId` explícitamente (o lo
-  deriva del `enrollment` en los `PATCH`) y lo valida contra las membresías
+  deriva del `enrollments` en los `PATCH`) y lo valida contra las membresías
   del usuario autenticado.
 
 ## `POST /enrollments`
@@ -59,7 +59,7 @@ en el cliente antes de enviar; `joinCode` se resuelve en el servidor).
 | 403 | el usuario autenticado no es guardián activo del `studentId` |
 | 404 | `joinCode` no corresponde a ninguna institución **con `status = approved`** (ADR-019, punto 4 — una institución `pending`/`suspended` no resuelve, igual que si no existiera) |
 | 404 | `institutionId` no corresponde a ninguna institución `approved` |
-| 409 | ya existe un `enrollment` para ese `(studentId, institutionId)` |
+| 409 | ya existe un `enrollments` para ese `(studentId, institutionId)` |
 
 ## `GET /enrollments?status=pending&institutionId=...`
 
@@ -69,7 +69,7 @@ feature 006.
 **Query params**
 | Param | Requerido | Notas |
 |---|---|---|
-| `institutionId` | sí | debe corresponder a una `institution_member` del usuario autenticado |
+| `institutionId` | sí | debe corresponder a una `institution_members` del usuario autenticado |
 | `status` | no | filtra por `pending`/`approved`/`rejected`; sin filtro, devuelve todos |
 
 **Response 200**
@@ -96,7 +96,7 @@ feature 006.
 | Código | Caso |
 |---|---|
 | 400 | `institutionId` faltante |
-| 403 | el usuario autenticado no es `institution_member` de ese `institutionId` |
+| 403 | el usuario autenticado no es `institution_members` de ese `institutionId` |
 
 ## `PATCH /enrollments/:id/approve`
 
@@ -117,11 +117,11 @@ Ver feature 006.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de la institución del enrollment |
-| 403 | el usuario autenticado es `institution_member` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
-| 404 | `enrollment` no existe |
-| 409 | `enrollment.status != pending` |
-| 422 | `institution.status != approved` (regla cruzada entre entidades; ADR-018, ADR-025 punto 5) |
+| 403 | el usuario autenticado no es `institution_members` de la institución del enrollment |
+| 403 | el usuario autenticado es `institution_members` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
+| 404 | `enrollments` no existe |
+| 409 | `enrollments.status != pending` |
+| 422 | `institutions.status != approved` (regla cruzada entre entidades; ADR-018, ADR-025 punto 5) |
 
 **Auditoría.** La aprobación registra una fila en `audit_log` con
 `action = enrollment.approved` (aprobación = acción sensible según `CLAUDE.md`;
@@ -146,12 +146,12 @@ capturarlo).
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de la institución del enrollment |
-| 403 | el usuario autenticado es `institution_member` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
-| 404 | `enrollment` no existe |
-| 409 | `enrollment.status != pending` |
+| 403 | el usuario autenticado no es `institution_members` de la institución del enrollment |
+| 403 | el usuario autenticado es `institution_members` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
+| 404 | `enrollments` no existe |
+| 409 | `enrollments.status != pending` |
 
-Nota: a diferencia de `approve`, `reject` no valida `institution.status`
+Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 (ver feature 006 — ADR-018 solo condiciona la transición a `approved`).
 
 **Auditoría.** El rechazo registra una fila en `audit_log` con
@@ -167,7 +167,7 @@ Nota: a diferencia de `approve`, `reject` no valida `institution.status`
 - ADR-018 (condición de aprobación; `rejected` terminal).
 - ADR-019 (visibilidad de instituciones no aprobadas; restricción de
   `role = admin` para aprobar/rechazar).
-- ADR-025 (punto 5: `institution.status != approved` → 422; punto 6: registro en
+- ADR-025 (punto 5: `institutions.status != approved` → 422; punto 6: registro en
   `audit_log` de `enrollment.approved` / `enrollment.rejected`).
 
 ## Preguntas abiertas

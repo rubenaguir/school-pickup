@@ -6,17 +6,17 @@ Un miembro de la institución administra las ventanas de salida recurrentes de
 su plantel (`dismissal_windows`): horarios semanales nombrados (ej. "Salida
 vespertina") que sirven para calcular los recordatorios de anticipación
 (`advance_notice_minutes`) y para validar la ventana en la que un
-`pickup_request` tiene sentido. Cubre crear, editar y pausar/activar ventanas.
+`pickup_requests` tiene sentido. Cubre crear, editar y pausar/activar ventanas.
 
 ## Entidades involucradas
 
-- `dismissal_window` (creado, actualizado, pausado/activado)
-- `institution_member` (leído, para autorización)
-- `institution` (leído, para autorización multi-tenant)
+- `dismissal_windows` (creado, actualizado, pausado/activado)
+- `institution_members` (leído, para autorización)
+- `institutions` (leído, para autorización multi-tenant)
 
 ## Precondiciones
 
-- Quien gestiona debe ser `institution_member` de la misma `institution_id`
+- Quien gestiona debe ser `institution_members` de la misma `institution_id`
   a la que pertenece (o pertenecerá) la ventana (aislamiento multi-tenant, ver
   `docs/arquitectura.md`).
 - Gestionar horarios recurrentes está **restringido a `role = admin`** de esa
@@ -26,20 +26,20 @@ vespertina") que sirven para calcular los recordatorios de anticipación
 ## Postcondiciones
 
 ### Al crear
-- Se crea una fila en `dismissal_window` con `institution_id`, `weekday` (0–6),
+- Se crea una fila en `dismissal_windows` con `institution_id`, `weekday` (0–6),
   `start_time`, `end_time`, `label` (obligatorio), `level` (opcional) y
   `status = active` por defecto (ADR-015). Una institución puede tener múltiples
   ventanas nombradas, diferenciadas por `label` y `level`.
 
 ### Al editar
 - Se actualizan los campos indicados de la ventana (`weekday`, `start_time`,
-  `end_time`, `label`, `level`). La entidad `dismissal_window` no tiene columnas
+  `end_time`, `label`, `level`). La entidad `dismissal_windows` no tiene columnas
   de timestamp (`created_at`/`updated_at`) — ver
   `specs/entities/dismissal_window.md` —, así que no se registra fecha de
   modificación.
 
 ### Al pausar/activar
-- `dismissal_window.status` alterna entre `active` y `paused`. `paused` desactiva
+- `dismissal_windows.status` alterna entre `active` y `paused`. `paused` desactiva
   temporalmente la ventana sin borrarla, conservando el historial de
   configuración (ADR-015). No hay borrado documentado en la entidad; pausar es
   el mecanismo para "apagar" una ventana.

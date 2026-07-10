@@ -9,18 +9,18 @@ que realiza esa verificación y activa la cuenta.
 
 ## Entidades involucradas
 
-- `user` (leído y actualizado)
+- `users` (leído y actualizado)
 
 ## Precondiciones
 
-- El `user` existe con `status = invited` (creado por feature 001 o 002).
+- El `users` existe con `status = invited` (creado por feature 001 o 002).
 
 ## Postcondiciones
 
-- Al verificar exitosamente: `user.status` pasa de `invited` a `active`. El
+- Al verificar exitosamente: `users.status` pasa de `invited` a `active`. El
   usuario puede iniciar sesión (feature 003).
 - El token de verificación es un JWT firmado de corta duración (24h),
-  conteniendo `user.id`, **sin persistencia en base de datos**: no existe
+  conteniendo `users.id`, **sin persistencia en base de datos**: no existe
   ninguna tabla para almacenarlo ni revocarlo (ver ADR-019, punto 2) — su
   validez se resuelve enteramente verificando firma y expiración.
 - **El reenvío de correo de verificación está limitado a 3 solicitudes por

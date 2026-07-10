@@ -10,17 +10,17 @@ contexto de verificación de identidad en el punto de entrega:
 
 ## Entidades involucradas
 
-- `pickup_request` (actualizado: `status` a `arrived` y luego `delivered`;
+- `pickup_requests` (actualizado: `status` a `arrived` y luego `delivered`;
   `completed_at` al entregar)
 - `pickup_request_status_history` (una fila por cada transición)
-- `institution_member` (leído, para autorizar la entrega)
-- `student_guardian` (leído, para autorizar la confirmación de llegada)
+- `institution_members` (leído, para autorizar la entrega)
+- `student_guardians` (leído, para autorizar la confirmación de llegada)
 - `audit_log` (creada una fila por cada intento de `delivery_code` incorrecto)
 
 ## Precondiciones
 
 ### Para `arrived` (tutor)
-- Solo el `guardian_user_id` **dueño** del `pickup_request` puede disparar esta
+- Solo el `guardian_user_id` **dueño** del `pickup_requests` puede disparar esta
   transición (es quien va en camino). En "Camino A" el tutor confirma
   manualmente "ya llegué"; no hay geofence en background
   (`docs/modelo-datos.md`).
@@ -31,22 +31,22 @@ contexto de verificación de identidad en el punto de entrega:
   marque `arriving`) — ADR-024 punto 8.
 
 ### Para `delivered` (staff)
-- Quien confirma la entrega debe ser `institution_member` de la
-  `institution_id` del `pickup_request` (aislamiento multi-tenant). **Cualquier
+- Quien confirma la entrega debe ser `institution_members` de la
+  `institution_id` del `pickup_requests` (aislamiento multi-tenant). **Cualquier
   `role` sirve**: la consola de puerta no está restringida por rol (ADR-011),
-  a diferencia de aprobar un `enrollment` (restringido a `admin` por ADR-019).
+  a diferencia de aprobar un `enrollments` (restringido a `admin` por ADR-019).
 - El staff verifica el `delivery_code` de 4 dígitos: la consola de puerta lo
-  despliega directamente (es visible para cualquier `institution_member` de la
+  despliega directamente (es visible para cualquier `institution_members` de la
   institución vía `GET`, ADR-024 punto 11), y el operador confirma que coincide
   con el que el tutor muestra en su app. La confirmación de entrega valida el
-  código server-side contra `pickup_request.delivery_code` (ADR-024 punto 4).
+  código server-side contra `pickup_requests.delivery_code` (ADR-024 punto 4).
 - La transición a `delivered` es válida según la máquina de estados compartida
   (ADR-017).
 
 ## Postcondiciones
 
 ### Al confirmar llegada (`arrived`)
-- `pickup_request.status` pasa a `arrived`.
+- `pickup_requests.status` pasa a `arrived`.
 - Se crea una fila en `pickup_request_status_history` con `status = arrived` y
   `changed_by_user_id` = el tutor.
 - Se publica el estado a los topics (agregado y, si hay `delivery_point_id`,
@@ -54,11 +54,11 @@ contexto de verificación de identidad en el punto de entrega:
   (`docs/arquitectura.md` §Identidad en la entrega).
 
 ### Al confirmar entrega (`delivered`)
-- Solo si el `delivery_code` ingresado coincide: `pickup_request.status` pasa a
+- Solo si el `delivery_code` ingresado coincide: `pickup_requests.status` pasa a
   `delivered` y se fija `completed_at = now()` (a partir de aquí corre la
   ventana de retención de `location_updates`, feature 023).
 - Se crea una fila en `pickup_request_status_history` con `status = delivered` y
-  `changed_by_user_id` = el `institution_member` que confirmó.
+  `changed_by_user_id` = el `institution_members` que confirmó.
 - Se publica el estado a los topics; la app del padre recibe la confirmación al
   instante (sin push, por MQTT con la app abierta).
 
@@ -68,7 +68,7 @@ contexto de verificación de identidad en el punto de entrega:
   fricción real con niños esperando por un error de tecleo.
 - Cada intento fallido se registra en `audit_log` con
   `action = pickup_request.delivery_code_mismatch` (convención libre
-  `entity.verb`, ADR-018 punto 9) para trazabilidad. El `pickup_request`
+  `entity.verb`, ADR-018 punto 9) para trazabilidad. El `pickup_requests`
   permanece en `arrived`; no se fija `completed_at` ni se crea fila de historial
   de estado.
 
@@ -147,11 +147,11 @@ agregado y, si hay `delivery_point_id`, a la cola del punto de entrega. Ver
 ## Referencias
 
 - ADR-011 (la consola de puerta no restringe por `role`: cualquier
-  `institution_member` puede confirmar la entrega).
+  `institution_members` puede confirmar la entrega).
 - ADR-013 (ciclo de vida; `delivery_code` como verificación de identidad en la
   entrega).
 - ADR-017 (máquina de estados compartida; `MqttClient` como port).
-- ADR-019 (contraste: aprobar `enrollment` sí se restringe a `admin`; la entrega
+- ADR-019 (contraste: aprobar `enrollments` sí se restringe a `admin`; la entrega
   no).
 - ADR-024 (punto 4: `delivery_code` incorrecto sin bloqueo, con registro en
   `audit_log`; punto 8: `arrived` admitido desde `en_route` y desde `arriving`;

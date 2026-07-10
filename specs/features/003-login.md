@@ -9,14 +9,14 @@ se resuelven después de autenticar, no antes.
 
 ## Entidades involucradas
 
-- `user` (leído)
-- `institution_member` (leído, para que el cliente sepa a qué instituciones
+- `users` (leído)
+- `institution_members` (leído, para que el cliente sepa a qué instituciones
   pertenece el usuario tras el login — ver decisión de diseño sobre el JWT
   abajo)
 
 ## Precondiciones
 
-- El `user` debe existir (por `email`).
+- El `users` debe existir (por `email`).
 
 ## Postcondiciones
 
@@ -25,11 +25,11 @@ se resuelven después de autenticar, no antes.
   `isSuperAdmin`. **No incluye `institutionId` ni `role`.**
   `specs/entities/institution_member.md` documenta explícitamente que el
   índice en `user_id` existe "para el cambio de contexto de institución en
-  el portal" — un mismo `user` puede pertenecer a varias instituciones (o a
+  el portal" — un mismo `users` puede pertenecer a varias instituciones (o a
   ninguna, si es solo tutor). Fijar una institución en el token la
   congelaría al momento del login; en su lugar, cada endpoint con alcance
   institucional recibe el `institutionId` explícitamente (query param o
-  path) y lo valida contra las filas de `institution_member` del usuario
+  path) y lo valida contra las filas de `institution_members` del usuario
   autenticado (ver `specs/api-contracts/enrollments.md`).
 - **Refresh token stateless (decisión aceptada, ADR-019 punto 3).** Ninguna
   de las 14 entidades del modelo persiste ni revoca refresh tokens; se emite
@@ -83,7 +83,7 @@ Then se rechaza el login con un error específico indicando que falta
 ```
 
 Este caso es alcanzable ya en este slice: todo auto-registro (institución o
-tutor) deja al `user` en `invited` hasta verificar su correo (ADR-019, punto
+tutor) deja al `users` en `invited` hasta verificar su correo (ADR-019, punto
 2; ver `specs/features/001-registro-institucion.md`,
 `specs/features/002-registro-tutor.md` y
 `specs/features/007-verificacion-correo.md`).

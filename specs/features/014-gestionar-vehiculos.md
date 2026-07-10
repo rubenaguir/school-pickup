@@ -5,26 +5,26 @@
 Un tutor administra su lista reutilizable de vehículos guardados en el perfil:
 los agrega, edita, elimina y marca cuál es el principal. Es un catálogo del
 tutor, **independiente de cualquier viaje**: el vehículo con el que llega puede
-variar por recogida, y el uso de un vehículo en un `pickup_request` guarda un
+variar por recogida, y el uso de un vehículo en un `pickup_requests` guarda un
 snapshot denormalizado, no una referencia viva (ADR-014). La selección de un
-vehículo al iniciar un `pickup_request` es de un slice futuro, fuera de aquí.
+vehículo al iniciar un `pickup_requests` es de un slice futuro, fuera de aquí.
 
 ## Entidades involucradas
 
-- `vehicle` (creado, actualizado, eliminado)
-- `user` (leído, para autorización: el tutor autenticado es el dueño)
+- `vehicles` (creado, actualizado, eliminado)
+- `users` (leído, para autorización: el tutor autenticado es el dueño)
 
 ## Precondiciones
 
-- Quien gestiona es un `user` autenticado y solo puede operar sobre **sus
-  propios** vehículos: `vehicle.guardian_user_id` debe ser el usuario
-  autenticado. No hay restricción por rol — "tutor" no es un flag en `user`
+- Quien gestiona es un `users` autenticado y solo puede operar sobre **sus
+  propios** vehículos: `vehicles.guardian_user_id` debe ser el usuario
+  autenticado. No hay restricción por rol — "tutor" no es un flag en `users`
   (ver `specs/entities/user.md`); la autorización es por propiedad del dato.
 
 ## Postcondiciones
 
 ### Al agregar
-- Se crea una fila en `vehicle` con `guardian_user_id` = usuario autenticado,
+- Se crea una fila en `vehicles` con `guardian_user_id` = usuario autenticado,
   `description` (obligatorio, ej. "Mazda CX-5 gris") y `plate` (obligatorio).
 - `is_primary` se puede fijar al crear; si no se indica, queda `false` por
   defecto. Si se fija `true`, aplica la regla del principal (ver abajo).
@@ -35,7 +35,7 @@ vehículo al iniciar un `pickup_request` es de un slice futuro, fuera de aquí.
   `pickup_requests` ya creados, que conservan su snapshot (ADR-014).
 
 ### Al marcar como principal
-- Solo un `vehicle` por `guardian_user_id` puede tener `is_primary = true`,
+- Solo un `vehicles` por `guardian_user_id` puede tener `is_primary = true`,
   forzado por el índice único parcial de Postgres
   `ON vehicles (guardian_user_id) WHERE is_primary = true` (ADR-018, punto 5).
   Marcar uno como principal implica desmarcar el que lo fuera antes: la
@@ -43,7 +43,7 @@ vehículo al iniciar un `pickup_request` es de un slice futuro, fuera de aquí.
   índice.
 
 ### Al eliminar
-- Se elimina la fila del `vehicle` del catálogo. No afecta el histórico: los
+- Se elimina la fila del `vehicles` del catálogo. No afecta el histórico: los
   `pickup_requests` que lo usaron conservan su snapshot y su FK queda
   `ON DELETE SET NULL` (ver `specs/entities/vehicle.md`).
 - **Borrado del vehículo principal (ADR-023, punto 1):** si el vehículo que se
@@ -125,7 +125,7 @@ MQTT.
 ## Referencias
 
 - ADR-014 (catálogo de vehículos del tutor; snapshot denormalizado en
-  `pickup_request`; el catálogo es libremente editable sin efectos secundarios).
+  `pickup_requests`; el catálogo es libremente editable sin efectos secundarios).
 - ADR-018 (punto 5: índice único parcial que fuerza un solo `is_primary = true`
   por `guardian_user_id`).
 - ADR-023 (punto 1: promoción seleccionada por el tutor al borrar el vehículo

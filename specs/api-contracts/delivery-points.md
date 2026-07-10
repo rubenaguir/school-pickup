@@ -6,7 +6,7 @@ Recurso de puntos de entrega de una institución. Cubre
 ## Reglas de autorización (aislamiento multi-tenant)
 
 Ver `docs/arquitectura.md`. El usuario autenticado debe ser
-`institution_member` de la institución dueña del `delivery_point`, verificado
+`institution_members` de la institución dueña del `delivery_points`, verificado
 por `InstitutionMembershipGuard` (ADR-022, punto 4). En los endpoints anidados
 bajo `/institutions/:id/...` el guard lee el `institutionId` de la ruta; en
 `PATCH /delivery-points/:id` resuelve la institución del recurso con una consulta
@@ -14,7 +14,7 @@ mínima al repositorio y la compara contra las membresías del usuario. Un usuar
 de otra institución recibe 403.
 
 Rol requerido para escritura (`POST`, `PATCH`): **`role = admin`** (ADR-022,
-punto 1). La lectura (`GET`) está disponible para cualquier `institution_member`
+punto 1). La lectura (`GET`) está disponible para cualquier `institution_members`
 de la institución.
 
 ## `GET /institutions/:id/delivery-points`
@@ -52,7 +52,7 @@ grupos (ADR-012).
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 404 | la institución no existe |
 
 ## `POST /institutions/:id/delivery-points`
@@ -89,10 +89,10 @@ opcional (texto libre, ADR-012).
 | Código | Caso |
 |---|---|
 | 400 | payload inválido (`name` faltante, tipos incorrectos) |
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la institución no existe |
-| 422 | `operatorUserId` no corresponde a un `institution_member` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
+| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
 
 ## `PATCH /delivery-points/:id`
 
@@ -128,10 +128,10 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
 | Código | Caso |
 |---|---|
 | 400 | payload inválido |
-| 403 | el usuario autenticado no es `institution_member` de la institución del `delivery_point` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
-| 404 | el `delivery_point` no existe |
-| 422 | `operatorUserId` no corresponde a un `institution_member` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
+| 403 | el usuario autenticado no es `institution_members` de la institución del `delivery_points` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 404 | el `delivery_points` no existe |
+| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
 
 ## Referencias
 

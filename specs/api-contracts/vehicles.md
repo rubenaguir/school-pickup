@@ -6,12 +6,12 @@ Recurso del catálogo reutilizable de vehículos del tutor. Cubre
 ## Autenticación
 
 Todos los endpoints requieren access token válido. No hay restricción por rol
-("tutor" no es un flag en `user`, ver `specs/entities/user.md`).
+("tutor" no es un flag en `users`, ver `specs/entities/user.md`).
 
 ## Reglas de autorización
 
 La autorización es por propiedad del dato: un usuario solo puede ver o gestionar
-vehículos donde `vehicle.guardian_user_id = sub` (el `user.id` del token). No
+vehículos donde `vehicles.guardian_user_id = sub` (el `users.id` del token). No
 existe un concepto de "ver todos los vehículos" para ningún rol.
 
 ## `GET /vehicles`
@@ -103,8 +103,8 @@ que nunca coexistan dos principales (ADR-018 punto 5).
 |---|---|
 | 400 | payload inválido |
 | 401 | no autenticado |
-| 403 | el `vehicle` pertenece a otro `guardian_user_id` |
-| 404 | el `vehicle` no existe |
+| 403 | el `vehicles` pertenece a otro `guardian_user_id` |
+| 404 | el `vehicles` no existe |
 
 ## `DELETE /vehicles/:id`
 
@@ -132,16 +132,16 @@ Reglas:
 | Código | Caso |
 |---|---|
 | 401 | no autenticado |
-| 403 | el `vehicle` pertenece a otro `guardian_user_id` |
-| 404 | el `vehicle` no existe |
-| 422 | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (obliga a reasignar la primariedad a otra fila `vehicle`; regla que cruza hacia otra entidad; ADR-023 punto 1, corregido de 409 a 422 en ADR-026 punto 3) |
+| 403 | el `vehicles` pertenece a otro `guardian_user_id` |
+| 404 | el `vehicles` no existe |
+| 422 | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (obliga a reasignar la primariedad a otra fila `vehicles`; regla que cruza hacia otra entidad; ADR-023 punto 1, corregido de 409 a 422 en ADR-026 punto 3) |
 | 422 | `newPrimaryVehicleId` no refiere a otro vehículo del tutor (regla cruzada entre entidades; ADR-025 punto 5) |
 
 ## Referencias
 
 - `specs/features/014-gestionar-vehiculos.md`.
 - `specs/entities/vehicle.md`, `specs/entities/user.md`.
-- ADR-014 (catálogo independiente del histórico; snapshot en `pickup_request`).
+- ADR-014 (catálogo independiente del histórico; snapshot en `pickup_requests`).
 - ADR-018 (punto 5: índice único parcial de `is_primary` por `guardian_user_id`).
 - ADR-023 (punto 1: promoción seleccionada por el tutor al borrar el principal).
 - ADR-025 (punto 5: `newPrimaryVehicleId` inválido → 422, regla cruzada entre

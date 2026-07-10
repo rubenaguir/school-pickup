@@ -11,7 +11,7 @@ tutor queda operativo para dar de alta alumnos y asociarlos a instituciones
 
 ## Entidades involucradas
 
-- `user` (creado)
+- `users` (creado)
 
 ## Precondiciones
 
@@ -19,7 +19,7 @@ tutor queda operativo para dar de alta alumnos y asociarlos a instituciones
 
 ## Postcondiciones
 
-- Se crea una fila en `user` con los datos capturados (`email`,
+- Se crea una fila en `users` con los datos capturados (`email`,
   `password_hash`, `full_name`, `phone` opcional).
 - Las columnas de preferencia de notificación quedan en sus defaults:
   `notify_enrollment_approved = true`, `notify_dismissal_reminder = true`,
@@ -27,12 +27,12 @@ tutor queda operativo para dar de alta alumnos y asociarlos a instituciones
   ADR-016). El formulario de registro no las expone; se ajustan después
   desde el perfil (fuera de este slice).
 - `is_super_admin = false` (no hay flujo de auto-registro como super-admin).
-- **El `user` queda en `status = invited`** (ADR-019, punto 2), no `active`:
+- **El `users` queda en `status = invited`** (ADR-019, punto 2), no `active`:
   al completar el registro se envía un correo de verificación vía el port
   `EmailProvider` (ADR-017) con un token firmado de corta duración (24h). El
   tutor no puede iniciar sesión hasta verificar su correo — ver
   `specs/features/007-verificacion-correo.md`.
-- **Este feature NO crea ningún `student` ni ningún `enrollment`.** El alta
+- **Este feature NO crea ningún `students` ni ningún `enrollments`.** El alta
   de un alumno (feature 004) y su asociación a una institución (feature 005)
   son pasos posteriores, independientes, que el tutor realiza después de
   tener cuenta.
@@ -74,11 +74,11 @@ No aplica.
 
 - ADR-016 (defaults de columnas de notificación inline en `users`).
 - ADR-017 (`EmailProvider` como port).
-- ADR-019 (`user.status = invited` en auto-registro hasta verificar correo).
+- ADR-019 (`users.status = invited` en auto-registro hasta verificar correo).
 - `specs/entities/user.md`.
 - `specs/features/007-verificacion-correo.md`.
 
 ## Preguntas abiertas
 
-Ninguna: la pregunta sobre el `status` inicial del `user` se resolvió en
+Ninguna: la pregunta sobre el `status` inicial del `users` se resolvió en
 ADR-019.

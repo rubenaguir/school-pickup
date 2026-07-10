@@ -9,8 +9,8 @@ como su primer tutor autorizado.
 
 ## Entidades involucradas
 
-- `student` (creado)
-- `student_guardian` (creado)
+- `students` (creado)
+- `student_guardians` (creado)
 
 ## Precondiciones
 
@@ -18,15 +18,15 @@ como su primer tutor autorizado.
 
 ## Postcondiciones
 
-- Se crea una fila en `student` con `created_by_user_id` = el tutor
+- Se crea una fila en `students` con `created_by_user_id` = el tutor
   autenticado.
-- **Se crea automáticamente una fila en `student_guardian`** vinculando ese
-  `student` con el tutor autenticado:
+- **Se crea automáticamente una fila en `student_guardians`** vinculando ese
+  `students` con el tutor autenticado:
   - `relationship`: el valor capturado en el mismo formulario de alta (uno
     de `mother`, `father`, `grandparent`, `driver`, `other` — ver
     `specs/entities/student_guardian.md`).
-  - `is_primary = true`. Es la primera y única fila de `student_guardian`
-    para este `student` en este momento, así que satisface trivialmente el
+  - `is_primary = true`. Es la primera y única fila de `student_guardians`
+    para este `students` en este momento, así que satisface trivialmente el
     índice único parcial documentado en `specs/entities/student_guardian.md`
     (ADR-018).
   - `status = active` (no `invited`): a diferencia de cuando un tutor
@@ -39,7 +39,7 @@ como su primer tutor autorizado.
   según cómo nace el vínculo"; ADR-025 punto 8). Es la única forma de que el tutor
   después pueda ver/gestionar ese alumno (ver la regla de autorización de
   `specs/api-contracts/students.md`: "un tutor solo puede ver alumnos donde él
-  mismo sea `student_guardian`"): sin esta fila `active`, el alumno recién creado
+  mismo sea `student_guardians`"): sin esta fila `active`, el alumno recién creado
   sería invisible para su propio creador.
 
 ## Casos Given/When/Then
@@ -56,7 +56,7 @@ Then se crea student con created_by_user_id = el tutor
 ```
 
 No hay casos de error de negocio adicionales documentados para este feature
-(no hay restricción de unicidad sobre `student.full_name` ni límite de
+(no hay restricción de unicidad sobre `students.full_name` ni límite de
 alumnos por tutor en ninguna spec de entidad).
 
 ## Referencia a contrato de API
@@ -70,13 +70,13 @@ No aplica.
 ## Referencias
 
 - `specs/entities/student.md`, `specs/entities/student_guardian.md`.
-- ADR-018 (índice único parcial de `is_primary` en `student_guardian`).
+- ADR-018 (índice único parcial de `is_primary` en `student_guardians`).
 - ADR-025 (punto 8: el guardián creador nace `status = active`, excepción al
   default `invited`).
 
 ## Preguntas abiertas
 
-Ninguna para este feature: la auto-creación de `student_guardian` con
+Ninguna para este feature: la auto-creación de `student_guardians` con
 `status = active` quedó formalizada como excepción explícita en
 `specs/entities/student_guardian.md` (ADR-025 punto 8), ya no como una inferencia
 del feature.

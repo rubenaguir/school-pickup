@@ -1,7 +1,7 @@
-# DismissalException
+# DismissalExceptions
 
 ## Propósito
-Día puntual que sobreescribe el horario normal de `dismissal_window` (ej.
+Día puntual que sobreescribe el horario normal de `dismissal_windows` (ej.
 "Fin de cursos", "Ensayo cívico"). Ver ADR-015.
 
 ## Campos
@@ -9,7 +9,7 @@ Día puntual que sobreescribe el horario normal de `dismissal_window` (ej.
 | Campo | Tipo TypeORM/PostgreSQL | Constraints | Notas |
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
-| `institution_id` | `uuid` | NOT NULL, FK → `institution.id`, `ON DELETE CASCADE` | |
+| `institution_id` | `uuid` | NOT NULL, FK → `institutions.id`, `ON DELETE CASCADE` | |
 | `date` | `date` | NOT NULL | |
 | `name` | `varchar(255)` | NOT NULL | ej. "Fin de cursos" |
 | `level` | `varchar(100)` | nullable | nivel afectado, o "todos los niveles" |
@@ -20,7 +20,7 @@ Restricción: único `(institution_id, date, level)`. Ver ADR-018.
 
 ## Relaciones
 
-- `belongsTo Institution` (`institution`) — vía `institution_id`.
+- `belongsTo Institution` (`institutions`) — vía `institution_id`.
 
 ## Índices
 
@@ -28,8 +28,8 @@ Restricción: único `(institution_id, date, level)`. Ver ADR-018.
 
 ## Invariantes de negocio
 
-- Una `dismissal_exception` sobreescribe puntualmente lo definido en `dismissal_window` para la fecha y (opcionalmente) el nivel indicados; no modifica ni reemplaza las filas de `dismissal_window`, que se mantienen como la regla recurrente de fondo. Ver ADR-015.
-- Se modela como entidad separada de `dismissal_window` explícitamente para no mezclar "regla recurrente" con "excepción puntual" en la misma tabla. Ver ADR-015.
+- Una `dismissal_exceptions` sobreescribe puntualmente lo definido en `dismissal_windows` para la fecha y (opcionalmente) el nivel indicados; no modifica ni reemplaza las filas de `dismissal_windows`, que se mantienen como la regla recurrente de fondo. Ver ADR-015.
+- Se modela como entidad separada de `dismissal_windows` explícitamente para no mezclar "regla recurrente" con "excepción puntual" en la misma tabla. Ver ADR-015.
 - Restricción única `(institution_id, date, level)`: no puede haber dos excepciones para la misma institución, fecha y nivel. El caso de un `level = NULL` ("todos los niveles") coexistiendo con una excepción de nivel específico en la misma fecha **no lo captura este constraint** (en Postgres, `NULL` nunca es igual a otro `NULL` a efectos de unicidad, así que varias filas con `level = NULL` en la misma fecha no violarían la restricción); se valida en la capa de aplicación al crear/editar una excepción. Ver ADR-018.
 
 ## Enums

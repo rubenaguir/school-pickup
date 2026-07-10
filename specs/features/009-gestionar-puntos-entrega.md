@@ -11,46 +11,46 @@ recogida.
 
 ## Entidades involucradas
 
-- `delivery_point` (creado, actualizado, desactivado)
-- `institution_member` (leído, para autorización y para validar
+- `delivery_points` (creado, actualizado, desactivado)
+- `institution_members` (leído, para autorización y para validar
   `operator_user_id`)
-- `institution` (leído, para autorización multi-tenant)
+- `institutions` (leído, para autorización multi-tenant)
 
 ## Precondiciones
 
-- Quien gestiona debe ser `institution_member` de la misma `institution_id`
-  a la que pertenece (o pertenecerá) el `delivery_point` (aislamiento
+- Quien gestiona debe ser `institution_members` de la misma `institution_id`
+  a la que pertenece (o pertenecerá) el `delivery_points` (aislamiento
   multi-tenant, ver `docs/arquitectura.md`).
 - Gestionar puntos de entrega está **restringido a `role = admin`** de esa
   institución (ADR-022, punto 1). `coordinator`, `teacher` y `gate_operator` no
   pueden crear/editar/desactivar puntos.
-- Si se asigna `operator_user_id`, ese `user` debe ser `institution_member` de
-  la **misma** `institution_id` que el `delivery_point` (ADR-018, punto 11).
+- Si se asigna `operator_user_id`, ese `users` debe ser `institution_members` de
+  la **misma** `institution_id` que el `delivery_points` (ADR-018, punto 11).
   Es una regla que cruza dos tablas y se valida en la capa de servicio (NestJS),
   no con FK ni trigger (ADR-017).
 
 ## Postcondiciones
 
 ### Al crear
-- Se crea una fila en `delivery_point` con `institution_id` de la institución,
+- Se crea una fila en `delivery_points` con `institution_id` de la institución,
   `name`, `description` (opcional), `assigned_groups` (opcional, texto libre),
   `operator_user_id` (opcional, validado) y `status = active` por defecto.
 
 ### Al editar
 - Se actualizan los campos indicados (`name`, `description`, `assigned_groups`,
-  `operator_user_id`) del `delivery_point`. `updated_at` pasa a `now()`.
+  `operator_user_id`) del `delivery_points`. `updated_at` pasa a `now()`.
 
 ### Al desactivar
-- `delivery_point.status` pasa a `inactive`. **No hay borrado físico** de puntos
-  de entrega: un `pickup_request` no debe perderse si el punto deja de operar
-  (por eso la FK `pickup_request.delivery_point_id` es `ON DELETE SET NULL`, ver
+- `delivery_points.status` pasa a `inactive`. **No hay borrado físico** de puntos
+  de entrega: un `pickup_requests` no debe perderse si el punto deja de operar
+  (por eso la FK `pickup_requests.delivery_point_id` es `ON DELETE SET NULL`, ver
   `specs/entities/delivery_point.md`). La reactivación es el mismo mecanismo con
   `status = active`.
 
 ### Nota sobre asignación
 - `assigned_groups` es texto libre (varchar[]); no está atado a un catálogo
-  curado (ADR-012). La asignación de un `pickup_request` a un `delivery_point`
-  es automática y estructural — se resuelve matcheando `enrollment.grade_or_group`
+  curado (ADR-012). La asignación de un `pickup_requests` a un `delivery_points`
+  es automática y estructural — se resuelve matcheando `enrollments.grade_or_group`
   contra `assigned_groups` al crear el viaje — y no es elegible por el tutor
   (ADR-012). Esa resolución vive en el slice de recogidas, fuera de esta feature.
 
@@ -129,7 +129,7 @@ feature.)
 - ADR-012 (puntos de entrega y asignación automática/estructural por grupo;
   `delivery_point_id` nullable en `pickup_requests`; el tutor no elige el punto).
 - ADR-017 (validaciones cruzadas en capa de servicio, no en base de datos).
-- ADR-018 (punto 11: `operator_user_id` debe ser `institution_member` de la
+- ADR-018 (punto 11: `operator_user_id` debe ser `institution_members` de la
   misma institución, validado en la capa de servicio).
 - ADR-019 (punto 5: restricción a `role = admin` de acciones sensibles).
 - ADR-022 (punto 1: la configuración exige `role = admin`; punto 5: código 422

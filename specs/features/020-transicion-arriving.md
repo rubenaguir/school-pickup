@@ -2,21 +2,21 @@
 
 ## Propósito
 
-El `worker` evalúa, en cada actualización de ubicación, si un `pickup_request`
+El `worker` evalúa, en cada actualización de ubicación, si un `pickup_requests`
 debe pasar de `en_route` a `arriving` (el tutor está cerca de llegar). Es una
 transición **automática del sistema**, sin acción humana, que avisa al tablero y
 a la consola de puerta que preparen al alumno.
 
 ## Entidades involucradas
 
-- `pickup_request` (actualizado: `status` de `en_route` a `arriving`)
+- `pickup_requests` (actualizado: `status` de `en_route` a `arriving`)
 - `pickup_request_status_history` (creada una fila, `changed_by_user_id = null`)
-- `institution` (leído: `location`, `geofence_radius_meters` y
+- `institutions` (leído: `location`, `geofence_radius_meters` y
   `arriving_lead_minutes` para las dos condiciones de disparo)
 
 ## Precondiciones
 
-- El `pickup_request` está en `status = en_route`.
+- El `pickup_requests` está en `status = en_route`.
 - La transición `en_route → arriving` es válida según la máquina de estados
   compartida en `packages/shared` (`pickup-request-status-machine.ts`, ADR-017,
   ADR-024 punto 8). El `worker` **invoca** `canTransition(en_route, arriving)`;
@@ -28,11 +28,11 @@ a la consola de puerta que preparen al alumno.
   condiciones (lo que ocurra primero), evaluadas en cada actualización de
   ubicación (feature 019) — ADR-024 punto 3:
   - **Umbral de tiempo:** el `eta_seconds` recalculado cae por debajo de
-    `institution.arriving_lead_minutes` (int, default 5; minutos de ETA restante
+    `institutions.arriving_lead_minutes` (int, default 5; minutos de ETA restante
     a partir de los cuales se prepara al alumno). Configurable por institución
     porque el tiempo de preparación varía por plantel; **o**
   - **Proximidad geográfica:** la última posición entra al radio de arribo:
-    comparar `pickup_request.last_location` contra `institution.location` con
+    comparar `pickup_requests.last_location` contra `institutions.location` con
     `geofence_radius_meters` (radio de **arribo**, ADR-013) mediante PostGIS
     (ej. `ST_DWithin`).
   Son condiciones distintas y complementarias (ADR-024 punto 3): el umbral de
@@ -40,7 +40,7 @@ a la consola de puerta que preparen al alumno.
   llegada real. Nota: se usa `geofence_radius_meters` (arribo), no
   `activation_radius_meters` (activación del botón, otro radio — ADR-013).
 - Al transicionar:
-  - `pickup_request.status` pasa a `arriving`.
+  - `pickup_requests.status` pasa a `arriving`.
   - Se crea una fila en `pickup_request_status_history` con `status = arriving` y
     **`changed_by_user_id = null`** (transición automática del sistema, no de una
     persona — invariante de `specs/entities/pickup_request_status_history.md`).
@@ -119,5 +119,5 @@ Publica el estado actualizado (vía `MqttClient`) al feed agregado y, si hay
 ## Preguntas abiertas
 
 Ninguna: el umbral de tiempo para `arriving` se resolvió como
-`institution.arriving_lead_minutes` (int, default 5), disparando la transición
+`institutions.arriving_lead_minutes` (int, default 5), disparando la transición
 junto con la geocerca —lo que ocurra primero— (ADR-024 punto 3).

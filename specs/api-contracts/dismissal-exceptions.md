@@ -6,7 +6,7 @@ Recurso de días especiales (excepciones de horario) de una institución. Cubre
 ## Reglas de autorización (aislamiento multi-tenant)
 
 Ver `docs/arquitectura.md`. El usuario autenticado debe ser
-`institution_member` de la institución dueña de la excepción, verificado por
+`institution_members` de la institución dueña de la excepción, verificado por
 `InstitutionMembershipGuard` (ADR-022, punto 4). En los endpoints anidados bajo
 `/institutions/:id/...` el guard lee el `institutionId` de la ruta; en `PATCH` y
 `DELETE /dismissal-exceptions/:id` resuelve la institución de la excepción con
@@ -15,7 +15,7 @@ usuario. Un usuario de otra institución recibe 403.
 
 Rol requerido para escritura (`POST`, `PATCH`, `DELETE`): **`role = admin`**
 (ADR-022, punto 1). La lectura (`GET`) está disponible para cualquier
-`institution_member` de la institución.
+`institution_members` de la institución.
 
 ## `GET /institutions/:id/dismissal-exceptions`
 
@@ -50,7 +50,7 @@ Lista las excepciones de horario de la institución. Ver feature 011.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 404 | la institución no existe |
 
 ## `POST /institutions/:id/dismissal-exceptions`
@@ -83,8 +83,8 @@ Crea una excepción de horario. Ver feature 011.
 | Código | Caso |
 |---|---|
 | 400 | payload inválido (`date`/`time` mal formados, `name` faltante) |
-| 403 | el usuario autenticado no es `institution_member` de esa `:id` |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la institución no existe |
 | 409 | ya existe una excepción para ese `(institutionId, date, level)` (restricción única, ADR-018 punto 10) |
 | 409 | colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación, ADR-018 punto 10 — no la atrapa el unique constraint) |
@@ -119,8 +119,8 @@ Edita una excepción. Ver feature 011.
 | Código | Caso |
 |---|---|
 | 400 | payload inválido |
-| 403 | el usuario autenticado no es `institution_member` de la institución de la excepción |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de la institución de la excepción |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la excepción no existe |
 | 409 | la edición choca con la restricción única `(institutionId, date, level)` (ADR-018 punto 10) |
 | 409 | la edición produce la colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación, ADR-018 punto 10) |
@@ -138,8 +138,8 @@ de fondo vuelve a regir esa fecha.
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_member` de la institución de la excepción |
-| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario autenticado no es `institution_members` de la institución de la excepción |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la excepción no existe |
 
 ## Referencias

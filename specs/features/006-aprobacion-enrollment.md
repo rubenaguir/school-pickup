@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Un miembro de la institución revisa un `enrollment` pendiente y decide
+Un miembro de la institución revisa un `enrollments` pendiente y decide
 aprobarlo o rechazarlo. Es el control de la institución sobre quién queda
 formalmente asociado a ella — la pantalla más importante del portal de
 institución según `docs/design-brief.md` ("Bandeja de aprobación de
@@ -10,43 +10,43 @@ alumnos").
 
 ## Entidades involucradas
 
-- `enrollment` (actualizado)
-- `institution_member` (leído, para autorización)
-- `institution` (leído, para validar `status`)
+- `enrollments` (actualizado)
+- `institution_members` (leído, para autorización)
+- `institutions` (leído, para validar `status`)
 
 ## Precondiciones
 
-- Quien aprueba/rechaza debe ser `institution_member` de la misma
-  `institution_id` que el `enrollment` (aislamiento multi-tenant, ver
+- Quien aprueba/rechaza debe ser `institution_members` de la misma
+  `institution_id` que el `enrollments` (aislamiento multi-tenant, ver
   `docs/arquitectura.md`) **y tener `role = admin`** (ADR-019, punto 5).
   `coordinator`, `teacher` y `gate_operator` no pueden aprobar ni rechazar.
   Esto es deliberadamente distinto de la consola de puerta (ADR-011, sin
   restricción de `role`, por ser cobertura operativa): aprobar un
-  `enrollment` es una decisión de control de acceso/identidad — decide quién
+  `enrollments` es una decisión de control de acceso/identidad — decide quién
   queda autorizado a operar sobre un alumno específico — de mayor
   sensibilidad que cubrir un turno en la puerta, por lo que se restringe al
   rol `admin`.
-- El `enrollment` debe estar en `status = pending` (no se puede aprobar ni
+- El `enrollments` debe estar en `status = pending` (no se puede aprobar ni
   rechazar uno ya `approved` o `rejected` — `rejected` es terminal según
   ADR-018).
-- Para aprobar (no para rechazar): `institution.status` debe ser `approved`
+- Para aprobar (no para rechazar): `institutions.status` debe ser `approved`
   en el momento de la revisión (ADR-018). Si la institución fue `suspended`
   entre que se creó la solicitud y se revisó, la aprobación debe rechazarse
-  aunque el `enrollment` en sí esté correctamente `pending`.
+  aunque el `enrollments` en sí esté correctamente `pending`.
 
 ## Postcondiciones
 
 ### Al aprobar
-- `enrollment.status = approved`
-- `enrollment.reviewed_by_user_id` = el miembro que aprobó
-- `enrollment.reviewed_at = now()`
+- `enrollments.status = approved`
+- `enrollments.reviewed_by_user_id` = el miembro que aprobó
+- `enrollments.reviewed_at = now()`
 
 ### Al rechazar
-- `enrollment.status = rejected` (terminal, ver ADR-018)
-- `enrollment.reviewed_by_user_id` = el miembro que rechazó
-- `enrollment.reviewed_at = now()`
+- `enrollments.status = rejected` (terminal, ver ADR-018)
+- `enrollments.reviewed_by_user_id` = el miembro que rechazó
+- `enrollments.reviewed_at = now()`
 - El tutor deberá enviar una nueva solicitud (feature 005) si quiere volver a
-  intentarlo; este feature no reabre el `enrollment` rechazado (ver la
+  intentarlo; este feature no reabre el `enrollments` rechazado (ver la
   pregunta abierta ya documentada en `specs/entities/enrollment.md` sobre
   cómo convive esto con la restricción única `(student_id, institution_id)`).
 
@@ -97,7 +97,7 @@ Then la operación falla
   And se devuelve un error indicando que la institución no está activa
 ```
 
-Nótese que el **rechazo** de un `enrollment` no requiere que la institución
+Nótese que el **rechazo** de un `enrollments` no requiere que la institución
 esté `approved` — ADR-018 solo condiciona la transición a `approved`, no la
 transición a `rejected`.
 
@@ -139,12 +139,12 @@ correo.
 
 - ADR-009 (correo transaccional para eventos de cuenta, incluida la
   aprobación/rechazo de solicitudes).
-- ADR-011 (rol organizacional de `institution_member`; la consola de puerta
+- ADR-011 (rol organizacional de `institution_members`; la consola de puerta
   no restringe por `role`, a diferencia de este feature — ver ADR-019).
 - ADR-017 (`EmailProvider` como port).
-- ADR-018 (condición de `institution.status = approved` para aprobar;
+- ADR-018 (condición de `institutions.status = approved` para aprobar;
   `rejected` terminal).
-- ADR-019 (punto 5: aprobar/rechazar `enrollment` restringido a
+- ADR-019 (punto 5: aprobar/rechazar `enrollments` restringido a
   `role = admin`).
 - `specs/entities/enrollment.md`, `specs/entities/institution_member.md`,
   `specs/entities/institution.md`.

@@ -12,18 +12,18 @@ Recurso del ciclo de vida de la recogida. Cubre
 Todos los endpoints requieren access token válido. La autorización combina dos
 perspectivas, según el endpoint:
 - **Tutor** (perspectiva del que va en camino): crear, confirmar llegada y
-  cancelar exigen ser el `guardian_user_id` dueño del `pickup_request` (para
-  crear: ser `student_guardian` en `status = active` del alumno del
-  `enrollment`).
+  cancelar exigen ser el `guardian_user_id` dueño del `pickup_requests` (para
+  crear: ser `student_guardians` en `status = active` del alumno del
+  `enrollments`).
 - **Miembro de institución** (perspectiva de la puerta): confirmar la entrega
-  exige ser `institution_member` de la `institution_id` del `pickup_request`,
+  exige ser `institution_members` de la `institution_id` del `pickup_requests`,
   con **cualquier `role`** (la consola de puerta no restringe por rol, ADR-011).
-- **Lectura**: el tutor guardián del alumno o cualquier `institution_member` de
-  la institución del `pickup_request` pueden leerlo.
+- **Lectura**: el tutor guardián del alumno o cualquier `institution_members` de
+  la institución del `pickup_requests` pueden leerlo.
 
 Como el access token no fija `institutionId` ni `role` (ver
 `specs/api-contracts/auth.md`), cada endpoint valida la relación (propiedad del
-tutor, o membresía a la institución) contra el `pickup_request` en cuestión.
+tutor, o membresía a la institución) contra el `pickup_requests` en cuestión.
 
 Toda transición de `status` se valida contra la máquina de estados compartida en
 `packages/shared` (`pickup-request-status-machine.ts`, ADR-017); un intento de
@@ -81,10 +81,10 @@ derivan/generan en el servidor (denormalización de `institution_id`, resolució
 |---|---|
 | 400 | payload inválido (`enrollmentId` faltante, `arrivalMode` fuera del enum, o combinación de campos de vehículo inválida: `vehicleId` junto con `vehicleDescription`/`vehiclePlate`) |
 | 401 | no autenticado |
-| 403 | el usuario autenticado no es `student_guardian` activo del alumno del `enrollment` |
-| 404 | el `enrollment` no existe |
-| 422 | el `enrollment` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
-| 422 | ya existe un `pickup_request` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
+| 403 | el usuario autenticado no es `student_guardians` activo del alumno del `enrollments` |
+| 404 | el `enrollments` no existe |
+| 422 | el `enrollments` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
+| 422 | ya existe un `pickup_requests` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
 
 `activationRadiusMeters` no se valida en el servidor: es afordance de cliente
 (ADR-024 punto 7). El servidor no exige que el tutor esté dentro del radio para
@@ -117,7 +117,7 @@ Devuelve el estado actual de una recogida. Ver features 018–022.
 ```
 
 `deliveryCode` se incluye para el `guardian_user_id` dueño (lo muestra en su app)
-**y** para cualquier `institution_member` de la institución del `pickup_request`
+**y** para cualquier `institution_members` de la institución del `pickup_requests`
 (vía `institution_id`, ADR-018 punto 4), sin restricción de `role` (ADR-011,
 ADR-024 punto 11): la consola de puerta lo despliega directamente para que el
 operador lo compare con el que muestra el tutor. La verificación de la entrega
@@ -127,12 +127,12 @@ sigue siendo server-side vía `PATCH .../deliver` (ADR-024 punto 4).
 | Código | Caso |
 |---|---|
 | 401 | no autenticado |
-| 403 | el usuario no es el tutor dueño ni `institution_member` de la institución del `pickup_request` |
-| 404 | el `pickup_request` no existe |
+| 403 | el usuario no es el tutor dueño ni `institution_members` de la institución del `pickup_requests` |
+| 404 | el `pickup_requests` no existe |
 
 ## `GET /pickup-requests?enrollmentId=...`
 
-Histórico de recogidas de un `enrollment`. Ver features 018–022.
+Histórico de recogidas de un `enrollments`. Ver features 018–022.
 
 **Query params**
 | Param | Requerido | Notas |
@@ -143,7 +143,7 @@ Histórico de recogidas de un `enrollment`. Ver features 018–022.
 | `offset` | no | desplazamiento; default `0` (ADR-024 punto 9) |
 
 Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
-`enrollment` acumula recogidas durante años.
+`enrollments` acumula recogidas durante años.
 
 **Response 200**
 ```json
@@ -168,7 +168,7 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 |---|---|
 | 400 | `enrollmentId` faltante |
 | 401 | no autenticado |
-| 403 | el usuario no es guardián del alumno ni miembro de la institución del `enrollment` |
+| 403 | el usuario no es guardián del alumno ni miembro de la institución del `enrollments` |
 
 ## `PATCH /pickup-requests/:id/arrived`
 
@@ -186,7 +186,7 @@ El tutor confirma "ya llegué". Ver feature 021. Transición a `arrived`.
 |---|---|
 | 401 | no autenticado |
 | 403 | el usuario autenticado no es el `guardian_user_id` dueño |
-| 404 | el `pickup_request` no existe |
+| 404 | el `pickup_requests` no existe |
 | 409 | transición inválida según la máquina de estados compartida (ADR-017) |
 
 ## `PATCH /pickup-requests/:id/deliver`
@@ -208,10 +208,10 @@ Transición a `delivered`.
 | Código | Caso |
 |---|---|
 | 401 | no autenticado |
-| 403 | el usuario no es `institution_member` de la institución del `pickup_request` (cualquier `role` sirve, ADR-011) |
-| 404 | el `pickup_request` no existe |
+| 403 | el usuario no es `institution_members` de la institución del `pickup_requests` (cualquier `role` sirve, ADR-011) |
+| 404 | el `pickup_requests` no existe |
 | 409 | transición inválida según la máquina de estados compartida (ADR-017) |
-| 422 | el `deliveryCode` ingresado no coincide con el del `pickup_request` |
+| 422 | el `deliveryCode` ingresado no coincide con el del `pickup_requests` |
 
 Ante un `deliveryCode` incorrecto **no hay bloqueo ni límite de reintentos**
 (verificación presencial, ADR-024 punto 4): el staff puede reintentar. Cada
@@ -234,7 +234,7 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
 |---|---|
 | 401 | no autenticado |
 | 403 | el usuario autenticado no es el `guardian_user_id` dueño |
-| 404 | el `pickup_request` no existe |
+| 404 | el `pickup_requests` no existe |
 | 409 | transición inválida (ya está en un estado terminal), según la máquina de estados compartida (ADR-017) |
 
 ## Referencias
@@ -253,18 +253,18 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
 - ADR-013 (`delivery_code`, ciclo de vida).
 - ADR-014 (snapshot de vehículo).
 - ADR-017 (máquina de estados compartida; ports).
-- ADR-018 (punto 2: `enrollment` aprobado; punto 3: unicidad de `delivery_code`;
+- ADR-018 (punto 2: `enrollments` aprobado; punto 3: unicidad de `delivery_code`;
   punto 4: `institution_id` denormalizado).
 - ADR-024 (punto 1: recogida activa duplicada → 422; punto 4: `deliveryCode`
   incorrecto sin bloqueo, con `audit_log`; punto 7: `activation_radius_meters`
   no se valida en servidor; punto 9: paginación `limit`/`offset`; punto 11:
   exposición del `deliveryCode` al dueño y a los miembros de la institución).
 - ADR-025 (punto 3: captura libre de vehículo vía `vehicleDescription`/`vehiclePlate`;
-  punto 5: `enrollment` no aprobado → 422).
+  punto 5: `enrollments` no aprobado → 422).
 
 ## Preguntas abiertas
 
 Ninguna: la exposición del `deliveryCode` en lectura (dueño + cualquier
-`institution_member` de la institución, sin restricción de `role`) se resolvió en
+`institution_members` de la institución, sin restricción de `role`) se resolvió en
 ADR-024 (punto 11). El resto de dudas del contrato se resolvieron en ADR-024
 (puntos 1, 4, 7 y 9).

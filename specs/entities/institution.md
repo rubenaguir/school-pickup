@@ -1,9 +1,9 @@
-# Institution
+# Institutions
 
 ## Propósito
 Representa un plantel: una escuela o una actividad extracurricular. Es la
 entidad multi-tenant raíz: casi todo el resto del dominio cuelga, directa o
-indirectamente, de una `institution`. Ver ADR-004 (por qué "institution" y no
+indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 "school").
 
 ## Campos
@@ -23,7 +23,7 @@ indirectamente, de una `institution`. Ver ADR-004 (por qué "institution" y no
 | `levels` | `varchar(50)[]` | NOT NULL, default `{}` | ver ADR-015 |
 | `arrival_tolerance_minutes` | `int` | NOT NULL, default `10` | ver ADR-015 y ADR-025 |
 | `advance_notice_minutes` | `int` | NOT NULL, default `15` | ver ADR-015 y ADR-025 |
-| `arriving_lead_minutes` | `int` | NOT NULL, default `5` | minutos de ETA restante a partir de los cuales el `worker` pasa el `pickup_request` a `arriving`. Distinto de `geofence_radius_meters`. Ver ADR-024 |
+| `arriving_lead_minutes` | `int` | NOT NULL, default `5` | minutos de ETA restante a partir de los cuales el `worker` pasa el `pickup_requests` a `arriving`. Distinto de `geofence_radius_meters`. Ver ADR-024 |
 | `join_code` | `varchar(20)` | NOT NULL, único | ver ADR-015 |
 | `status` | `enum` (`pending`, `approved`, `suspended`) | NOT NULL, default `pending` | aprobado por super-admin |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | |
@@ -31,11 +31,11 @@ indirectamente, de una `institution`. Ver ADR-004 (por qué "institution" y no
 
 ## Relaciones
 
-- `hasMany InstitutionMember` (`members`) — vía `institution_member.institution_id`. `ON DELETE CASCADE`.
-- `hasMany DeliveryPoint` (`deliveryPoints`) — vía `delivery_point.institution_id`. `ON DELETE CASCADE`.
-- `hasMany Enrollment` (`enrollments`) — vía `enrollment.institution_id`. `ON DELETE CASCADE`.
-- `hasMany DismissalWindow` (`dismissalWindows`) — vía `dismissal_window.institution_id`. `ON DELETE CASCADE`.
-- `hasMany DismissalException` (`dismissalExceptions`) — vía `dismissal_exception.institution_id`. `ON DELETE CASCADE`.
+- `hasMany InstitutionMember` (`members`) — vía `institution_members.institution_id`. `ON DELETE CASCADE`.
+- `hasMany DeliveryPoint` (`deliveryPoints`) — vía `delivery_points.institution_id`. `ON DELETE CASCADE`.
+- `hasMany Enrollment` (`enrollments`) — vía `enrollments.institution_id`. `ON DELETE CASCADE`.
+- `hasMany DismissalWindow` (`dismissalWindows`) — vía `dismissal_windows.institution_id`. `ON DELETE CASCADE`.
+- `hasMany DismissalException` (`dismissalExceptions`) — vía `dismissal_exceptions.institution_id`. `ON DELETE CASCADE`.
 
 ## Índices
 
