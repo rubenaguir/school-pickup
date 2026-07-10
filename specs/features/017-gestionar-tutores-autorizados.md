@@ -24,9 +24,11 @@ autorizado a operar sobre un alumno, complementario a la invitación (feature
   guardián principal administra a los demás. Es la misma autoridad que para
   invitar (ADR-023 punto 2).
 - Revocar solo aplica a un `student_guardian` que no esté ya en `status =
-  revoked`: `revoked` es **terminal** (ADR-018, punto 7), no se reactiva; para
-  restablecer el vínculo se requiere una nueva invitación (feature 015). No
-  existe una acción de "reactivar".
+  revoked`: `revoked` es **terminal** (ADR-018, punto 7), no se reactiva
+  in-place. Para restablecer el vínculo se envía una nueva invitación (feature
+  015), que crea una **fila nueva** — no reactiva la fila `revoked` (el índice
+  único parcial la excluye, ADR-026 punto 1). No existe una acción de
+  "reactivar".
 - **Protección del principal / último guardián activo (ADR-023, punto 5):** no se
   puede revocar a un `student_guardian` con `is_primary = true` sin **reasignar
   antes** la primariedad a otro guardián `active`. Esto incluye la
@@ -140,6 +142,9 @@ No aplica: la gestión de tutores autorizados no publica ni consume topics MQTT.
 - ADR-023 (punto 5: solo el guardián `is_primary` revoca y reasigna
   primariedad; no se revoca al principal sin reasignar antes; auto-revocación
   del principal solo tras reasignar).
+- ADR-026 (punto 1: el índice único parcial excluye `revoked`, por lo que la
+  nueva invitación de feature 015 crea una fila nueva; punto 3: protección del
+  guardián principal responde 422).
 - `specs/entities/student_guardian.md`, `specs/entities/student.md`.
 - `specs/features/015-invitar-tutor-autorizado.md` (nueva invitación para
   restablecer un vínculo revocado).

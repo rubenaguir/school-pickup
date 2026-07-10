@@ -131,11 +131,11 @@ Reglas:
 **Errores**
 | Código | Caso |
 |---|---|
-| 400 | `newPrimaryVehicleId` no refiere a otro vehículo del tutor |
 | 401 | no autenticado |
 | 403 | el `vehicle` pertenece a otro `guardian_user_id` |
 | 404 | el `vehicle` no existe |
-| 409 | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (ADR-023 punto 1) |
+| 422 | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (obliga a reasignar la primariedad a otra fila `vehicle`; regla que cruza hacia otra entidad; ADR-023 punto 1, corregido de 409 a 422 en ADR-026 punto 3) |
+| 422 | `newPrimaryVehicleId` no refiere a otro vehículo del tutor (regla cruzada entre entidades; ADR-025 punto 5) |
 
 ## Referencias
 
@@ -144,6 +144,10 @@ Reglas:
 - ADR-014 (catálogo independiente del histórico; snapshot en `pickup_request`).
 - ADR-018 (punto 5: índice único parcial de `is_primary` por `guardian_user_id`).
 - ADR-023 (punto 1: promoción seleccionada por el tutor al borrar el principal).
+- ADR-025 (punto 5: `newPrimaryVehicleId` inválido → 422, regla cruzada entre
+  entidades).
+- ADR-026 (punto 3: borrar el principal sin `newPrimaryVehicleId` habiendo otros
+  → 422, corregido de 409).
 
 ## Preguntas abiertas
 

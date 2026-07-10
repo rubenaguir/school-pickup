@@ -18,9 +18,11 @@ rechazar (feature 006) antes de que el alumno pueda tener recogidas
 - El tutor debe estar autenticado y ser `student_guardian` (`status =
   active`) del `student` que intenta asociar — un tutor no puede asociar un
   alumno que no es suyo.
-- No debe existir ya un `enrollment` para ese `(student_id, institution_id)`
-  (constraint única documentada en `docs/modelo-datos.md` y
-  `specs/entities/enrollment.md`).
+- No debe existir ya un `enrollment` **no terminal** (`pending` o `approved`)
+  para ese `(student_id, institution_id)` — índice único parcial documentado en
+  `docs/modelo-datos.md` y `specs/entities/enrollment.md`. Una fila `rejected`
+  previa (terminal) NO bloquea una solicitud nueva: se crea una fila nueva. Ver
+  ADR-026 punto 1.
 - **La institución debe tener `status = approved`** (ADR-019, punto 4):
   tanto la búsqueda por nombre como la resolución por `join_code` solo
   consideran instituciones `approved`. Una institución en `pending` o
@@ -63,24 +65,32 @@ When el tutor captura el join_code y solicita asociar al alumno
 Then se crea enrollment con status = pending
 ```
 
-### Caso: enrollment duplicado
+### Caso: enrollment duplicado no terminal
 
 ```
-Given ya existe un enrollment (pending, approved o rejected) para el mismo
+Given ya existe un enrollment no terminal (pending o approved) para el mismo
       (student_id, institution_id)
 When el tutor intenta solicitar la asociación de nuevo
-Then la operación falla por violar la restricción única (student_id,
-     institution_id)
+Then la operación falla por violar el índice único parcial (student_id,
+     institution_id) WHERE status IN ('pending', 'approved')
   And se devuelve un error indicando que ya existe una solicitud o relación
-      con esa institución
+      activa con esa institución
 ```
 
-Si el `enrollment` existente está en `rejected` (terminal, ver ADR-018), el
-tutor no puede generar una nueva solicitud para la misma institución bajo
-este modelo tal como está documentado hoy — ver "Preguntas abiertas" en
-`specs/entities/enrollment.md`, que ya señala esta tensión sin resolverla.
-Este feature no la resuelve tampoco; simplemente hereda el mismo
-comportamiento (rechazar por constraint única).
+### Caso: nueva solicitud tras un rechazo previo
+
+```
+Given la única fila enrollment existente para ese (student_id, institution_id)
+      está en status = rejected (terminal)
+When el tutor solicita de nuevo la asociación a esa institución
+Then se crea un enrollment nuevo con status = pending (una fila nueva; no se
+     reactiva la fila rejected)
+```
+
+`rejected` es terminal y no se reactiva in-place (ADR-018): el índice único
+parcial excluye `rejected` precisamente para permitir esta solicitud nueva sin
+chocar con la fila previa. La regla queda documentada en la sección "Invariantes
+de negocio" de `specs/entities/enrollment.md`. Ver ADR-026 punto 1.
 
 ### Caso: institución no aprobada (búsqueda o join_code)
 
@@ -112,6 +122,7 @@ No aplica.
 - ADR-016 (`enrollment_code` único, vive en `enrollment`).
 - ADR-018 (aprobación bloqueada si `institution.status != approved`).
 - ADR-019 (visibilidad de instituciones no aprobadas en búsqueda/`join_code`).
+- ADR-026 (punto 1: índice único parcial que excluye `rejected`; una solicitud nueva tras un rechazo crea una fila nueva).
 
 ## Preguntas abiertas
 

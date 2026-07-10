@@ -53,8 +53,11 @@ en las dos ramas se envía correo de invitación vía `EmailProvider`.
   `student_guardian` pase a `active` (ADR-023 punto 3). Su aceptación **no**
   define contraseña ni verifica correo (el `user` ya está `active`); solo
   transiciona el `student_guardian` (ver feature 016).
-- Se respeta la restricción única `(student_id, guardian_user_id)`: si ese user
-  ya es guardián de ese alumno, la invitación se rechaza.
+- Se respeta el índice único parcial `(student_id, guardian_user_id) WHERE status
+  IN ('invited', 'active')`: si ese user ya es guardián **no terminal**
+  (`invited` o `active`) de ese alumno, la invitación se rechaza. Si su único
+  vínculo previo está `revoked` (terminal), la invitación sí procede y crea una
+  fila nueva (ver ADR-026 punto 1).
 
 ### Caso (b) — el correo NO existe como `user`
 - Se crea un `user` nuevo con `status = invited` y `password_hash = NULL` (sin
@@ -92,15 +95,28 @@ Then se crea un user con status = invited y password_hash = NULL
   And se envía el correo de invitación vía EmailProvider (ver feature 016)
 ```
 
-### Caso: el correo ya es guardián de este alumno
+### Caso: el correo ya es guardián no terminal de este alumno
 
 ```
-Given un user que ya es student_guardian de ese student (en cualquier status)
+Given un user que ya es student_guardian de ese student con status invited o active
 When se intenta invitarlo de nuevo al mismo student
-Then la operación se rechaza por la restricción única (student_id,
-     guardian_user_id) (specs/entities/student_guardian.md)
-  And no se crea una segunda fila
+Then la operación se rechaza por el índice único parcial (student_id,
+     guardian_user_id) WHERE status IN ('invited', 'active')
+     (specs/entities/student_guardian.md)
+  And no se crea una segunda fila no terminal
 ```
+
+### Caso: nueva invitación tras una revocación previa
+
+```
+Given el único vínculo previo de ese user con el student está en status = revoked
+When el guardián principal lo invita de nuevo al mismo student
+Then se crea una fila student_guardian nueva con status = invited (no se reactiva
+     la fila revoked)
+```
+
+`revoked` es terminal y no se reactiva in-place (ADR-018 punto 7); el índice único
+parcial excluye `revoked` para permitir esta invitación nueva. Ver ADR-026 punto 1.
 
 ### Caso: relationship fuera del enum
 
@@ -144,6 +160,8 @@ operativos de recogida en tiempo real; los eventos de cuenta van por correo).
 - ADR-022 (punto 2: `password_hash` nullable para el `user` invitado).
 - ADR-023 (punto 2: solo el guardián `is_primary` invita; punto 3: la invitación
   siempre requiere aceptación, incluso para un `user` ya activo).
+- ADR-026 (punto 1: índice único parcial que excluye `revoked`; una invitación
+  nueva tras una revocación crea una fila nueva).
 - `specs/entities/student_guardian.md` (con columna `status`; único
   `(student_id, guardian_user_id)`), `specs/entities/user.md`,
   `specs/entities/student.md`.

@@ -141,13 +141,35 @@ Then la operación se rechaza por falta de autorización (aislamiento
      multi-tenant)
 ```
 
+### Caso: dar de baja a un miembro
+
+```
+Given una institution con más de un institution_member con role = admin
+  And quien opera es institution_member con role = admin de esa institution
+When da de baja a otro miembro de la institution
+Then se elimina la fila institution_member correspondiente
+  And el user asociado NO se borra (puede seguir existiendo como tutor o como
+      personal de otra institution)
+  And la baja se registra en audit_log (institution_member.removed)
+```
+
+### Caso: dar de baja al único admin (protección del último admin)
+
+```
+Given una institution con un solo institution_member con role = admin
+When se intenta dar de baja a ese único admin
+Then la operación se rechaza (protección del último admin, ADR-022 punto 5):
+     no puede quedar la institution sin ningún admin
+```
+
 ## Referencia a contrato de API
 
 Ver `specs/api-contracts/institution-members.md` —
 `GET /institutions/:id/members` y `POST /institutions/:id/members/invite`. El
-cambio de rol de un miembro existente es `PATCH /institution-members/:id`; la
-aceptación de invitación del caso (b) es `POST /invitations/:token/accept`
-(feature 013).
+cambio de rol de un miembro existente es `PATCH /institution-members/:id`; la baja
+de un miembro es `DELETE /institution-members/:id` (con protección del último admin,
+ADR-025 punto 9); la aceptación de invitación del caso (b) es
+`POST /invitations/:token/accept` (feature 013).
 
 ## Referencia a MQTT
 
@@ -164,7 +186,10 @@ operativos de recogida en tiempo real; los eventos de cuenta van por correo).
 - ADR-019 (punto 2: `status = invited` para cuentas no verificadas; punto 5:
   restricción a `role = admin` de acciones sensibles).
 - ADR-022 (punto 1: invitar exige `role = admin`; punto 2: `password_hash`
-  nullable para el `user` invitado; punto 5: reenvío vía este mismo endpoint).
+  nullable para el `user` invitado; punto 5: reenvío vía este mismo endpoint;
+  protección del último admin).
+- ADR-025 (punto 9: endpoint `DELETE /institution-members/:id` para dar de baja a
+  un miembro, con protección del último admin y registro `institution_member.removed`).
 - `specs/entities/institution_member.md` (sin columna `status`; único
   `(institution_id, user_id)`), `specs/entities/user.md` (`status` enum;
   `password_hash` nullable), `specs/entities/institution.md`.

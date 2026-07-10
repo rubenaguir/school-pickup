@@ -28,7 +28,7 @@ consecutivas. Ver ADR-013.
 
 ## Invariantes de negocio
 
-- Tabla de solo inserción (append-only): no se actualizan ni borran filas existentes; cada transición de `pickup_request.status` genera una fila nueva.
+- Tabla de solo inserción (append-only): no se actualizan ni borran filas existentes; cada transición de `pickup_request.status` genera una fila nueva. **El append-only se garantiza en la capa de servicio** (ningún endpoint ni caso de uso expone `UPDATE`/`DELETE` sobre esta tabla). A diferencia de `audit_log`, NO recibe protección de privilegios a nivel de BD: no es un log forense/legal, basta la disciplina de la capa de servicio, consistente con el resto del proyecto. Ver ADR-026 punto 4.
 - `changed_by_user_id` es nullable específicamente para representar transiciones automáticas del sistema (ej. `arriving` disparada por el `worker` al detectar cercanía por geocerca, sin acción humana).
 - Las métricas derivadas (ej. "tiempo en puerta") se calculan restando `changed_at` entre filas consecutivas de esta tabla — no hay campos de timestamp ad-hoc por estado en `pickup_request`.
 - Las transiciones que generan estas filas deben ser válidas según la máquina de estados compartida en `packages/shared` (ver ADR-017); esta tabla registra el resultado de una transición ya validada, no valida por sí misma.
@@ -41,3 +41,5 @@ consecutivas. Ver ADR-013.
 
 - ADR-013 (historial en tabla separada en vez de timestamps individuales).
 - ADR-017 (máquina de estados compartida en `packages/shared`).
+- ADR-024 (punto 8: conjunto completo de transiciones válidas del enum de `status`, incluido el salto directo `en_route → arrived`).
+- ADR-026 (punto 4: append-only garantizado en capa de servicio, sin protección de BD — a diferencia de `audit_log`).

@@ -17,7 +17,7 @@ tutores autorizados por alumno.
 | `status` | `enum` (`active`, `invited`, `revoked`) | NOT NULL, default `invited` | |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | |
 
-Restricción: único `(student_id, guardian_user_id)`.
+Restricción: índice único parcial `(student_id, guardian_user_id) WHERE status IN ('invited', 'active')` — excluye el estado terminal `revoked`. Ver ADR-026 punto 1.
 
 ## Relaciones
 
@@ -26,17 +26,20 @@ Restricción: único `(student_id, guardian_user_id)`.
 
 ## Índices
 
-- Único compuesto `(student_id, guardian_user_id)` (ya es la constraint principal).
+- Índice único parcial `(student_id, guardian_user_id) WHERE status IN ('invited', 'active')` (es la constraint principal: un tutor no puede tener dos vínculos **no terminales** con el mismo alumno; una fila `revoked` previa no bloquea una invitación nueva). Mismo patrón que el índice parcial de `is_primary`. Ver ADR-026 punto 1.
 - Índice en `guardian_user_id` (pantalla "mis alumnos" del tutor: listar todos los `student` para los que es guardián).
 - Índice en `(student_id, status)` para resolver rápido "tutores activos autorizados de este alumno" (usado al verificar autorización de un `pickup_request`).
 - Índice único parcial `UNIQUE INDEX ... ON student_guardians (student_id) WHERE is_primary = true` — fuerza en base de datos que solo un tutor por alumno sea el principal (ver invariantes). Ver ADR-018.
 
 ## Invariantes de negocio
 
-- Un tutor no puede tener más de una relación con el mismo alumno (constraint única `(student_id, guardian_user_id)`).
+- Un tutor no puede tener más de un vínculo **no terminal** con el mismo alumno. Se fuerza con el índice único parcial `(student_id, guardian_user_id) WHERE status IN ('invited', 'active')`: una fila `revoked` previa no bloquea una invitación nueva (que se crea como fila nueva, no reactivando la existente — `revoked` es terminal). Ver ADR-026 punto 1.
 - Solo tutores en `status = active` deberían poder iniciar un `pickup_request` para ese alumno; `invited` y `revoked` no están autorizados. Esta regla no está formalizada en ningún ADR como constraint de base de datos — se aplicaría a nivel de servicio/`feature`.
 - `is_primary`: solo un `student_guardian` por `student_id` puede tener `is_primary = true`. Se fuerza con un índice único parcial de Postgres (no es solo convención de UI). Ver ADR-018.
-- `status = revoked` es terminal, igual que `enrollment.rejected`: no puede reactivarse directamente. Restablecer el vínculo requiere una nueva invitación (nueva fila o reinicio explícito del flujo de invitación, a definir en `specs/features/`). Ver ADR-018.
+- `status = revoked` es terminal, igual que `enrollment.rejected`: no puede reactivarse in-place. Restablecer el vínculo requiere una **nueva invitación** (feature 015), que crea una **fila nueva** — no reactiva la `revoked` previa. El índice único parcial excluye deliberadamente `revoked` para permitirlo. Ver ADR-018 y ADR-026 punto 1.
+- **Estado inicial según cómo nace el vínculo** (el default de columna es `invited`, pero hay una excepción documentada):
+  - **Guardián creador** (feature 004, alta de alumno): el tutor que registra al alumno queda con `is_primary = true` y `status = active` **directamente**, sin pasar por `invited`. No se auto-invita: es quien crea el vínculo sobre sí mismo. Sin esta fila `active`, el alumno recién creado sería invisible para su propio creador (ver regla de autorización de `specs/api-contracts/students.md`). Ver ADR-025 punto 8.
+  - **Guardianes agregados después por invitación** (feature 015, ADR-023): nacen con `status = invited` (el default) y solo pasan a `active` cuando la persona acepta la invitación (feature 016). Ver ADR-023.
 
 ## Enums
 
@@ -48,3 +51,6 @@ Restricción: único `(student_id, guardian_user_id)`.
 - docs/modelo-datos.md (tutores autorizados múltiples por alumno).
 - Visión general del proyecto en `CLAUDE.md` (alcance del MVP: "Tutores autorizados múltiples por alumno").
 - ADR-018 (índice único parcial para `is_primary`; `revoked` terminal).
+- ADR-023 (invitación de tutores autorizados: solo el guardián `is_primary` invita/revoca/reasigna; aceptación obligatoria; protección del guardián principal / último activo).
+- ADR-025 (punto 8: excepción del guardián creador — nace `active`, no `invited`).
+- ADR-026 (punto 1: índice único parcial que excluye `revoked`, para permitir una invitación nueva tras una revocación sin reactivar la fila terminal).

@@ -33,6 +33,22 @@ invariantes de negocio que no se expresan como un simple constraint de
 columna (reglas que cruzan tablas, reglas condicionadas por el estado de
 otra entidad, etc.).
 
+**Template obligatorio (7 secciones).** Cada spec de `entities/` debe tener,
+en este orden, las siguientes 7 secciones —incluso cuando una no aplique, en
+cuyo caso se incluye igual con una nota explícita (ej. "Sin columnas enum"):
+
+1. **Propósito** — qué modela la entidad y por qué existe.
+2. **Campos** — tabla de columnas con tipo TypeORM/PostgreSQL, constraints y notas.
+3. **Relaciones** — FKs entrantes/salientes y su comportamiento `ON DELETE`.
+4. **Índices** — índices e índices únicos (incluidos los parciales).
+5. **Invariantes de negocio** — cada regla con su mecanismo de aplicación:
+   un constraint/índice de esquema, o una nota explícita de validación en capa
+   de servicio (ADR-021: cada invariante → un test o un constraint de BD).
+6. **Enums** — dominios de valores y transiciones; "Sin columnas enum" si no aplica.
+7. **Referencias** — enlaces a los ADRs y specs que sustentan las decisiones.
+
+Ver ADR-026 (formalización del template, antes patrón de facto).
+
 ### `features/`
 Una spec por funcionalidad (ej. "aprobar enrollment", "iniciar pickup
 request", "recalcular ETA"). Debe incluir: qué entidades involucra,
@@ -61,9 +77,14 @@ posibles de la pantalla, y acciones disponibles en cada estado.
 
 ## Estado actual
 
-Esta primera ronda cubre únicamente `entities/` (las 14 entidades del
-dominio). `features/`, `api-contracts/` y `ui-screens/` quedan como carpetas
-vacías (con `.gitkeep`) hasta la siguiente ronda.
+- **`entities/`** — 14 archivos, completo (las 14 entidades del dominio).
+- **`features/`** — 23 archivos, completo. Organizados en 4 vertical slices:
+  auth/enrollment (001–007), configuración de institución (008–013),
+  vehículos/tutores autorizados (014–017) y flujo de `pickup_request`
+  (018–023).
+- **`api-contracts/`** — 12 archivos, completo.
+- **`ui-screens/`** — vacía (con `.gitkeep`): pendiente de los tokens del
+  design system antes de poder especificarse. Ver `docs/plan-implementacion.md`.
 
 ## Orden de migración
 

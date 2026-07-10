@@ -16,7 +16,9 @@ REST API que atiende al portal y a la app del padre. Responsabilidades:
 - Autenticación (JWT con access + refresh) y autorización por rol.
 - CRUD de instituciones, usuarios, alumnos, tutores.
 - Flujo de aprobación de asociaciones alumno–institución (`enrollment`).
-- Aislamiento multi-tenant: cada institución solo ve y gestiona lo suyo.
+- Aislamiento multi-tenant vía `InstitutionMembershipGuard`: cada institución
+  solo ve y gestiona lo suyo (ver detalle en "Arquitectura de capas y
+  convenciones de módulos" más abajo, y ADR-022).
 
 ### 2. `worker` (Node/TypeScript)
 Proceso de larga duración suscrito al broker MQTT. Responsabilidades:
@@ -106,7 +108,32 @@ como función pura, sin dependencia de TypeORM ni de NestJS, en
 funciones tipo `canTransition(from, to): boolean` y
 `nextValidStates(from): Status[]`. Es la única pieza de lógica de dominio
 aislada explícitamente, consumida tanto por `api` como por `worker` para
-evitar que ambos procesos diverjan en su validación. Ver ADR-017.
+evitar que ambos procesos diverjan en su validación. Conjunto completo de
+transiciones válidas documentado en ADR-024, punto 8. Ver ADR-017.
+
+**Aislamiento multi-tenant vía `InstitutionMembershipGuard`.** Guard de
+NestJS, ejecutado inmediatamente después del guard de autenticación JWT en
+cualquier ruta que opere sobre datos de una institución. Verifica que exista
+un `institution_member` con `(userId, institutionId)` antes de dejar pasar
+el request; si no existe, corta con `403` antes de llegar al controller.
+Dos estrategias de resolución de `institutionId` según el tipo de ruta:
+- **Rutas anidadas** (`/institutions/:institutionId/...`): el guard lee
+  `institutionId` directo del parámetro de ruta.
+- **Rutas por recurso** (`PATCH /delivery-points/:id`,
+  `PATCH /dismissal-windows/:id`, etc.): el guard resuelve la institución
+  del recurso con una consulta mínima al repositorio correspondiente antes
+  de comparar contra las membresías del usuario.
+
+Complemento obligatorio, en la capa de servicio: cada `service` construye
+sus queries filtrando siempre por el `institutionId` del contexto
+autenticado (URL/JWT), **nunca** por uno que venga en el body de la
+petición — defensa en profundidad ante un guard que falte en una ruta
+nueva.
+
+Se descarta Row-Level Security de Postgres para este propósito: es
+ceremonia y complejidad operativa (fricción con TypeORM y connection
+pooling) no justificada dado el mismo criterio de ADR-017. Ver ADR-022 para
+el razonamiento completo.
 
 ## Flujo de tiempo real (recogida)
 
@@ -156,12 +183,15 @@ evitar que ambos procesos diverjan en su validación. Ver ADR-017.
   consola de puerta no está restringido por rol dentro del mismo tenant).
 - TLS obligatorio (WSS). Autenticación por usuario/token en el broker, nunca
   anónimo. Tokens emitidos por el `api` tras el login.
+- A nivel API (REST, no MQTT), el mismo principio de aislamiento por tenant lo
+  aplica el `InstitutionMembershipGuard` (ver sección anterior).
 
 ## ETA y costo
 
 - La API de mapas con tráfico en vivo (Google o Mapbox) es el principal costo
-  variable. El `worker` aplica throttling: recalcula cada N segundos o cada X
-  metros recorridos, no en cada lectura del GPS.
+  variable. El `worker` aplica throttling: recalcula cada 20 segundos o cada
+  150 metros recorridos, lo que ocurra primero (ADR-024, punto 2) — no en
+  cada lectura del GPS.
 - El tablero hace la cuenta regresiva por aritmética entre recálculos, así que la
   experiencia se ve fluida sin multiplicar las llamadas a la API.
 
@@ -171,6 +201,8 @@ evitar que ambos procesos diverjan en su validación. Ver ADR-017.
   rastrear **solo durante la ventana de recogida** y detener el tracking al
   finalizar. Nunca ubicación continua.
 - Aviso de privacidad y consentimiento explícitos.
+- `location_updates` se retiene 90 días desde `pickup_requests.completed_at`
+  y luego se purga vía job diario (ADR-018 punto 8, ADR-024 punto 6).
 - `audit_log` para trazabilidad de toda acción sensible.
 
 ## Identidad en la entrega (control de seguridad)
@@ -185,3 +217,12 @@ Como capa adicional de verificación, cada `pickup_request` incluye un
 app al alcanzar el estado "En puerta". El staff lo verifica en la consola de
 puerta contra el valor del `pickup_request` antes de confirmar la entrega y
 disparar la transición a `delivered`. Ver ADR-013.
+
+El código es visible, vía `GET`, tanto para el tutor dueño del
+`pickup_request` como para cualquier `institution_member` de la institución
+asociada, sin restricción de `role` — consistente con ADR-011 (acceso
+abierto a la consola de puerta). Un `delivery_code` incorrecto no bloquea ni
+limita reintentos (es verificación presencial, no un vector de ataque
+remoto): cada intento fallido se registra en `audit_log`
+(`pickup_request.delivery_code_mismatch`) para trazabilidad. Ver ADR-024,
+puntos 4 y 11.

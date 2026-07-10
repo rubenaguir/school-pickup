@@ -100,6 +100,10 @@ comportamiento depende de si el correo ya corresponde a un `user`:
 cuando se creó un `user` nuevo (caso (b)) o cuando se reenvió a un `user`
 todavía `invited` que ya era miembro (reenvío, ADR-022 punto 5).
 
+**Auditoría.** El alta de personal registra una fila en `audit_log` con
+`action = institution_member.added` (alta de personal = acción sensible según
+`CLAUDE.md`; convención libre `entity.verb`, ADR-018 punto 9; ADR-025 punto 6).
+
 **Errores**
 | Código | Caso |
 |---|---|
@@ -118,6 +122,17 @@ y su `users.status` pasa a `active`. Ver feature 013. Endpoint de acceso públic
 mecanismo de activación por token que la verificación de correo, parametrizado
 para fijar contraseña (ADR-022 punto 3).
 
+Este endpoint es **compartido** entre la aceptación de personal (feature 013) y la
+de tutor autorizado (feature 016); distingue el tipo de invitación por el payload
+del token (ADR-023 punto 4). El chequeo de "invitación ya completada" (error 409)
+se resuelve **según el tipo de invitación**, no siempre contra `user.status`:
+- **invitación de personal:** ya completada si `users.status = active` (no hay un
+  `status` propio del `institution_member`);
+- **invitación de tutor:** ya completada si `student_guardian.status = active` — no
+  se mira `users.status`, porque el `user` puede estar `active` desde antes (p. ej.
+  ya es tutor en otra institución) mientras su vínculo con este alumno sigue
+  `invited` (ADR-025 punto 7).
+
 **Request**
 ```json
 { "password": "string" }
@@ -133,7 +148,13 @@ para fijar contraseña (ADR-022 punto 3).
 |---|---|
 | 400 | token con firma inválida o malformado, o `password` faltante/ inválida |
 | 410 | token con firma válida pero expirado (hace falta una nueva invitación — ver Preguntas abiertas de feature 013) |
-| 409 | la cuenta asociada al token ya está `active` (invitación ya aceptada) |
+| 409 | la invitación ya fue aceptada — resuelto según el tipo de invitación del token: personal → `users.status = active`; tutor → `student_guardian.status = active` (ADR-023 punto 4, ADR-025 punto 7) |
+
+**Auditoría.** Al aceptar una invitación de **personal**, se registra una fila en
+`audit_log` con `action = institution_member.accepted` (la aceptación de tutor se
+registra como `student_guardian.accepted`, ver
+`specs/api-contracts/student-guardians.md`). ADR-018 punto 9; prefijo
+`student_guardian.*` consolidado en ADR-026 punto 5.
 
 ## `PATCH /institution-members/:id`
 
@@ -166,6 +187,39 @@ capaz de aprobar enrollments, gestionar personal o editar la configuración.
 | 404 | el `institution_member` no existe |
 | 422 | el miembro es el único con `role = admin` de la institución y el cambio lo degradaría (protección del último admin, ADR-022 punto 5) |
 
+**Auditoría.** El cambio de rol registra una fila en `audit_log` con
+`action = institution_member.role_changed` (ADR-018 punto 9; ADR-025 punto 6).
+
+## `DELETE /institution-members/:id`
+
+Da de baja a un miembro del personal de la institución. Ver feature 012.
+**Elimina únicamente la fila de `institution_member`**; el `user` no se borra (puede
+seguir existiendo como tutor o como personal de otra institución). **Protección del
+último admin (ADR-022 punto 5, ADR-025 punto 9):** no puede darse de baja al único
+miembro con `role = admin` de la institución (dejaría al plantel sin nadie capaz de
+aprobar enrollments, gestionar personal o editar la configuración) — mismo criterio
+que el `PATCH`.
+
+Autorización: **`role = admin`** de la institución (ADR-022 punto 1); el
+`InstitutionMembershipGuard` resuelve la institución desde la propia membresía del
+recurso (ADR-022 punto 4), igual que el `PATCH`.
+
+**Request:** sin body.
+
+**Response 204** (sin body)
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 403 | el usuario autenticado no es `institution_member` de la institución del miembro |
+| 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 404 | el `institution_member` no existe |
+| 422 | el miembro es el único con `role = admin` de la institución (protección del último admin, ADR-022 punto 5, ADR-025 punto 9) |
+
+**Auditoría.** La baja registra una fila en `audit_log` con
+`action = institution_member.removed` (baja de personal = acción sensible según
+`CLAUDE.md`; convención libre `entity.verb`, ADR-018 punto 9; ADR-025 puntos 6 y 9).
+
 ## Referencias
 
 - `specs/features/012-invitar-personal.md`,
@@ -185,6 +239,14 @@ capaz de aprobar enrollments, gestionar personal o editar la configuración.
   `password_hash` nullable; punto 3: activación por token parametrizada; punto 4:
   `InstitutionMembershipGuard`; punto 5: protección del último admin y reenvío
   vía re-invitación).
+- ADR-023 (punto 4: endpoint de aceptación compartido, parametrizado por tipo de
+  invitación).
+- ADR-025 (punto 6: registro en `audit_log` de `institution_member.added` /
+  `institution_member.accepted` / `institution_member.role_changed` /
+  `institution_member.removed`; punto 7: chequeo de "ya aceptada" según el tipo de
+  invitación en `POST /invitations/:token/accept`; punto 9: endpoint
+  `DELETE /institution-members/:id` con protección del último admin).
+- `specs/entities/audit_log.md`.
 
 ## Preguntas abiertas
 

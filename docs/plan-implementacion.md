@@ -28,14 +28,18 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–023 (`docs/decisiones.md`): stack, dominio, arquitectura de
+- [x] ADRs 001–026 (`docs/decisiones.md`): stack, dominio, arquitectura de
       capas (ADR-017), reglas de negocio de entidades (ADR-018), resolución
       de preguntas abiertas del slice auth/enrollment (ADR-019), versiones de
       frontend (ADR-020), compuerta de calidad (ADR-021), resolución de
       preguntas abiertas del slice de configuración de institución (ADR-022),
       resolución de preguntas abiertas del slice de vehículos y tutores
-      autorizados (ADR-023)
-- [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`)
+      autorizados (ADR-023), resolución de preguntas abiertas del slice de
+      flujo de `pickup_request` (ADR-024), y las dos rondas de validación
+      cruzada de cierre de Fase 1 (ADR-025 y ADR-026)
+- [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
+      el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
+      ADR-022)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
       relaciones, índices, invariantes y enums
 
@@ -51,8 +55,10 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 - [x] `CLAUDE.md` §"Reglas de implementación": spec como fuente de verdad,
       spec antes que código, invariante de negocio → test o constraint,
       verificar dependencias antes de importarlas
+- [x] Node 24.18 instalado y `.nvmrc` fijado; `engines` del monorepo en
+      `>=24.11` (piso real de TypeORM 1.0, ver ADR-021)
 
-## Fase 1 — Specs de features y contratos de API ⏳ en progreso
+## Fase 1 — Specs de features y contratos de API ✅ completo
 
 - [x] Decidir la feature de arranque → **Auth + aprobación de `enrollment`**
       (se pospuso el flujo completo de `pickup_request` para un slice
@@ -100,13 +106,50 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 - [x] Slice de vehículos y tutores autorizados **cerrado** (sin preguntas
       abiertas pendientes); sin cambios de entidad (`is_primary`/`status` ya
       existían)
-- [ ] Especificar los slices restantes antes de dar Fase 1 por completa
-      (los módulos de Fase 5/6 los necesitan primero):
-      - [x] Configuración de institución (geocerca, radios, horarios,
-            puntos de entrega, personal)
-      - [x] Catálogo de vehículos + tutores autorizados (`student_guardian`)
-      - [ ] Flujo completo `pickup_request` (ADR-012, ADR-013, ADR-014) +
-            topics MQTT (`MqttClient`, ver ADR-017)
+- [x] `specs/features/018-023-*.md` — slice de flujo de `pickup_request`: crear
+      recogida, ingesta de ubicación + ETA, transición a `arriving`, confirmar
+      llegada y entrega, cancelar, purga de `location_updates`
+- [x] `specs/api-contracts/{pickup-requests,pickup-realtime-mqtt}.md`
+      correspondientes (REST + contrato de tiempo real MQTT)
+- [x] **Resolver 10 preguntas abiertas** del slice (ADR-024): bloqueo de
+      recogida activa duplicada (422), throttling de ETA (20 s / 150 m),
+      `arriving_lead_minutes` configurable por institución, `delivery_code`
+      incorrecto sin bloqueo con registro en `audit_log`, "Reportar incidencia"
+      fuera de alcance, purga diaria, `activation_radius_meters` solo
+      client-side, conjunto de transiciones válidas (incl. `en_route → arrived`),
+      paginación `limit`/`offset`, payloads MQTT diferidos a Fase 7–9,
+      exposición de `delivery_code` en `GET` (tutor dueño + cualquier
+      `institution_member`, sin restricción de rol)
+- [x] `specs/entities/institution.md` y `docs/modelo-datos.md` actualizados:
+      nueva columna `arriving_lead_minutes` (int, default 5; ADR-024 punto 3),
+      añadida también a la configuración editable (feature 008 + `institutions.md`)
+- [x] Slice de flujo de `pickup_request` **cerrado** (sin preguntas abiertas
+      pendientes; "Reportar incidencia" y payloads MQTT son decisiones
+      explícitas, no pendientes)
+- [x] Los cuatro vertical slices de la Fase 1 especificados:
+      - [x] Auth + aprobación de `enrollment` (001–007)
+      - [x] Configuración de institución (008–013)
+      - [x] Catálogo de vehículos + tutores autorizados (014–017)
+      - [x] Flujo completo `pickup_request` + topics MQTT (018–023)
+- [x] **Dos rondas de validación cruzada de cierre** de la Fase 1: correcciones
+      de consistencia tras la primera validación (ADR-025) y de la validación
+      final antes de Fase 2 (ADR-026): índices únicos parciales que excluyen
+      estados terminales en `enrollments`/`student_guardians`, ampliación de la
+      convención 409/422, protección append-only de `audit_log` a nivel de BD,
+      consolidación de `audit_log.action` a `student_guardian.*`, y
+      formalización del template de 7 secciones de `specs/entities/`
+
+### Pendiente explícito para un slice futuro (no bloquea Fase 2)
+
+- [ ] **Consola de super-admin — aprobar/suspender instituciones.** No existen
+      features para que el super-admin apruebe (`institution.approved`) o
+      suspenda (`institution.suspended`) una institución, pese a ser acciones
+      auditables ya previstas en ADR-018 punto 1 y a que las transiciones de
+      `institutions.status` son de super-admin (ADR-018). Es un gap de cobertura,
+      no una contradicción; se especificará como un slice futuro, probablemente
+      junto con el resto de la consola de super-admin, con sus acciones de
+      `audit_log` (`institution.approved` / `institution.suspended`). Ver ADR-026
+      punto 6.
 
 ## Fase 2 — Fundamentos de código compartido (`packages/shared`)
 
@@ -115,7 +158,7 @@ No depende de qué feature se elija primero — es la base que todas usan.
 - [ ] Tipos TypeScript compartidos (entidades, enums) derivados 1:1 de
       `specs/entities/*.md`
 - [ ] Máquina de estados de `pickup_request` (función pura, sin TypeORM ni
-      NestJS) — ver ADR-017
+      NestJS) — ver ADR-017, conjunto de transiciones en ADR-024 punto 8
 - [ ] Interfaces de los ports: `MapsProvider`, `EmailProvider`, `MqttClient`
       (solo las interfaces; las implementaciones concretas van en `api`/`worker`)
 - [ ] Constantes de topics MQTT (prefijo `school-pickup/...`, ver
@@ -136,8 +179,6 @@ dismissal_exceptions → audit_log).
       ver ADR-018
 - [ ] Verificar conexión a Postgres+PostGIS local (sin contenedor, ver
       `CLAUDE.md`)
-- [ ] Nota de compatibilidad (ADR-021): TypeORM 1.0 exige Node ≥24.11; hoy se
-      corre Node 24.7 — subir el runtime si se adopta esa versión de TypeORM
 
 ## Fase 4 — Módulo de autenticación
 
@@ -145,13 +186,20 @@ dismissal_exceptions → audit_log).
       del stack original)
 - [ ] Endpoints de registro/login diferenciados institución vs. tutor (ver
       `docs/design-brief.md`, sección "Acceso")
+- [ ] Servicio de activación por token unificado (verificación de correo +
+      aceptación de invitación de personal/tutor, parametrizado por si define
+      contraseña o no; ver ADR-022, punto 3)
+- [ ] `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
+      ADR-022 punto 4; ver `docs/arquitectura.md`) — lo consumen todos los
+      módulos de la Fase 5 en adelante
 - [ ] Implementación concreta de `EmailProvider` (Resend) para verificación
       de correo (ADR-019), recuperación de contraseña e invitaciones (ADR-009)
 
 ## Fase 5 — Módulos CRUD core
 
 Orden sugerido por dependencia funcional (no todos son bloqueantes entre sí,
-pero este orden minimiza retrabajo):
+pero este orden minimiza retrabajo). Todos protegidos por
+`InstitutionMembershipGuard` (Fase 4) donde aplique aislamiento multi-tenant.
 
 - [ ] `institutions` (incluye geocerca, horarios, puntos de entrega)
 - [ ] `delivery-points`
@@ -169,12 +217,15 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
       automática de `delivery_point_id` (ADR-012), `delivery_code`
 - [ ] `pickup_request_status_history`: registro de transiciones
 - [ ] `worker`: suscripción MQTT, ingesta de ubicación, cálculo de ETA con
-      throttling, implementación concreta de `MapsProvider`
+      throttling (20 s / 150 m, ADR-024 punto 2), implementación concreta de
+      `MapsProvider`
 - [ ] Publicación a topics de tablero y de punto de entrega (ADR-012,
       `docs/arquitectura.md`)
-- [ ] Job programado de purga de `location_updates` a 90 días (ADR-018)
+- [ ] Job programado diario de purga de `location_updates` a 90 días
+      (ADR-018 punto 8, ADR-024 punto 6)
 - [ ] `audit_log`: instrumentar en las acciones sensibles ya identificadas
-      (aprobaciones, altas/bajas de tutores)
+      (aprobaciones, altas/bajas de tutores, `pickup_request.delivery_code_mismatch`
+      — ADR-024 punto 4)
 
 ## Fase 7 — Frontend: `apps/portal`
 

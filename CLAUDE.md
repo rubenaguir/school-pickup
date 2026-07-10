@@ -72,7 +72,9 @@ docs/         Documentación (español)
 
 - `snake_case` en base de datos; `camelCase` en TypeScript. Las entidades de
   TypeORM hacen el mapeo entre ambos.
-- Identificadores de dominio en inglés: `institution`, `student`, `guardian`,
+- Identificadores de dominio en inglés: `institution`, `student`,
+  `student_guardian` (la relación tutor–alumno; el tutor en sí es un `user`
+  referenciado por `student_guardians.guardian_user_id`, no una tabla `guardian`),
   `enrollment`, `pickup_request`, `location_update`, `delivery_point`, `vehicle`.
 - Todos los topics MQTT cuelgan del prefijo raíz de proyecto `school-pickup/`
   (el broker es compartido con otras aplicaciones; así se evita la colisión de
@@ -80,6 +82,16 @@ docs/         Documentación (español)
   aplica, por punto de entrega (ver `docs/arquitectura.md`). ACL por tenant
   en el broker. Un cliente NUNCA debe poder suscribirse a topics de otra
   institución.
+- Aislamiento multi-tenant a nivel API (REST) vía `InstitutionMembershipGuard`
+  (NestJS): verifica `institution_member(userId, institutionId)` antes de
+  dejar pasar cualquier request sobre datos de una institución. Los services
+  nunca confían en un `institutionId` recibido en el body. Ver ADR-022 y
+  `docs/arquitectura.md`.
+- Convención HTTP: `422 Unprocessable Entity` para peticiones bien formadas
+  que violan una regla de negocio cruzada entre entidades (ej. un
+  `operator_user_id` que no pertenece a la institución, o dejar una
+  institución sin ningún `admin`). `400` queda reservado para peticiones mal
+  formadas. Ver ADR-022, punto 5.
 - Toda acción sensible (aprobaciones, alta/baja de tutores) se registra en
   `audit_log`.
 - Comunicación TLS en todo (HTTPS y WSS). MQTT con autenticación, nunca anónimo.

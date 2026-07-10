@@ -43,6 +43,7 @@ Devuelve la configuración de la institución. Ver feature 008.
   "levels": ["string"],
   "arrivalToleranceMinutes": "number",
   "advanceNoticeMinutes": "number",
+  "arrivingLeadMinutes": "number",
   "joinCode": "string",
   "status": "pending | approved | suspended"
 }
@@ -73,12 +74,15 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
   "cctCode": "string | null",
   "levels": ["string"],
   "arrivalToleranceMinutes": "number",
-  "advanceNoticeMinutes": "number"
+  "advanceNoticeMinutes": "number",
+  "arrivingLeadMinutes": "number"
 }
 ```
 
 `geofenceRadiusMeters` (arribo) y `activationRadiusMeters` (activación del botón
 "ya voy") son dos campos independientes y se actualizan por separado (ADR-013).
+`arrivingLeadMinutes` (int, default 5) es el umbral de ETA para pasar a
+`arriving` (ADR-024 punto 3).
 
 **Response 200**
 ```json
@@ -95,6 +99,7 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
   "levels": ["string"],
   "arrivalToleranceMinutes": "number",
   "advanceNoticeMinutes": "number",
+  "arrivingLeadMinutes": "number",
   "status": "pending | approved | suspended"
 }
 ```
@@ -106,8 +111,8 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
 | 403 | el usuario autenticado no es `institution_member` de esa `:id` |
 | 403 | el usuario es `institution_member` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la institución no existe |
-| 409 | se envió `category` no nula en una institución con `type = school` (invariante de `specs/entities/institution.md`) |
-| 409 | `institution.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008) |
+| 409 | se envió `category` no nula en una institución con `type = school` (invariante intra-entidad de `specs/entities/institution.md`; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
+| 409 | `institution.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
 
 ## `POST /institutions/:id/regenerate-join-code`
 
@@ -141,6 +146,10 @@ aleatorio ante colisión) es el mismo que en el alta.
   restricción a `role = admin`).
 - ADR-022 (punto 1: la configuración exige `role = admin`; punto 4:
   `InstitutionMembershipGuard`).
+- ADR-024 (punto 3: `arrivingLeadMinutes` como campo de configuración editable).
+- ADR-026 (punto 2: ampliación de la convención 409/422 — el conflicto de un
+  recurso con su propio estado, como `status != approved` o `category`/`type`,
+  usa 409, no 422; ambos casos de este endpoint quedan correctamente en 409).
 
 ## Preguntas abiertas
 

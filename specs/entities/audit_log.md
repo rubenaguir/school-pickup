@@ -11,7 +11,7 @@ de menores + ubicación).
 |---|---|---|---|
 | `id` | `bigserial` | PK | |
 | `actor_user_id` | `uuid` | nullable, FK → `user.id`, `ON DELETE SET NULL` | `NULL` si la acción fue del sistema |
-| `action` | `varchar(100)` | NOT NULL | ej. `enrollment.approved`, `guardian.added` |
+| `action` | `varchar(100)` | NOT NULL | ej. `enrollment.approved`, `student_guardian.added` |
 | `entity_type` | `varchar(100)` | NOT NULL | nombre de la entidad afectada |
 | `entity_id` | `varchar(100)` | NOT NULL | id de la entidad afectada (texto para admitir `uuid` y `bigint`) |
 | `metadata` | `jsonb` | nullable | detalle adicional específico de la acción |
@@ -30,16 +30,17 @@ de menores + ubicación).
 
 ## Invariantes de negocio
 
-- Tabla de solo inserción (append-only): un registro de auditoría nunca se modifica ni se borra.
+- Tabla de solo inserción (append-only): un registro de auditoría nunca se modifica ni se borra. **Se fuerza a nivel de base de datos**: se revocan los privilegios `UPDATE` y `DELETE` sobre esta tabla para el rol de conexión de la aplicación (`api`/`worker` solo pueden `INSERT`/`SELECT`). Es una excepción deliberada al criterio general del proyecto (evitar mecanismos de BD y validar en capa de servicio, ADR-017/ADR-018): la inmutabilidad de un log forense/legal (LFPDPPP) debe sobrevivir incluso a un bug de la aplicación, no solo a la disciplina del código. Es el único caso del proyecto con protección a nivel de BD por encima de la capa de servicio. Ver ADR-026 punto 4.
 - `actor_user_id` es nullable para representar acciones automáticas del sistema (ej. una transición de `pickup_request.status` disparada por el `worker` sin intervención humana), de forma consistente con `pickup_request_status_history.changed_by_user_id`.
 - Toda acción sensible mencionada en `CLAUDE.md` (aprobaciones, alta/baja de tutores) debe generar una fila aquí; es una obligación transversal del backend, no una regla que viva en el esquema de `audit_log` mismo.
 
 ## Enums
 
-- `action` es `varchar` libre, no un enum de PostgreSQL: la lista de acciones auditables crece con cada nuevo módulo de dominio y no conviene fijarla como tipo de base de datos. Convención de nombres: `entity.verb` (ej. `enrollment.approved`, `institution.suspended`, `guardian.added`), sin catálogo cerrado — nuevos tipos de evento no requieren migración de esquema. Ver ADR-018.
+- `action` es `varchar` libre, no un enum de PostgreSQL: la lista de acciones auditables crece con cada nuevo módulo de dominio y no conviene fijarla como tipo de base de datos. Convención de nombres: `entity.verb`, donde `entity` es una **entidad real del dominio** (ej. `enrollment.approved`, `institution.suspended`, `student_guardian.added` — no `guardian.*`, que no es una tabla), sin catálogo cerrado — nuevos tipos de evento no requieren migración de esquema. Ver ADR-018 punto 9 y ADR-026 punto 5.
 
 ## Referencias
 
 - `CLAUDE.md` (toda acción sensible se registra en `audit_log`).
 - `docs/arquitectura.md` (privacidad y marco legal LFPDPPP; `audit_log` para trazabilidad).
 - ADR-018 (convención de nombres `entity.verb` para `action`).
+- ADR-026 (punto 4: protección append-only a nivel de BD — revocación de `UPDATE`/`DELETE`; punto 5: prefijo canónico `student_guardian.*`, no `guardian.*`).

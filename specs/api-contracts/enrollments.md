@@ -121,7 +121,11 @@ Ver feature 006.
 | 403 | el usuario autenticado es `institution_member` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
 | 404 | `enrollment` no existe |
 | 409 | `enrollment.status != pending` |
-| 409 | `institution.status != approved` (ver ADR-018) |
+| 422 | `institution.status != approved` (regla cruzada entre entidades; ADR-018, ADR-025 punto 5) |
+
+**Auditoría.** La aprobación registra una fila en `audit_log` con
+`action = enrollment.approved` (aprobación = acción sensible según `CLAUDE.md`;
+convención libre `entity.verb`, ADR-018 punto 9; ADR-025 punto 6).
 
 ## `PATCH /enrollments/:id/reject`
 
@@ -150,16 +154,21 @@ capturarlo).
 Nota: a diferencia de `approve`, `reject` no valida `institution.status`
 (ver feature 006 — ADR-018 solo condiciona la transición a `approved`).
 
+**Auditoría.** El rechazo registra una fila en `audit_log` con
+`action = enrollment.rejected` (ADR-018 punto 9; ADR-025 punto 6).
+
 ## Referencias
 
 - `specs/features/005-asociar-institucion.md`,
   `specs/features/006-aprobacion-enrollment.md`.
 - `specs/entities/enrollment.md`, `specs/entities/institution.md`,
-  `specs/entities/institution_member.md`.
+  `specs/entities/institution_member.md`, `specs/entities/audit_log.md`.
 - `docs/arquitectura.md` (aislamiento multi-tenant).
 - ADR-018 (condición de aprobación; `rejected` terminal).
 - ADR-019 (visibilidad de instituciones no aprobadas; restricción de
   `role = admin` para aprobar/rechazar).
+- ADR-025 (punto 5: `institution.status != approved` → 422; punto 6: registro en
+  `audit_log` de `enrollment.approved` / `enrollment.rejected`).
 
 ## Preguntas abiertas
 

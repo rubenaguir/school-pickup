@@ -106,14 +106,23 @@ When se intenta aceptar la invitación
 Then la operación falla con un error genérico de token inválido
 ```
 
-### Caso: la cuenta ya está activa
+### Caso: la invitación de tutor ya fue aceptada
 
 ```
-Given un user cuyo status ya es active (la invitación ya fue aceptada antes)
+Given un student_guardian cuyo status ya es active (esta invitación de tutor ya
+      fue aceptada antes)
 When se intenta aceptar de nuevo con este flujo
 Then la operación es idempotente/segura: no reactiva ni redefine credenciales
-     y no degrada el vínculo ya active
+     y no degrada el vínculo ya active (responde 409, invitación ya completada)
 ```
+
+> **Importante:** el chequeo de "ya aceptada" para una invitación de tutor se
+> resuelve contra `student_guardian.status`, **no** contra `user.status` (ADR-025
+> punto 7). El `user` puede estar `active` desde antes —por ejemplo, ya es tutor de
+> otro alumno o en otra institución— mientras su vínculo con **este** alumno sigue
+> `invited`; mirar `user.status` rechazaría por error una primera aceptación
+> legítima (rama (a)). El endpoint compartido distingue el tipo de invitación por el
+> payload del token (ADR-023 punto 4).
 
 ## Referencia a contrato de API
 
@@ -139,6 +148,8 @@ por MQTT.
   punto 3: mecanismo único de activación por token parametrizado).
 - ADR-023 (punto 3: aceptación obligatoria en ambas ramas, sin contraseña para
   el `user` ya activo; punto 4: reutiliza el endpoint compartido de aceptación).
+- ADR-025 (punto 7: el chequeo de "invitación ya aceptada" se resuelve contra
+  `student_guardian.status`, no contra `user.status`).
 - `specs/entities/user.md`, `specs/entities/student_guardian.md`.
 - `specs/features/015-invitar-tutor-autorizado.md` (genera este flujo),
   `specs/features/013-aceptar-invitacion-personal.md` (flujo análogo para

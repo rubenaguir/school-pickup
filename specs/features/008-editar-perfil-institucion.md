@@ -38,7 +38,9 @@ es la que permite completarlos y mantenerlos después.
   `geofence_radius_meters` (radio de arribo) y `activation_radius_meters` (radio
   de activación del botón "ya voy") — **dos campos independientes que no deben
   colapsarse** (ADR-013, punto 5) —, `cct_code`, `levels`,
-  `arrival_tolerance_minutes` y `advance_notice_minutes` (ADR-015).
+  `arrival_tolerance_minutes`, `advance_notice_minutes` (ADR-015) y
+  `arriving_lead_minutes` (ADR-024, punto 3: minutos de ETA restante para pasar a
+  `arriving`).
 - `category` solo puede tener valor cuando `type = extracurricular`; debe
   quedar `NULL` cuando `type = school` (invariante de
   `specs/entities/institution.md`). Un intento de fijar `category` en una
@@ -121,6 +123,8 @@ MQTT.
   `category`, `arrival_tolerance_minutes`, `advance_notice_minutes`).
 - ADR-018 (transiciones de `institution.status` son acción de super-admin, no
   se editan aquí).
+- ADR-024 (punto 3: `arriving_lead_minutes` como campo de configuración
+  editable).
 - ADR-019 (punto 5: restringir a `role = admin` las acciones de control de
   acceso/identidad).
 - ADR-022 (punto 1: la configuración de institución exige `role = admin`).

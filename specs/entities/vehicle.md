@@ -40,3 +40,4 @@ Sin columnas enum.
 
 - ADR-014 (catálogo de vehículos del tutor; snapshot denormalizado en `pickup_request`).
 - ADR-018 (índice único parcial para `is_primary`).
+- ADR-023 (punto 1: al borrar el vehículo principal se promueve un reemplazo elegido por el tutor, o el catálogo queda sin principal si era el único).

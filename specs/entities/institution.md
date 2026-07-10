@@ -16,13 +16,14 @@ indirectamente, de una `institution`. Ver ADR-004 (por qué "institution" y no
 | `category` | `varchar(100)` | nullable | solo cuando `type = extracurricular`; ver invariantes. Ver ADR-015 |
 | `address` | `varchar(500)` | NOT NULL | |
 | `location` | `geography(Point,4326)` | NOT NULL | punto de la institución |
-| `geofence_radius_meters` | `int` | NOT NULL | radio de arribo. Ver ADR-013 |
-| `activation_radius_meters` | `int` | NOT NULL | radio de activación del botón "ya voy". Ver ADR-013 |
+| `geofence_radius_meters` | `int` | NOT NULL, default `100` | radio de arribo. Ver ADR-013 y ADR-025 |
+| `activation_radius_meters` | `int` | NOT NULL, default `3000` | radio de activación del botón "ya voy". Ver ADR-013 y ADR-025 |
 | `timezone` | `varchar(50)` | NOT NULL | ej. `America/Mexico_City` |
 | `cct_code` | `varchar(20)` | nullable | clave de centro de trabajo (SEP). Ver ADR-015 |
 | `levels` | `varchar(50)[]` | NOT NULL, default `{}` | ver ADR-015 |
-| `arrival_tolerance_minutes` | `int` | NOT NULL | ver ADR-015 |
-| `advance_notice_minutes` | `int` | NOT NULL | ver ADR-015 |
+| `arrival_tolerance_minutes` | `int` | NOT NULL, default `10` | ver ADR-015 y ADR-025 |
+| `advance_notice_minutes` | `int` | NOT NULL, default `15` | ver ADR-015 y ADR-025 |
+| `arriving_lead_minutes` | `int` | NOT NULL, default `5` | minutos de ETA restante a partir de los cuales el `worker` pasa el `pickup_request` a `arriving`. Distinto de `geofence_radius_meters`. Ver ADR-024 |
 | `join_code` | `varchar(20)` | NOT NULL, único | ver ADR-015 |
 | `status` | `enum` (`pending`, `approved`, `suspended`) | NOT NULL, default `pending` | aprobado por super-admin |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | |
@@ -60,3 +61,7 @@ indirectamente, de una `institution`. Ver ADR-004 (por qué "institution" y no
 - ADR-013 (radios de geocerca y activación).
 - ADR-015 (configuración operativa y horarios).
 - ADR-018 (transiciones válidas de `status`).
+- ADR-024 (`arriving_lead_minutes`: umbral de tiempo configurable para la
+  transición a `arriving`).
+- ADR-025 (defaults de `geofence_radius_meters`, `activation_radius_meters`,
+  `arrival_tolerance_minutes` y `advance_notice_minutes`).

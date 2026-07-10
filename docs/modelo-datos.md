@@ -62,13 +62,14 @@ Plantel: escuela o actividad extracurricular.
 | `category` | varchar | nullable — subcategoría/disciplina cuando `type = extracurricular` (ej. "Ballet", "Natación", "Robótica"); siempre nulo para `type = school`. Ver ADR-015 |
 | `address` | varchar | |
 | `location` | geography(Point,4326) | punto de la institución |
-| `geofence_radius_meters` | int | radio de **arribo**: detecta llegada a la institución (polígono = mejora futura). Distinto de `activation_radius_meters` — ver ADR-013 |
-| `activation_radius_meters` | int | radio de **activación**: distancia a partir de la cual se habilita el botón "ya voy" en la app del padre. Coexiste con `geofence_radius_meters`, no lo sustituye — ver ADR-013 |
+| `geofence_radius_meters` | int | default `100` — radio de **arribo**: detecta llegada a la institución (polígono = mejora futura). Distinto de `activation_radius_meters` — ver ADR-013 y ADR-025 |
+| `activation_radius_meters` | int | default `3000` — radio de **activación**: distancia a partir de la cual se habilita el botón "ya voy" en la app del padre. Coexiste con `geofence_radius_meters`, no lo sustituye — ver ADR-013 y ADR-025 |
 | `timezone` | varchar | para los horarios de salida |
 | `cct_code` | varchar | nullable — clave de centro de trabajo (SEP). Ver ADR-015 |
 | `levels` | varchar[] | niveles que ofrece la institución (ej. preescolar, primaria, secundaria). Ver ADR-015 |
-| `arrival_tolerance_minutes` | int | tolerancia antes de marcar el plazo de recogida como vencido. Ver ADR-015 |
-| `advance_notice_minutes` | int | minutos de anticipación para el recordatorio de salida. Ver ADR-015 |
+| `arrival_tolerance_minutes` | int | default `10` — tolerancia antes de marcar el plazo de recogida como vencido. Ver ADR-015 y ADR-025 |
+| `advance_notice_minutes` | int | default `15` — minutos de anticipación para el recordatorio de salida. Ver ADR-015 y ADR-025 |
+| `arriving_lead_minutes` | int | default `5` — minutos de ETA restante a partir de los cuales el `worker` transiciona el `pickup_request` a `arriving`. Distinto de `geofence_radius_meters` (ambos disparan la transición, lo que ocurra primero). Ver ADR-024 |
 | `join_code` | varchar | único — código que el tutor captura para vincular la institución (ej. "CSB-2024"). Ver ADR-015 |
 | `status` | enum | `pending`, `approved`, `suspended` |
 | `created_at` / `updated_at` | timestamptz | |
@@ -137,7 +138,10 @@ Tutores autorizados por alumno (madre, padre, abuela, chofer).
 | `status` | enum | `active`, `invited`, `revoked` |
 | `created_at` | timestamptz | |
 
-Restricción: único `(student_id, guardian_user_id)`.
+Restricción: índice único parcial `(student_id, guardian_user_id) WHERE status
+IN ('invited', 'active')` — excluye el estado terminal `revoked`, de modo que una
+invitación nueva tras una revocación crea una fila nueva sin chocar con la previa.
+Ver ADR-026 punto 1.
 
 > `is_primary` se fuerza en base de datos con un índice único parcial
 > (`UNIQUE INDEX ... ON student_guardians (student_id) WHERE is_primary =
@@ -180,7 +184,10 @@ Asociación alumno ↔ institución con aprobación.
 | `requested_at` | timestamptz | |
 | `reviewed_at` | timestamptz | nullable |
 
-Restricción: único `(student_id, institution_id)`.
+Restricción: índice único parcial `(student_id, institution_id) WHERE status IN
+('pending', 'approved')` — excluye el estado terminal `rejected`, de modo que una
+solicitud nueva tras un rechazo crea una fila nueva sin chocar con la previa. Ver
+ADR-026 punto 1.
 
 > `enrollment_code` vive en `enrollments`, no en `students`: la matrícula/folio
 > es propia de la relación alumno–institución (un mismo alumno tiene folios
@@ -220,6 +227,11 @@ Evento central: "voy en camino".
 > capturado libre si el tutor no seleccionó uno guardado). Es intencional: si
 > el tutor edita o borra un vehículo de su perfil después, el histórico de
 > `pickup_requests` no cambia retroactivamente. Ver ADR-014.
+>
+> **Recogida activa única.** Índice único parcial sobre `(enrollment_id)` con
+> `WHERE status IN ('en_route', 'arriving', 'arrived')`: no puede haber más de un
+> `pickup_request` no terminal por `enrollment_id`. Un segundo intento se rechaza
+> con 422. Ver ADR-024 punto 1 y ADR-025.
 
 ### `pickup_request_status_history`
 Historial de transiciones de estado de un `pickup_request`. Se usa una tabla de
@@ -288,7 +300,7 @@ Trazabilidad de acciones sensibles.
 |---|---|---|
 | `id` | bigserial (PK) | |
 | `actor_user_id` | uuid (FK) | nullable |
-| `action` | varchar | p. ej. `enrollment.approved`, `guardian.added` |
+| `action` | varchar | p. ej. `enrollment.approved`, `student_guardian.added` (convención `entity.verb`, ADR-018 punto 9; prefijo `student_guardian.*`, ADR-026 punto 5) |
 | `entity_type` | varchar | |
 | `entity_id` | varchar | |
 | `metadata` | jsonb | nullable |
@@ -298,6 +310,7 @@ Trazabilidad de acciones sensibles.
 
 ```
 en_route ──> arriving ──> arrived ──> delivered
+   │   └────── salto directo ──────> arrived
    │             │            │
    └─────────────┴────────────┴──> cancelled
 ```
@@ -305,9 +318,15 @@ en_route ──> arriving ──> arrived ──> delivered
 - `en_route`: el tutor inició el trayecto; se publica ubicación y se calcula ETA.
 - `arriving`: el ETA es bajo o entró a la geocerca.
 - `arrived`: en Camino A, el tutor confirma "ya llegué" (sin geofence en
-  background); el staff lo ve en el tablero.
+  background); el staff lo ve en el tablero. Es alcanzable tanto desde `arriving`
+  como **directamente desde `en_route`** (salto directo, ADR-024 punto 8): un tutor
+  puede llegar y confirmar antes de que el `worker` calcule la transición automática
+  a `arriving`.
 - `delivered`: el staff confirma la entrega del alumno.
 - `cancelled`: el tutor cancela en cualquier momento.
+
+Conjunto completo de transiciones válidas en ADR-024 punto 8 (codificado en la
+máquina de estados compartida de `packages/shared`).
 
 Cada transición se registra como una fila en `pickup_request_status_history`
 (estado, momento, y quién la originó). No hay timestamps individuales por

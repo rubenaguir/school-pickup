@@ -439,8 +439,10 @@ a `specs/features/`.
    queda fuera de esta ronda de specs, se resuelve al definir
    `specs/features/` para el `worker`.
 9. **`audit_log.action`.** Convención de nombres libre `entity.verb` (ej.
-   `enrollment.approved`, `institution.suspended`, `guardian.added`), no un
-   enum cerrado. Nuevos tipos de evento no requieren migración de esquema.
+   `enrollment.approved`, `institution.suspended`, `student_guardian.added`), no
+   un enum cerrado. Nuevos tipos de evento no requieren migración de esquema.
+   (El prefijo canónico del tutor autorizado es `student_guardian.*`, no
+   `guardian.*` — consolidado en ADR-026 punto 5.)
 10. **`dismissal_exceptions`.** Restricción única `(institution_id, date,
     level)`. El caso de un `level = null` ("todos los niveles") coexistiendo
     con una excepción de nivel específico en la misma fecha no lo captura un
@@ -655,6 +657,27 @@ Se resuelven aquí.
      para peticiones mal formadas: falta de campo, tipo incorrecto). Aplica a
      `operator_user_id` que no es miembro de la institución (ADR-018, punto 11),
      y en general a toda validación cruzada del API.
+
+     **Ampliación (validación final de Fase 1, ADR-026).** La convención se
+     amplía para cubrir explícitamente el caso de un recurso que entra en
+     conflicto con **su propio estado actual** (transiciones de máquina de
+     estados, invariantes intra-entidad). La distinción completa queda así:
+     - **400**: petición mal formada (campo faltante, tipo incorrecto).
+     - **409**: el recurso entra en conflicto con **su propio estado** — por
+       ejemplo `institution.status != approved` bloqueando un `PATCH` sobre esa
+       misma institución, o `category` no nula con `type = school` en la misma
+       entidad, o una transición de estado inválida sobre el propio recurso.
+     - **422**: la petición viola una regla de negocio que **cruza hacia otra
+       entidad** — por ejemplo un `operator_user_id` que no es miembro de la
+       institución, dejar una institución sin ningún admin, revocar al guardián
+       principal sin reasignar antes, o reasignar la primariedad a un guardián
+       no activo.
+
+     Nota: esta ampliación aclara —sin requerir cambio de código— que
+     `specs/api-contracts/institutions.md` (bloqueo de `PATCH` si
+     `institution.status != approved`) y la validación de `category`/`type` en
+     esa misma spec ya estaban correctamente codificados en **409** bajo esta
+     lectura ampliada.
    - **Protección del último admin:** el cambio de `role`
      (`PATCH /institution-members/:id`) y cualquier baja de personal deben
      rechazarse con **422** si el miembro afectado es el único con `role = admin`
@@ -759,3 +782,351 @@ negocio. Se resuelven aquí. Ninguna requiere cambios de esquema: `is_primary` y
 - Reglas de negocio nuevas a forzar por test (ADR-021): solo el principal invita
   y revoca; no se revoca al principal sin reasignar primero; promoción del
   principal al borrar un vehículo principal.
+
+## ADR-024 — Resolución de preguntas abiertas del vertical slice de flujo de `pickup_request`
+
+**Contexto.** Al construir el cuarto y último vertical slice de la Fase 1
+(`specs/features/018`–`023` y `specs/api-contracts/pickup-requests.md`,
+`pickup-realtime-mqtt.md` — ciclo de vida completo de la recogida) se
+identificaron 10 preguntas abiertas, entre ellas varios valores numéricos que las
+specs deliberadamente no inventaron. Se resuelven aquí.
+
+**Decisión.**
+1. **Recogida activa duplicada: bloquear con 422.** No se permite crear un
+   `pickup_request` nuevo si ya existe uno en estado no terminal
+   (`en_route`/`arriving`/`arrived`) para el mismo `enrollment_id`. El código es
+   **422**, consistente con la convención de validación cruzada entre entidades
+   (ADR-023 punto 5 / ADR-022 punto 5).
+2. **Throttling del recálculo de ETA: 20 segundos o 150 metros, lo que ocurra
+   primero.** El `worker` recalcula el ETA (vía `MapsProvider`) cuando han pasado
+   ≥ 20 s desde el último recálculo **o** el tutor se ha desplazado ≥ 150 m,
+   lo que ocurra primero. La ingesta de `location_updates` sigue sin throttling.
+3. **Umbral de transición a `arriving`: configurable por institución.** Se agrega
+   la columna `institutions.arriving_lead_minutes` (`int`, NOT NULL, default
+   `5`): minutos de ETA restante a partir de los cuales el `worker` transiciona
+   el `pickup_request` a `arriving`, dando tiempo al plantel para vocear y
+   preparar al alumno. Es **distinta** de `geofence_radius_meters` (detección de
+   arribo real por proximidad); ambas condiciones —umbral de tiempo O entrada a
+   la geocerca— disparan la transición, lo que ocurra primero. Es configurable
+   por el mismo criterio que `arrival_tolerance_minutes` y
+   `activation_radius_meters` (ADR-015): el tiempo de preparación varía por
+   tamaño e infraestructura del plantel.
+4. **`delivery_code` incorrecto: sin bloqueo, con registro en `audit_log`.** Es
+   verificación presencial (tutor y staff cara a cara), no fuerza bruta remota;
+   bloquear generaría fricción con niños esperando por un error de tecleo. No hay
+   límite de reintentos. Cada intento fallido se registra en `audit_log` con
+   `action = pickup_request.delivery_code_mismatch` (convención libre `entity.verb`,
+   ADR-018 punto 9) para trazabilidad.
+5. **"Reportar incidencia": fuera de alcance.** El botón visible en las pantallas
+   diseñadas no tiene entidad ni campo en el modelo. Se confirma fuera de alcance
+   de este slice; cuando se aborde será su propio ADR + entidad nueva, no una
+   improvisación dentro de este slice.
+6. **Job de purga de `location_updates`: diario.** Con una ventana de retención de
+   90 días (ADR-018 punto 8), ejecutar el job una vez al día (de madrugada,
+   horario de bajo tráfico) es suficiente.
+7. **`activation_radius_meters`: solo afordance de cliente, sin validación en
+   servidor.** Es un gatillo de UX (habilita el botón "ya voy" en `parent`), no
+   una frontera de seguridad: nada sensible se expone si un tutor lo "salta".
+   Forzarlo en el servidor exigiría capturar ubicación al crear el
+   `pickup_request` (antes de que exista el flujo MQTT), complejidad no
+   justificada para algo de bajo riesgo. `POST /pickup-requests` no valida
+   distancia.
+8. **Transiciones válidas de la máquina de estados** (`packages/shared`,
+   `pickup-request-status-machine.ts`, ADR-017):
+   - `en_route → arriving` (automática, `worker`)
+   - `en_route → arrived` (manual, el tutor confirma antes de que el `worker`
+     detecte `arriving`)
+   - `arriving → arrived` (manual, tutor)
+   - `arrived → delivered` (staff, verifica `delivery_code`)
+   - `en_route`/`arriving`/`arrived` → `cancelled` (manual, tutor, en cualquier
+     estado no terminal)
+   - `delivered` y `cancelled` son terminales (sin transiciones salientes).
+   Se permite el salto directo `en_route → arrived`: es más realista que forzar
+   el paso por `arriving`, ya que un tutor puede llegar rápido y confirmar
+   manualmente antes de que el `worker` calcule la transición automática.
+9. **Paginación del histórico: sí, desde ahora.** `GET /pickup-requests?enrollmentId=`
+   pagina con `limit`/`offset` (default `limit = 20`), orden `created_at DESC`.
+   Es barato agregarlo ahora y caro retrofitarlo: un `enrollment` acumula
+   recogidas durante años.
+10. **Payloads MQTT: estimación, no congelados.** La forma de los payloads de los
+    topics queda como estimación derivable del modelo, **sujeta a revisión en
+    Fase 7–9**, cuando se construyan los consumidores reales (`board`, consola de
+    puerta) y se sepa con certeza qué campos necesita cada pantalla. No se
+    congela ahora.
+11. **Exposición del `delivery_code` en lectura.** El `delivery_code` es visible
+    en `GET /pickup-requests/:id` para el `guardian_user_id` dueño del
+    `pickup_request` (lo muestra en su app) **y** para cualquier
+    `institution_member` de la institución asociada (vía
+    `pickup_requests.institution_id`, ADR-018 punto 4), sin restricción de
+    `role` (consistente con ADR-011: acceso abierto a la consola de puerta). El
+    precedente de la pantalla "Puerta — Consola de salida" (`docs/design-brief.md`)
+    confirma que el código se despliega directamente en la consola del operador,
+    no se valida a ciegas. La verificación en la entrega
+    (`PATCH /pickup-requests/:id/deliver`) sigue siendo server-side: el operador
+    confirma que el código que muestra el tutor coincide con el de la consola, y
+    un desajuste se maneja según el punto 4.
+
+**Consecuencias.**
+- **Cambio de esquema:** nueva columna `institutions.arriving_lead_minutes`
+  (`int`, NOT NULL, default `5`) — actualiza `specs/entities/institution.md` y
+  `docs/modelo-datos.md`. Se suma a los campos editables del perfil de
+  institución (`specs/features/008-editar-perfil-institucion.md` y
+  `specs/api-contracts/institutions.md`).
+- **Nuevo `action` de `audit_log`:** `pickup_request.delivery_code_mismatch` (sin
+  cambio de esquema; `audit_log.action` es convención libre, ADR-018 punto 9).
+- Las 8 specs del slice dejan de marcar preguntas abiertas (salvo la #5 y la #10,
+  que quedan como decisiones explícitas: fuera de alcance / diferido a Fase 7–9,
+  no como pendientes).
+- Valores concretos a fijar en configuración/código: throttling 20 s / 150 m
+  (worker), `arriving_lead_minutes` default 5 (institución), purga diaria (job).
+- La máquina de estados de `packages/shared` (Fase 2) codifica el conjunto de
+  transiciones del punto 8.
+- Reglas de negocio nuevas a forzar por test (ADR-021): bloqueo de recogida
+  activa duplicada (422); registro de `delivery_code` fallido en `audit_log`.
+- Cierra la Fase 1 de `docs/plan-implementacion.md` (los cuatro vertical slices
+  especificados).
+
+## ADR-025 — Correcciones de consistencia cruzada tras validación de especificaciones (Fase 1)
+
+**Contexto.** Al completar la Fase 1 de SDD (los cuatro vertical slices) se ejecutó
+una validación cruzada exhaustiva entre las 15 specs de entidades, las 12 de
+api-contracts, las 23 de features y los documentos de `docs/`
+(`arquitectura.md`, `modelo-datos.md`, `decisiones.md`, `CLAUDE.md`,
+`plan-implementacion.md`), usando agentes en paralelo. Se encontraron 6
+discrepancias reales entre lo decidido en ADRs previos y su aplicación en las
+specs, más dos bugs de especificación (features 016 y 004) y varios gaps de
+documentación (referencias de ADR que ya regían una entidad pero no la citaban).
+Se resuelven aquí. Ninguna es una decisión de fondo nueva: son sincronizaciones
+que alinean las specs con decisiones ya tomadas (ADR-014, 018, 022, 023, 024) o
+correcciones puntuales de contrato.
+
+**Decisión.**
+1. **Diagrama y enums incompletos: falta la transición `en_route → arrived`.**
+   ADR-024 punto 8 ya permite el salto directo (`en_route → arrived`, el tutor
+   confirma antes de que el `worker` detecte `arriving`), y
+   `specs/features/021-confirmar-llegada-y-entrega.md` ya lo usa. Es un gap de
+   sincronización, no una decisión nueva: se completa el diagrama ASCII de
+   `docs/modelo-datos.md` y la sección Enums de `specs/entities/pickup_request.md`
+   para reflejar el conjunto completo de transiciones ya decidido.
+2. **Falta el constraint de "recogida activa única por enrollment".** ADR-024
+   punto 1 decidió bloquear con 422 la creación de un `pickup_request` si ya existe
+   uno no terminal para el mismo `enrollment_id`, pero
+   `specs/entities/pickup_request.md` no lo documentaba como invariante forzada. Se
+   agrega índice único parcial de Postgres, mismo patrón que `vehicles.is_primary`
+   (ADR-018): `UNIQUE INDEX ... ON pickup_requests (enrollment_id) WHERE status IN
+   ('en_route', 'arriving', 'arrived')`.
+3. **Captura libre de vehículo sin forma de enviarse en la API.** ADR-014 preveía
+   que el tutor pudiera capturar un vehículo no guardado en su catálogo ("captura
+   libre"), pero `specs/api-contracts/pickup-requests.md` (`POST /pickup-requests`)
+   solo aceptaba `vehicleId`. Se agregan `vehicleDescription` y `vehiclePlate`
+   (string, opcionales) al body, mutuamente exclusivos con `vehicleId`: si se manda
+   `vehicleId`, el snapshot se copia del catálogo (`vehicles`); si se mandan
+   `vehicleDescription`/`vehiclePlate` sin `vehicleId`, es captura libre; si
+   `arrivalMode = walking`, ninguno de los tres aplica.
+4. **Cuatro columnas `NOT NULL` de `institutions` sin default ni punto de captura.**
+   `geofence_radius_meters`, `activation_radius_meters`, `arrival_tolerance_minutes`
+   y `advance_notice_minutes` eran `NOT NULL` sin default, y ningún feature las
+   capturaba obligatoriamente (`001-registro-institucion.md` decía "valores por
+   defecto o vacíos" sin que existiera un default real). Se agregan defaults a nivel
+   de columna, tres de ellos tomados directamente de las pantallas ya diseñadas y
+   auditadas (Colegio Simón Bolívar, panel "Tolerancia y avisos"):
+   - `activation_radius_meters`: default `3000` (3 km, valor visible en el diseño)
+   - `arrival_tolerance_minutes`: default `10` (valor visible en el diseño)
+   - `advance_notice_minutes`: default `15` (valor visible en el diseño)
+   - `geofence_radius_meters`: default `100` (sin precedente en el diseño; valor
+     razonable, menor que el radio de activación, cubre el frente/estacionamiento del
+     plantel)
+   Con estos defaults, el registro de una institución (feature 001) no necesita
+   capturarlos explícitamente — quedan editables después en
+   `008-editar-perfil-institucion.md`, como ya estaba previsto.
+5. **Inconsistencia sistemática 409 vs. 422.** Se corrigen 3 violaciones puntuales de
+   la convención ya establecida en ADR-022 punto 5 (422 = regla de negocio cruzada
+   entre entidades bien formada; 400 = mal formada; 409 solo para conflictos de
+   duplicidad genuina):
+   - `specs/api-contracts/vehicles.md`: `DELETE /vehicles/:id` con
+     `newPrimaryVehicleId` inválido — cambia de 400 a 422.
+   - `specs/api-contracts/enrollments.md`: `PATCH /enrollments/:id/approve` cuando
+     `institution.status != approved` — cambia de 409 a 422.
+   - `specs/api-contracts/pickup-requests.md`: caso "enrollment no aprobado" — cambia
+     de 409 a 422 (consistente con el caso análogo de recogida activa duplicada, que
+     ya usa 422 en el mismo endpoint).
+6. **Alcance de `audit_log` incompleto.** `CLAUDE.md` exige registrar "aprobaciones,
+   alta/baja de tutores" en `audit_log`, y `specs/entities/audit_log.md` ya usa
+   `guardian.added` y `enrollment.approved` como ejemplos, pero ninguno de los
+   api-contracts correspondientes lo documentaba. Se agrega explícitamente:
+   - `specs/api-contracts/enrollments.md`: `approve`/`reject` registran
+     `enrollment.approved` / `enrollment.rejected`.
+   - `specs/api-contracts/student-guardians.md`: invitar/aceptar/revocar/reasignar
+     principal registran `guardian.added` / `guardian.accepted` / `guardian.revoked` /
+     `guardian.primary_reassigned`.
+   - `specs/api-contracts/institution-members.md`: invitar/aceptar/cambiar rol/dar de
+     baja registran `institution_member.added` / `institution_member.accepted` /
+     `institution_member.role_changed` / `institution_member.removed`.
+   `specs/api-contracts/students.md` queda **fuera de alcance**: la creación de un
+   alumno no es "alta/baja de tutor" según la redacción de `CLAUDE.md`, y no se agrega
+   registro de auditoría ahí.
+7. **Bug en feature 016 (aceptar invitación de tutor).** El endpoint compartido
+   `POST /invitations/:token/accept` (ADR-023 punto 4, diseñado para parametrizarse
+   por tipo de invitación) validaba incorrectamente "ya aceptada" revisando
+   `user.status = active` — válido para invitaciones de personal, pero incorrecto para
+   invitaciones de tutor, donde lo pendiente es `student_guardian.status`, no
+   `user.status` (el `user` puede ya estar `active` como tutor en otra institución). Se
+   corrige: el chequeo de "ya completada" se resuelve según el tipo de invitación
+   codificado en el payload del token — para personal, contra `user.status`; para
+   tutor, contra `student_guardian.status`.
+8. **Excepción no documentada en feature 004 (alta de alumno).** El guardián que
+   registra a un `student` (feature 004) queda como `student_guardian` con
+   `is_primary = true` y `status = active` directamente, sin pasar por `invited` — es
+   correcto (quien registra al alumno no necesita auto-invitarse), pero no estaba
+   documentado como excepción en la spec de la entidad, cuyo default es `invited`. Se
+   agrega nota explícita en `specs/entities/student_guardian.md`: el guardián creador
+   (feature 004) nace `active`; los guardianes agregados después por invitación
+   (ADR-023) nacen `invited`.
+9. **Endpoint faltante de baja de personal.** Al aplicar el punto 6 (alcance de
+   `audit_log`) se detectó que `institution_member.removed` quedaba como nombre de
+   acción reservado **sin endpoint correspondiente**:
+   `specs/api-contracts/institution-members.md` solo tenía `PATCH` (cambio de rol),
+   nunca una baja explícita. Se agrega `DELETE /institution-members/:id`:
+   - **Autorización:** mismo guard que el resto de las acciones de configuración de
+     esta spec — `institution_member.role = admin` de la institución (ADR-022 punto 1);
+     el `InstitutionMembershipGuard` resuelve la institución desde la propia membresía
+     (ADR-022 punto 4), como ya hace el `PATCH`.
+   - **Protección del último admin:** mismo criterio que ya aplica al `PATCH` (ADR-022
+     punto 5) — responde **422** si el miembro a eliminar es el único con `role = admin`
+     de esa institución.
+   - **No elimina el `user`:** solo la fila de `institution_members`. El `user` puede
+     seguir existiendo (p. ej. como tutor, o como personal de otra institución).
+   - Registra `institution_member.removed` en `audit_log`, cerrando el nombre que había
+     quedado reservado en el punto 6.
+
+**Consecuencias.**
+- **Cambio de esquema:** 4 columnas de `institutions` ganan default (sin cambio de
+  tipo ni nullability); nuevo índice único parcial en `pickup_requests` (recogida
+  activa única por `enrollment_id`).
+- `POST /pickup-requests` gana 2 campos opcionales de request
+  (`vehicleDescription`/`vehiclePlate`, captura libre).
+- 3 códigos HTTP corregidos de 409/400 a 422.
+- 3 api-contracts ganan documentación de `audit_log` que antes faltaba (sin nuevas
+  columnas; `audit_log.action` es convención libre `entity.verb`, ADR-018 punto 9).
+- Nuevo endpoint `DELETE /institution-members/:id` (baja de personal), con protección
+  del último admin (422) y registro `institution_member.removed`: el nombre de acción
+  reservado en el punto 6 deja de estar sin endpoint.
+- 1 bug de spec corregido (feature 016) sin cambio de esquema.
+- 1 excepción de negocio documentada explícitamente (feature 004 /
+  `student_guardian.md`).
+- Varias specs de entidades ganan referencias a ADRs que ya las regían pero no
+  citaban (ADR-022 en `institution_member`; ADR-023 en `student_guardian` y `vehicle`;
+  ADR-024 en `pickup_request` y `pickup_request_status_history`).
+- `CLAUDE.md` corrige la lista de identificadores de dominio (`guardian` no es una
+  entidad propia; el concepto vive como `student_guardians.guardian_user_id`).
+- Reglas de negocio nuevas a forzar por test/constraint (ADR-021): recogida activa
+  única por `enrollment_id` (índice parcial).
+
+---
+
+## ADR-026 — Correcciones de la validación final de Fase 1 (SDD)
+
+**Contexto.** Tras aplicar ADR-025, se corrió una tercera y última ronda de
+validación cruzada exhaustiva (5 agentes en paralelo, 12 verificaciones) sobre la
+Fase 1 completa, como checkpoint final antes de que empiece a existir código
+(Fase 2). Se encontraron 4 discrepancias reales y 12 hallazgos menores. Este ADR
+resuelve las decisiones de fondo; su aplicación puntual en cada spec queda
+registrada en las "Consecuencias".
+
+**Decisión.**
+
+1. **Reactivación tras estado terminal: índices únicos parciales, no un mecanismo
+   de reactivación.** Se detectó que `enrollments` (constraint única
+   `(student_id, institution_id)`) y `student_guardians` (constraint única
+   `(student_id, guardian_user_id)`) bloqueaban a nivel de esquema la creación de
+   la "fila nueva" que ADR-018 puntos 2 y 7 exigen tras un estado terminal
+   (`rejected`, `revoked`) — una contradicción entre el constraint y la regla de
+   negocio ya decidida. Se resuelve relajando ambas constraints a **índices únicos
+   parciales** que excluyen los estados terminales, mismo patrón que
+   `vehicles.is_primary` (ADR-018) y la recogida activa única de `pickup_requests`
+   (ADR-024 punto 2):
+   ```sql
+   -- enrollments
+   UNIQUE (student_id, institution_id) WHERE status IN ('pending', 'approved')
+
+   -- student_guardians
+   UNIQUE (student_id, guardian_user_id) WHERE status IN ('invited', 'active')
+   ```
+   Esto preserva la semántica "terminal = requiere una solicitud/invitación nueva"
+   (no se reactiva la fila existente in-place) sin bloquear físicamente la fila
+   siguiente. No se introduce ningún endpoint ni flujo de "reactivación".
+
+2. **Ampliación de la convención 409/422** (ver la enmienda a ADR-022 punto 5).
+   Se aplica retroactivamente, **sin cambio de código**, a
+   `specs/api-contracts/institutions.md` (bloqueo de `PATCH` por `status`) y a la
+   validación `category`/`type`: ambos casos son un conflicto del recurso con su
+   propio estado y quedan correctamente en **409**.
+
+3. **Tres códigos de error corregidos a 422** (bugs confirmados; cruzan hacia otra
+   entidad bajo la convención ampliada):
+   - `specs/api-contracts/vehicles.md`: `DELETE /vehicles/:id` sin
+     `newPrimaryVehicleId` cuando existen otros vehículos — 409 → 422.
+   - `specs/api-contracts/student-guardians.md`: reasignar la primariedad a un
+     guardián no `active` — 409 → 422.
+   - `specs/api-contracts/student-guardians.md`: protección del guardián principal
+     (revocar al principal sin reasignar antes; análoga a la del último admin) —
+     409 → 422.
+
+4. **Protección append-only de `audit_log` a nivel de base de datos.** Por ser la
+   garantía forense/legal del proyecto (trazabilidad de acciones sensibles ante
+   requerimientos de privacidad; ver `docs/arquitectura.md` sección LFPDPPP),
+   `audit_log` recibe protección a nivel de base de datos: se revocan los
+   privilegios `UPDATE` y `DELETE` sobre esa tabla para el rol de conexión de la
+   aplicación (`api`/`worker` solo pueden `INSERT`/`SELECT`). Es una **excepción
+   deliberada** al criterio general de ADR-017/ADR-018 (evitar mecanismos de base
+   de datos y preferir la capa de servicio): se justifica porque la inmutabilidad
+   de un log forense debe sobrevivir incluso a un bug de la aplicación, no solo a
+   la disciplina del código. `location_updates` y `pickup_request_status_history`
+   (también conceptualmente append-only) **NO** reciben esta protección — para
+   esos dos basta una nota de capa de servicio (ningún endpoint expone
+   `UPDATE`/`DELETE` sobre ellos), consistente con el resto del proyecto.
+
+5. **Consolidación de nombres de `audit_log.action`: `student_guardian.*`, no
+   `guardian.*`.** Las 4 acciones `guardian.added` / `guardian.accepted` /
+   `guardian.revoked` / `guardian.primary_reassigned` (documentadas en ADR-018
+   punto 9 y usadas como ejemplo en `audit_log.md`) usan un prefijo que no
+   corresponde a ninguna entidad real: `guardian` no es una tabla (ya aclarado en
+   `CLAUDE.md` tras ADR-025). Se renombran a `student_guardian.added` /
+   `student_guardian.accepted` / `student_guardian.revoked` /
+   `student_guardian.primary_reassigned`, consistente con la convención
+   `entity.verb` de ADR-018 punto 9. Sin impacto de esquema (`audit_log.action` es
+   texto libre).
+
+6. **Gap de features del super-admin: diferido, no se especifica en esta ronda.**
+   No existen features para que el super-admin apruebe (`institution.approved`) o
+   suspenda (`institution.suspended`) una institución, pese a ser acciones
+   auditables ya previstas en ADR-018 punto 1. Es un gap de cobertura, no una
+   contradicción: se registra como pendiente explícito en
+   `docs/plan-implementacion.md` para especificarse como un slice futuro
+   (probablemente junto con el resto de la consola de super-admin). No se resuelve
+   en esta ronda.
+
+**Consecuencias.**
+- Dos constraints únicas cambian de totales a parciales (`enrollments`,
+  `student_guardians`) — impacta `specs/entities/enrollment.md`,
+  `specs/entities/student_guardian.md` y `docs/modelo-datos.md`.
+- `specs/features/005-asociar-institucion.md` y
+  `specs/features/015-invitar-tutor-autorizado.md` corrigen su lógica de rechazo
+  para considerar el estado de la fila existente, no solo su existencia.
+- `audit_log` gana una restricción de privilegios a nivel de base de datos —
+  primer y único caso del proyecto de mecanismo de BD por encima de la capa de
+  servicio, justificado explícitamente por su naturaleza forense.
+- 4 nombres de `audit_log.action` renombrados (`guardian.*` → `student_guardian.*`)
+  en las specs y ADRs que los mencionan.
+- 3 códigos HTTP corregidos de 409 a 422 (`vehicles.md`, `student-guardians.md`).
+- `location_updates` y `pickup_request_status_history` ganan nota explícita de
+  capa de servicio para su invariante append-only; `location_update.md` corrige la
+  referencia estancada al job de purga (ya existe como feature 023).
+- `institution_member.md` sube la protección del último admin a su sección de
+  Invariantes de negocio; `enrollment.md` y `pickup_request.md` ganan notas de
+  capa de servicio que faltaban.
+- `specs/README.md` formaliza el template de 7 secciones de `specs/entities/`.
+- Gap de super-admin queda registrado como trabajo futuro, no resuelto.
+- Reglas de negocio a forzar por test/constraint (ADR-021): unicidad parcial de
+  `enrollments` y `student_guardians` (excluyendo estados terminales); revocación
+  de `UPDATE`/`DELETE` sobre `audit_log` para el rol de la aplicación.
