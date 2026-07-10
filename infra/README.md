@@ -12,6 +12,14 @@ Requisito: la base debe tener la extensión **PostGIS** habilitada
 (`CREATE EXTENSION IF NOT EXISTS postgis;`), necesaria para geocercas y
 consultas de distancia.
 
+Requisito adicional: la base debe tener la extensión **pgcrypto** habilitada
+(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`), que provee `gen_random_uuid()`
+para las columnas `uuid` de las entidades. En Postgres < 13 (sin
+`gen_random_uuid()` nativo) esto requiere superusuario — el dueño de la base
+no basta. Ninguna de las dos extensiones se habilita desde una migración de
+este repo: son prerequisitos de la infraestructura externa, igual que el
+propio servidor de Postgres.
+
 ## Broker MQTT (Mosquitto)
 
 Es un broker **compartido con otras aplicaciones**. Por eso todos los topics de

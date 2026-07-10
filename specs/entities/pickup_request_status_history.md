@@ -12,10 +12,10 @@ consecutivas. Ver ADR-013.
 | Campo | Tipo TypeORM/PostgreSQL | Constraints | Notas |
 |---|---|---|---|
 | `id` | `bigserial` | PK | |
-| `pickup_request_id` | `uuid` | NOT NULL, FK → `pickup_request.id`, `ON DELETE CASCADE` | |
+| `pickup_request_id` | `uuid` | NOT NULL, FK → `pickup_requests.id`, `ON DELETE CASCADE` | |
 | `status` | `enum` (`en_route`, `arriving`, `arrived`, `delivered`, `cancelled`) | NOT NULL | mismo enum que `pickup_request.status` |
 | `changed_at` | `timestamptz` | NOT NULL, default `now()` | |
-| `changed_by_user_id` | `uuid` | nullable, FK → `user.id`, `ON DELETE SET NULL` | `NULL` si la transición fue automática/del sistema |
+| `changed_by_user_id` | `uuid` | nullable, FK → `users.id`, `ON DELETE SET NULL` | `NULL` si la transición fue automática/del sistema |
 
 ## Relaciones
 

@@ -1086,6 +1086,27 @@ registrada en las "Consecuencias".
    esos dos basta una nota de capa de servicio (ningún endpoint expone
    `UPDATE`/`DELETE` sobre ellos), consistente con el resto del proyecto.
 
+   **Enmienda (Fase 3, implementación de migraciones).** El mecanismo descrito
+   arriba —revocar `UPDATE`/`DELETE` sobre `audit_log` para el rol de conexión
+   de la aplicación— no ofrece protección real: en PostgreSQL el dueño de una
+   tabla ignora los privilegios ACL sobre ella, y el rol de conexión
+   configurado en `.env` (`api`/`worker`) es el mismo rol que ejecuta las
+   migraciones y por tanto el dueño de `audit_log`. Un `REVOKE` sobre el
+   propio dueño no tiene efecto real — sería protección de papel. Se corrige
+   el mecanismo a un **trigger de base de datos**
+   (`BEFORE UPDATE OR DELETE ON audit_log FOR EACH ROW`) que rechaza la
+   operación (`RAISE EXCEPTION`) sin importar qué rol la ejecute, incluido el
+   dueño de la tabla. El trigger bloquea todo `DELETE` sin condición; en
+   `UPDATE` permite únicamente la forma exacta que produce el cascade
+   `ON DELETE SET NULL` ya decidido para `audit_log.actor_user_id` (ver
+   `specs/entities/user.md`): `actor_user_id` pasa de no nulo a nulo sin que
+   ninguna otra columna cambie. Cualquier otro `UPDATE` sigue rechazado. Se
+   mantiene la misma excepción deliberada ya aceptada arriba (mecanismo de
+   base de datos en vez de capa de servicio, justificado por la naturaleza
+   forense de `audit_log`); no se introduce separación de roles de base de
+   datos (un rol de migraciones distinto del rol de conexión de la
+   aplicación), que habría sido un cambio de alcance mayor.
+
 5. **Consolidación de nombres de `audit_log.action`: `student_guardian.*`, no
    `guardian.*`.** Las 4 acciones `guardian.added` / `guardian.accepted` /
    `guardian.revoked` / `guardian.primary_reassigned` (documentadas en ADR-018

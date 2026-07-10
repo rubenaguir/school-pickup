@@ -12,5 +12,8 @@
     "paths": {},
     "incremental": true
   },
+  "ts-node": {
+    "transpileOnly": true
+  },
   "include": ["src/**/*"]
 }

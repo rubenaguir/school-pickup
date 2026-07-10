@@ -18,14 +18,8 @@ import { DeliveryPoint } from './delivery-point.entity';
 import { Vehicle } from './vehicle.entity';
 import { PickupRequestStatusHistory } from './pickup-request-status-history.entity';
 import { LocationUpdate } from './location-update.entity';
+import { PICKUP_REQUEST_STATUS_VALUES } from './pickup-request-status.values';
 
-export const PICKUP_REQUEST_STATUS_VALUES: readonly PickupRequestStatus[] = [
-  'en_route',
-  'arriving',
-  'arrived',
-  'delivered',
-  'cancelled',
-];
 const ARRIVAL_MODE_VALUES: readonly ArrivalMode[] = ['vehicle', 'walking'];
 
 // Two partial unique indexes from the spec are deliberately absent here (go in a

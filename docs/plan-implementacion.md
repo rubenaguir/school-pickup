@@ -90,25 +90,28 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 - [x] Validado contra specs y docs: compuerta de calidad end-to-end, paridad
       de tipos, máquina de estados, ports, y topics MQTT, sin discrepancias
 
-## Fase 3 — Entidades TypeORM y migraciones (`apps/api`)
+## Fase 3 — Entidades TypeORM y migraciones (`apps/api`) ✅ completo
 
-Seguir el orden topológico ya verificado en `specs/README.md` (users →
-institutions → institution_members → delivery_points → students →
-student_guardians → vehicles → enrollments → pickup_requests →
-pickup_request_status_history → location_updates → dismissal_windows →
-dismissal_exceptions → audit_log).
-
-- [ ] Entidades de TypeORM 1:1 con `specs/entities/*.md`
-- [ ] Migraciones versionadas, en el mismo orden
-- [ ] Índices únicos parciales: `vehicles.is_primary`,
-      `student_guardians.is_primary` (ADR-018); recogida activa única en
-      `pickup_requests`, vínculo/solicitud activa única en `enrollments` y
-      `student_guardians` excluyendo estados terminales (ADR-024, ADR-026);
-      y compuesto en `dismissal_exceptions` (ADR-018)
-- [ ] Protección append-only de `audit_log` a nivel de BD (revocar
-      `UPDATE`/`DELETE` del rol de la app) — ADR-026 punto 4
-- [ ] Verificar conexión a Postgres+PostGIS local (sin contenedor, ver
-      `CLAUDE.md`)
+- [x] Entidades de TypeORM 1:1 con `specs/entities/*.md` (14, nombres de
+      tabla en plural — ver ADR-027)
+- [x] Migraciones versionadas, en el orden topológico verificado en
+      `specs/README.md`: PostGIS → 14 tablas → 7 índices únicos parciales →
+      trigger append-only de `audit_log`
+- [x] Índices únicos parciales: `vehicles.is_primary`,
+      `student_guardians.is_primary`, vínculo/solicitud activa única en
+      `enrollments` y `student_guardians`, recogida activa única y
+      `delivery_code` único activo en `pickup_requests` (ADR-018, ADR-024,
+      ADR-026), más índice GIN en `delivery_points.assigned_groups`
+- [x] Protección append-only de `audit_log` vía trigger de base de datos
+      (`BEFORE UPDATE OR DELETE`, rechaza incondicionalmente) — corregido de
+      la propuesta original de `REVOKE` (no protege contra el dueño de la
+      tabla en Postgres), ver enmienda a ADR-026 punto 4. Probado con
+      `INSERT`/`UPDATE`/`DELETE` reales contra la base local.
+- [x] Conexión a Postgres+PostGIS local verificada (sin contenedor)
+- [x] Scripts `migration:generate`/`migration:run`/`migration:revert` en
+      `package.json`; `CLAUDE.md` actualizado con los comandos reales
+- [x] `npm run check` en verde: lint, formato, build de los 5 workspaces,
+      41/41 tests
 
 ## Fase 4 — Módulo de autenticación
 

@@ -9,8 +9,10 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 
-// DB-level append-only protection (REVOKE UPDATE/DELETE for the app's DB role) is a
-// GRANT/REVOKE statement for a future migration — no entity-decorator representation.
+// DB-level append-only protection is a BEFORE UPDATE OR DELETE trigger
+// (audit_log_append_only, migration AuditLogAppendOnlyTrigger1783697356402) —
+// a REVOKE UPDATE/DELETE would be no-op since the app's DB role owns this
+// table (ADR-026 point 4 amendment). No entity-decorator representation.
 @Entity('audit_log')
 @Index(['entityType', 'entityId'])
 export class AuditLog {

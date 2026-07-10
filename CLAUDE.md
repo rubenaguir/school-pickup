@@ -140,4 +140,5 @@ Guardrails para que el código no se desvíe de las specs. Ver ADR-021.
 - Compuerta de calidad: `npm run check` (lint + formato + build + tests). Ver ADR-021.
 - Lint / formato / tests por separado: `npm run lint` · `npm run format` · `npm run test`
 - Requiere Postgres+PostGIS y broker MQTT externos (config en `.env`, ver `.env.example`).
-- Migraciones: _(TODO al crear las entidades TypeORM — Fase 3)_
+- Migraciones (`apps/api`): `npm run migration:generate` · `migration:run` ·
+  `migration:revert` (TypeORM CLI contra `src/database/data-source.ts`).

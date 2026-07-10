@@ -10,7 +10,7 @@ de menores + ubicación).
 | Campo | Tipo TypeORM/PostgreSQL | Constraints | Notas |
 |---|---|---|---|
 | `id` | `bigserial` | PK | |
-| `actor_user_id` | `uuid` | nullable, FK → `user.id`, `ON DELETE SET NULL` | `NULL` si la acción fue del sistema |
+| `actor_user_id` | `uuid` | nullable, FK → `users.id`, `ON DELETE SET NULL` | `NULL` si la acción fue del sistema |
 | `action` | `varchar(100)` | NOT NULL | ej. `enrollment.approved`, `student_guardian.added` |
 | `entity_type` | `varchar(100)` | NOT NULL | nombre de la entidad afectada |
 | `entity_id` | `varchar(100)` | NOT NULL | id de la entidad afectada (texto para admitir `uuid` y `bigint`) |
@@ -30,7 +30,7 @@ de menores + ubicación).
 
 ## Invariantes de negocio
 
-- Tabla de solo inserción (append-only): un registro de auditoría nunca se modifica ni se borra. **Se fuerza a nivel de base de datos**: se revocan los privilegios `UPDATE` y `DELETE` sobre esta tabla para el rol de conexión de la aplicación (`api`/`worker` solo pueden `INSERT`/`SELECT`). Es una excepción deliberada al criterio general del proyecto (evitar mecanismos de BD y validar en capa de servicio, ADR-017/ADR-018): la inmutabilidad de un log forense/legal (LFPDPPP) debe sobrevivir incluso a un bug de la aplicación, no solo a la disciplina del código. Es el único caso del proyecto con protección a nivel de BD por encima de la capa de servicio. Ver ADR-026 punto 4.
+- Tabla de solo inserción (append-only): un registro de auditoría nunca se modifica ni se borra. **Se fuerza a nivel de base de datos** mediante un trigger (`BEFORE UPDATE OR DELETE ON audit_log FOR EACH ROW`) que rechaza la operación con `RAISE EXCEPTION` sin importar el rol que la ejecute, incluido el dueño de la tabla — un `REVOKE UPDATE/DELETE` no basta porque el rol de conexión de la aplicación es también el dueño de la tabla, y un dueño ignora los privilegios ACL sobre su propia tabla. El trigger bloquea todo `DELETE` sin condición; en `UPDATE` permite únicamente la forma exacta que produce el cascade `ON DELETE SET NULL` de `actor_user_id` (`actor_user_id` pasa de no nulo a nulo sin que cambie ninguna otra columna) — cualquier otro `UPDATE` sigue rechazado. Es una excepción deliberada al criterio general del proyecto (evitar mecanismos de BD y validar en capa de servicio, ADR-017/ADR-018): la inmutabilidad de un log forense/legal (LFPDPPP) debe sobrevivir incluso a un bug de la aplicación, no solo a la disciplina del código. Es el único caso del proyecto con protección a nivel de BD por encima de la capa de servicio. Ver ADR-026 punto 4 y su enmienda.
 - `actor_user_id` es nullable para representar acciones automáticas del sistema (ej. una transición de `pickup_request.status` disparada por el `worker` sin intervención humana), de forma consistente con `pickup_request_status_history.changed_by_user_id`.
 - Toda acción sensible mencionada en `CLAUDE.md` (aprobaciones, alta/baja de tutores) debe generar una fila aquí; es una obligación transversal del backend, no una regla que viva en el esquema de `audit_log` mismo.
 
@@ -43,4 +43,4 @@ de menores + ubicación).
 - `CLAUDE.md` (toda acción sensible se registra en `audit_log`).
 - `docs/arquitectura.md` (privacidad y marco legal LFPDPPP; `audit_log` para trazabilidad).
 - ADR-018 (convención de nombres `entity.verb` para `action`).
-- ADR-026 (punto 4: protección append-only a nivel de BD — revocación de `UPDATE`/`DELETE`; punto 5: prefijo canónico `student_guardian.*`, no `guardian.*`).
+- ADR-026 (punto 4 y su enmienda: protección append-only a nivel de BD vía trigger; punto 5: prefijo canónico `student_guardian.*`, no `guardian.*`).
