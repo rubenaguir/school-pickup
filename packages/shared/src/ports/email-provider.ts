@@ -1,0 +1,19 @@
+export type EmailMessage =
+  | { kind: 'email_verification'; to: string; token: string }
+  | { kind: 'password_reset'; to: string; token: string }
+  | { kind: 'institution_member_invitation'; to: string; token: string; institutionName: string }
+  | {
+      kind: 'student_guardian_invitation';
+      to: string;
+      token: string;
+      studentName: string;
+      inviterName: string;
+    }
+  | { kind: 'enrollment_approved'; to: string; studentName: string; institutionName: string }
+  | { kind: 'enrollment_rejected'; to: string; studentName: string; institutionName: string };
+
+export interface EmailProvider {
+  send(message: EmailMessage): Promise<void>;
+}
+
+export const EMAIL_PROVIDER = Symbol('EmailProvider');

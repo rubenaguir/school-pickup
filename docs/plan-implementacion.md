@@ -28,141 +28,67 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–026 (`docs/decisiones.md`): stack, dominio, arquitectura de
-      capas (ADR-017), reglas de negocio de entidades (ADR-018), resolución
-      de preguntas abiertas del slice auth/enrollment (ADR-019), versiones de
-      frontend (ADR-020), compuerta de calidad (ADR-021), resolución de
-      preguntas abiertas del slice de configuración de institución (ADR-022),
-      resolución de preguntas abiertas del slice de vehículos y tutores
-      autorizados (ADR-023), resolución de preguntas abiertas del slice de
-      flujo de `pickup_request` (ADR-024), y las dos rondas de validación
-      cruzada de cierre de Fase 1 (ADR-025 y ADR-026)
+- [x] ADRs 001–026 (`docs/decisiones.md`)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
-      el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
-      ADR-022)
+      el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
       relaciones, índices, invariantes y enums
 
-### Tooling y compuerta de calidad ✅ completo (ADR-020, ADR-021)
+### Tooling y compuerta de calidad ✅ completo
 
 - [x] Frontends (`portal`, `parent`, `board`) en React 19.2 + Vite 8.1
 - [x] Compuerta `npm run check`: ESLint 10 + typescript-eslint 8 (type-aware)
       → Prettier 3 (`format:check`) → build (typecheck real) → Vitest 4
-- [x] TypeScript fijado en 5.9.3 (TS 7 rompe el linting type-aware por
-      conflicto de peer dependency con `typescript-eslint`, ver ADR-021)
+- [x] TypeScript fijado en 5.9.3
 - [x] `.prettierignore`: Prettier formatea código, no `docs/`, `specs/` ni
       markdown en general
-- [x] `CLAUDE.md` §"Reglas de implementación": spec como fuente de verdad,
-      spec antes que código, invariante de negocio → test o constraint,
-      verificar dependencias antes de importarlas
+- [x] `CLAUDE.md` §"Reglas de implementación"
 - [x] Node 24.18 instalado y `.nvmrc` fijado; `engines` del monorepo en
-      `>=24.11` (piso real de TypeORM 1.0, ver ADR-021)
+      `>=24.11`
 
 ## Fase 1 — Specs de features y contratos de API ✅ completo
 
-- [x] Decidir la feature de arranque → **Auth + aprobación de `enrollment`**
-      (se pospuso el flujo completo de `pickup_request` para un slice
-      posterior)
-- [x] `specs/features/001-006-*.md` — slice auth/enrollment: registro de
-      institución, registro de tutor, login, alta de alumno, asociar
-      institución, aprobación de enrollment
-- [x] `specs/api-contracts/{auth,students,enrollments}.md` correspondientes
-- [x] **Resolver 5 preguntas abiertas** del slice (ADR-019): generación de
-      `join_code`, `user.status = invited` hasta verificar correo, refresh
-      token stateless (aceptado), visibilidad de instituciones no aprobadas,
-      restricción de `role = admin` para aprobar/rechazar `enrollment`
-- [x] `specs/features/007-verificacion-correo.md` — feature nueva derivada
-      de ADR-019 (verificación de correo tras auto-registro), incluyendo
-      límite de tasa de reenvío (3/hora por email) decidido directamente
-      contigo al trabajar la spec
-- [x] Slice auth/enrollment **cerrado** (sin preguntas abiertas pendientes)
-- [x] `specs/features/008-013-*.md` — slice de configuración de institución:
-      editar perfil/geocerca, gestionar puntos de entrega, horarios
-      recurrentes, días especiales, invitar personal, aceptar invitación
-- [x] `specs/api-contracts/{institutions,delivery-points,dismissal-windows,`
-      `dismissal-exceptions,institution-members}.md` correspondientes
-- [x] **Resolver 5 preguntas abiertas** del slice (ADR-022): rol `admin` para
-      las acciones de configuración, `users.password_hash` nullable (usuario
-      invitado sin contraseña) con invariante `active` ⇒ no nulo, activación
-      por token unificada entre 007 y 013, `InstitutionMembershipGuard` para
-      el aislamiento multi-tenant, y convenciones (422 para validaciones
-      cruzadas, protección del último admin, reenvío de invitación vía
-      re-invitación)
-- [x] `specs/entities/user.md` y `docs/modelo-datos.md` actualizados:
-      `password_hash` pasa a nullable (ADR-022, punto 2)
-- [x] Slice de configuración de institución **cerrado** (sin preguntas
-      abiertas pendientes)
-- [x] `specs/features/014-017-*.md` — slice de vehículos y tutores autorizados:
-      gestionar catálogo de vehículos, invitar tutor autorizado, aceptar
-      invitación de tutor, gestionar tutores autorizados (revocar/reasignar
-      primariedad)
-- [x] `specs/api-contracts/{vehicles,student-guardians}.md` correspondientes
-- [x] **Resolver 5 preguntas abiertas** del slice (ADR-023): promoción del
-      principal al borrar un vehículo (seleccionada por el tutor), solo el
-      guardián `is_primary` invita/revoca/reasigna, aceptación obligatoria en
-      ambas ramas (incl. `user` ya activo, sin contraseña), reuso del endpoint
-      compartido `POST /invitations/:token/accept`, y protección del principal
-      (reasignar primariedad antes de revocar)
-- [x] Slice de vehículos y tutores autorizados **cerrado** (sin preguntas
-      abiertas pendientes); sin cambios de entidad (`is_primary`/`status` ya
-      existían)
-- [x] `specs/features/018-023-*.md` — slice de flujo de `pickup_request`: crear
-      recogida, ingesta de ubicación + ETA, transición a `arriving`, confirmar
-      llegada y entrega, cancelar, purga de `location_updates`
-- [x] `specs/api-contracts/{pickup-requests,pickup-realtime-mqtt}.md`
-      correspondientes (REST + contrato de tiempo real MQTT)
-- [x] **Resolver 10 preguntas abiertas** del slice (ADR-024): bloqueo de
-      recogida activa duplicada (422), throttling de ETA (20 s / 150 m),
-      `arriving_lead_minutes` configurable por institución, `delivery_code`
-      incorrecto sin bloqueo con registro en `audit_log`, "Reportar incidencia"
-      fuera de alcance, purga diaria, `activation_radius_meters` solo
-      client-side, conjunto de transiciones válidas (incl. `en_route → arrived`),
-      paginación `limit`/`offset`, payloads MQTT diferidos a Fase 7–9,
-      exposición de `delivery_code` en `GET` (tutor dueño + cualquier
-      `institution_member`, sin restricción de rol)
-- [x] `specs/entities/institution.md` y `docs/modelo-datos.md` actualizados:
-      nueva columna `arriving_lead_minutes` (int, default 5; ADR-024 punto 3),
-      añadida también a la configuración editable (feature 008 + `institutions.md`)
-- [x] Slice de flujo de `pickup_request` **cerrado** (sin preguntas abiertas
-      pendientes; "Reportar incidencia" y payloads MQTT son decisiones
-      explícitas, no pendientes)
-- [x] Los cuatro vertical slices de la Fase 1 especificados:
-      - [x] Auth + aprobación de `enrollment` (001–007)
-      - [x] Configuración de institución (008–013)
-      - [x] Catálogo de vehículos + tutores autorizados (014–017)
-      - [x] Flujo completo `pickup_request` + topics MQTT (018–023)
-- [x] **Dos rondas de validación cruzada de cierre** de la Fase 1: correcciones
-      de consistencia tras la primera validación (ADR-025) y de la validación
-      final antes de Fase 2 (ADR-026): índices únicos parciales que excluyen
-      estados terminales en `enrollments`/`student_guardians`, ampliación de la
-      convención 409/422, protección append-only de `audit_log` a nivel de BD,
-      consolidación de `audit_log.action` a `student_guardian.*`, y
-      formalización del template de 7 secciones de `specs/entities/`
+- [x] Los 4 vertical slices especificados, validados y cerrados:
+      - [x] Auth + aprobación de `enrollment` (features 001–007, ver ADR-019)
+      - [x] Configuración de institución (features 008–013, ver ADR-022)
+      - [x] Catálogo de vehículos + tutores autorizados (features 014–017,
+            ver ADR-023)
+      - [x] Flujo completo `pickup_request` + topics MQTT (features 018–023,
+            ver ADR-024)
+- [x] 14 `specs/entities/*.md`, 12 `specs/api-contracts/*.md`, 23
+      `specs/features/*.md`
+- [x] Validación cruzada completa entre specs y `docs/` (ADR-025, ADR-026):
+      índices únicos parciales que excluyen estados terminales en
+      `enrollments`/`student_guardians`, convención 409/422 ampliada,
+      protección append-only de `audit_log`, consolidación de
+      `audit_log.action` a `student_guardian.*`
 
 ### Pendiente explícito para un slice futuro (no bloquea Fase 2)
 
 - [ ] **Consola de super-admin — aprobar/suspender instituciones.** No existen
-      features para que el super-admin apruebe (`institution.approved`) o
-      suspenda (`institution.suspended`) una institución, pese a ser acciones
-      auditables ya previstas en ADR-018 punto 1 y a que las transiciones de
-      `institutions.status` son de super-admin (ADR-018). Es un gap de cobertura,
-      no una contradicción; se especificará como un slice futuro, probablemente
-      junto con el resto de la consola de super-admin, con sus acciones de
-      `audit_log` (`institution.approved` / `institution.suspended`). Ver ADR-026
-      punto 6.
+      features para `institution.approved`/`institution.suspended` pese a ser
+      acciones auditables ya previstas (ADR-018 punto 1). Gap de cobertura,
+      no contradicción — se especifica junto con el resto de la consola de
+      super-admin. Ver ADR-026 punto 6.
 
-## Fase 2 — Fundamentos de código compartido (`packages/shared`)
+## Fase 2 — Fundamentos de código compartido (`packages/shared`) ✅ completo
 
-No depende de qué feature se elija primero — es la base que todas usan.
-
-- [ ] Tipos TypeScript compartidos (entidades, enums) derivados 1:1 de
-      `specs/entities/*.md`
-- [ ] Máquina de estados de `pickup_request` (función pura, sin TypeORM ni
-      NestJS) — ver ADR-017, conjunto de transiciones en ADR-024 punto 8
-- [ ] Interfaces de los ports: `MapsProvider`, `EmailProvider`, `MqttClient`
-      (solo las interfaces; las implementaciones concretas van en `api`/`worker`)
-- [ ] Constantes de topics MQTT (prefijo `school-pickup/...`, ver
-      `docs/arquitectura.md`)
+- [x] Tipos TypeScript compartidos (`packages/shared/src/types/`), 14
+      archivos, paridad 1:1 con `specs/entities/*.md`
+- [x] Máquina de estados de `pickup_request`
+      (`pickup-request-status-machine.ts`), función pura sin TypeORM ni
+      NestJS, conjunto de transiciones validado contra ADR-024 punto 8 con
+      cobertura de test exhaustiva (las 25 combinaciones posibles)
+- [x] Interfaces de los ports (`packages/shared/src/ports/`): `MapsProvider`,
+      `EmailProvider` (6 `kind` de mensaje, ver ADR-009), `MqttClient` — sin
+      implementación concreta todavía (Fase 4/6), sin dependencia de framework
+- [x] Constantes y builders de topics MQTT: ya existían en
+      `packages/shared/src/index.ts` desde el scaffolding inicial
+      (`boardTopic`, `pickupLocationTopic`, `MQTT_TOPIC_ROOT`); se agregó el
+      builder faltante de `delivery-point/queue` extendiendo ese mismo
+      archivo — no se creó un archivo nuevo
+- [x] Validado contra specs y docs: compuerta de calidad end-to-end, paridad
+      de tipos, máquina de estados, ports, y topics MQTT, sin discrepancias
 
 ## Fase 3 — Entidades TypeORM y migraciones (`apps/api`)
 
@@ -174,9 +100,13 @@ dismissal_exceptions → audit_log).
 
 - [ ] Entidades de TypeORM 1:1 con `specs/entities/*.md`
 - [ ] Migraciones versionadas, en el mismo orden
-- [ ] Índices únicos parciales (`vehicles.is_primary`,
-      `student_guardians.is_primary`) y compuestos (`dismissal_exceptions`) —
-      ver ADR-018
+- [ ] Índices únicos parciales: `vehicles.is_primary`,
+      `student_guardians.is_primary` (ADR-018); recogida activa única en
+      `pickup_requests`, vínculo/solicitud activa única en `enrollments` y
+      `student_guardians` excluyendo estados terminales (ADR-024, ADR-026);
+      y compuesto en `dismissal_exceptions` (ADR-018)
+- [ ] Protección append-only de `audit_log` a nivel de BD (revocar
+      `UPDATE`/`DELETE` del rol de la app) — ADR-026 punto 4
 - [ ] Verificar conexión a Postgres+PostGIS local (sin contenedor, ver
       `CLAUDE.md`)
 
@@ -192,8 +122,8 @@ dismissal_exceptions → audit_log).
 - [ ] `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
       ADR-022 punto 4; ver `docs/arquitectura.md`) — lo consumen todos los
       módulos de la Fase 5 en adelante
-- [ ] Implementación concreta de `EmailProvider` (Resend) para verificación
-      de correo (ADR-019), recuperación de contraseña e invitaciones (ADR-009)
+- [ ] Implementación concreta de `EmailProvider` (Resend) — los 6 `kind` de
+      `EmailMessage` ya están definidos en `packages/shared/src/ports/`
 
 ## Fase 5 — Módulos CRUD core
 
@@ -214,9 +144,12 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 `enrollments` aprobados y `delivery_points` configurados).
 
 - [ ] `pickups` module en `api`: creación de `pickup_request`, resolución
-      automática de `delivery_point_id` (ADR-012), `delivery_code`
-- [ ] `pickup_request_status_history`: registro de transiciones
-- [ ] `worker`: suscripción MQTT, ingesta de ubicación, cálculo de ETA con
+      automática de `delivery_point_id` (ADR-012), `delivery_code`, soporte
+      de captura libre de vehículo (ADR-026 punto 3 vía ADR-014)
+- [ ] `pickup_request_status_history`: registro de transiciones, usando la
+      máquina de estados ya implementada en `packages/shared`
+- [ ] `worker`: suscripción MQTT (usando `MqttClient` y los builders de
+      topics ya implementados), ingesta de ubicación, cálculo de ETA con
       throttling (20 s / 150 m, ADR-024 punto 2), implementación concreta de
       `MapsProvider`
 - [ ] Publicación a topics de tablero y de punto de entrega (ADR-012,
@@ -224,8 +157,8 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 - [ ] Job programado diario de purga de `location_updates` a 90 días
       (ADR-018 punto 8, ADR-024 punto 6)
 - [ ] `audit_log`: instrumentar en las acciones sensibles ya identificadas
-      (aprobaciones, altas/bajas de tutores, `pickup_request.delivery_code_mismatch`
-      — ADR-024 punto 4)
+      (aprobaciones, altas/bajas de tutores y de personal,
+      `pickup_request.delivery_code_mismatch`)
 
 ## Fase 7 — Frontend: `apps/portal`
 
@@ -238,6 +171,7 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 - [ ] Vistas de tutor: mis hijos, alta de alumno, asociar institución,
       tutores autorizados, perfil (vehículos, notificaciones)
 - [ ] Vistas de super-admin: aprobación de instituciones, métricas globales
+      (requiere especificar primero el slice diferido en Fase 1)
 
 ## Fase 8 — Frontend: `apps/parent` (PWA)
 
@@ -262,25 +196,19 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
       `location_updates` (ADR-018)
 - [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
       documentar explícitamente por qué se deja fuera del alcance final
-- [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md` (los ADRs
-      documentan el "por qué" de cada decisión técnica)
+- [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md`
 
 ---
 
 ## Decisiones pendientes que bloquean fases futuras
 
-Mantener esta lista corta — mover a "resuelto" (o eliminar la fila) en cuanto
-se decida:
-
 | Pendiente | Bloquea | Estado |
 |---|---|---|
 | Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
+| Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
 
 ## Backlog técnico (no bloquea, pero no debe olvidarse)
-
-Decisiones aceptadas conscientemente como limitación del MVP, con una mejora
-futura ya identificada. Revisar antes de producción o antes de la Fase 10.
 
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
