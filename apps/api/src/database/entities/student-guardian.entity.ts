@@ -24,12 +24,20 @@ const STUDENT_GUARDIAN_STATUS_VALUES: readonly StudentGuardianStatus[] = [
   'revoked',
 ];
 
-// Two partial unique indexes from the spec are deliberately absent here (go in a
-// future migration as raw SQL, not as entity decorators):
-//   UNIQUE (student_id) WHERE is_primary = true
-//   UNIQUE (student_id, guardian_user_id) WHERE status IN ('invited','active')
+// Espejo declarativo de los índices ya aplicados en la migración
+// 1783697356401-PartialUniqueAndGinIndexes.ts — el SQL crudo de esa
+// migración sigue siendo la fuente de verdad; estos decoradores solo evitan
+// que TypeORM proponga recrearlos. Ver ADR-024, ADR-025.
 @Entity('student_guardians')
 @Index(['student', 'status'])
+@Index('IDX_student_guardians_primary_per_student', ['student'], {
+  unique: true,
+  where: '"is_primary" = true',
+})
+@Index('IDX_student_guardians_active_link', ['student', 'guardian'], {
+  unique: true,
+  where: `"status" IN ('invited', 'active')`,
+})
 export class StudentGuardian {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

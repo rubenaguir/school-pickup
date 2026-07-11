@@ -12,9 +12,15 @@ import {
 import { User } from './user.entity';
 import { PickupRequest } from './pickup-request.entity';
 
-// Partial unique index from the spec is deliberately absent here (goes in a
-// future migration as raw SQL): UNIQUE (guardian_user_id) WHERE is_primary = true
+// Espejo declarativo del índice ya aplicado en la migración
+// 1783697356401-PartialUniqueAndGinIndexes.ts — el SQL crudo de esa
+// migración sigue siendo la fuente de verdad; este decorador solo evita
+// que TypeORM proponga recrearlo. Ver ADR-024, ADR-025.
 @Entity('vehicles')
+@Index('IDX_vehicles_primary_per_guardian', ['guardian'], {
+  unique: true,
+  where: '"is_primary" = true',
+})
 export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

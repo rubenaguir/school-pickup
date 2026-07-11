@@ -24,6 +24,14 @@ export class InstitutionMember {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  // Read-only mirror of the institution_id column already owned by the
+  // `institution` relation below — lets InstitutionMembershipGuard read the
+  // FK without eager-loading Institution. nullable:true matches the JoinColumn's
+  // actual (default) nullability; do not tighten it here, it would produce a
+  // schema diff. See ADR-029.
+  @Column({ name: 'institution_id', type: 'uuid', nullable: true, insert: false, update: false })
+  institutionId!: string;
+
   @ManyToOne(() => Institution, (institution) => institution.members, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;

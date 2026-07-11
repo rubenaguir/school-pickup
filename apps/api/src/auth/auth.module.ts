@@ -3,17 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PassportModule } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { EMAIL_PROVIDER } from '@casillego/shared';
 import { User } from '../database/entities/user.entity';
 import { Institution } from '../database/entities/institution.entity';
 import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { EmailModule } from '../email/email.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ResendVerificationThrottlerGuard } from './guards/resend-verification-throttler.guard';
 import { ActivationTokenService } from './activation-token.service';
-import { ConsoleEmailProvider } from './console-email.provider';
 import { ACCESS_JWT_SERVICE, ACTIVATION_JWT_SERVICE, REFRESH_JWT_SERVICE } from './jwt.tokens';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -27,6 +26,7 @@ const ONE_MINUTE_MS = 60 * 1000;
       { name: 'hourly', ttl: ONE_HOUR_MS, limit: 3 },
       { name: 'cooldown', ttl: ONE_MINUTE_MS, limit: 1 },
     ]),
+    EmailModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -35,7 +35,6 @@ const ONE_MINUTE_MS = 60 * 1000;
     JwtAuthGuard,
     ResendVerificationThrottlerGuard,
     ActivationTokenService,
-    { provide: EMAIL_PROVIDER, useClass: ConsoleEmailProvider },
     {
       provide: ACCESS_JWT_SERVICE,
       useFactory: () =>

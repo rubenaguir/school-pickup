@@ -135,6 +135,47 @@ ceremonia y complejidad operativa (fricción con TypeORM y connection
 pooling) no justificada dado el mismo criterio de ADR-017. Ver ADR-022 para
 el razonamiento completo.
 
+**Forma concreta de `InstitutionMembershipGuard`.** Vive en
+`apps/api/src/auth/guards/`, junto a `jwt-auth.guard.ts`:
+
+- `institution-resource.decorator.ts` expone `@InstitutionResource(options)`
+  (decorador de método, vía `SetMetadata`), con
+  `InstitutionResourceOptions { entity, idParam = 'id', institutionColumn =
+  'institutionId' }`. `entity` es el `EntityTarget` de TypeORM del recurso a
+  resolver.
+- `institution-membership.guard.ts` implementa `CanActivate`. Sin metadata
+  `@InstitutionResource` en el handler, opera en modo ruta anidada y lee
+  `institutionId` directo de `request.params`. Con metadata, resuelve el
+  recurso vía `dataSource.getRepository(options.entity).findOne({ where: {
+  id: resourceId } })` y lee `institutionColumn` del recurso (soporta
+  dot-path, ej. `'institution.id'`, para navegar una relación TypeORM ya
+  cargada — necesario porque entidades reales como `DeliveryPoint` o
+  `InstitutionMember` modelan la institución como relación
+  (`institution: Institution`), no como columna plana; queda a cargo de
+  quien cablee el guard en cada ruta pasar el `institutionColumn` correcto
+  y asegurar que esa relación esté disponible en el recurso resuelto).
+- Recurso no encontrado → `404` con `{ code: 'RESOURCE_NOT_FOUND', message
+  }`: categoría de fallo distinta de "no eres miembro" (el dato no existe,
+  vs. existe pero no tienes acceso); el guard así absorbe la comprobación
+  de existencia que si no cada controller duplicaría.
+- Sin membresía → `403` con `{ code: 'NOT_INSTITUTION_MEMBER', message }`
+  (idioma inglés en `code`/`message`, per ADR-028).
+- Con membresía, el guard adjunta el registro resuelto en
+  `request.institutionMembership` para que el controller/service lo
+  reutilicen sin una segunda consulta. Este guard solo verifica membresía;
+  no impone ninguna restricción por `role` (eso es responsabilidad de cada
+  endpoint, ej. la restricción a `role = admin` de ADR-022 punto 1).
+- Si `request.user` falta (el guard corrió sin `JwtAuthGuard` antes) o la
+  ruta anidada no trae `:institutionId`, el guard lanza un `Error` plano
+  (no `HttpException`) — señal de error de configuración en desarrollo, no
+  una respuesta de negocio.
+
+Nota de alcance: por ahora el guard es infraestructura transversal sin
+consumidores (los módulos de Fase 5 — `institutions`, `delivery-points`,
+etc. — todavía no existen); queda cubierto por tests unitarios con mocks
+(`apps/api/src/auth/guards/institution-membership.guard.spec.ts`), sin
+aplicarse todavía a ninguna ruta real.
+
 ## Flujo de tiempo real (recogida)
 
 1. El tutor toca "voy en camino" y elige la institución (el alumno asiste a

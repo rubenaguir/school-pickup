@@ -28,7 +28,7 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–027 (`docs/decisiones.md`)
+- [x] ADRs 001–029 (`docs/decisiones.md`)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
       el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
@@ -113,20 +113,38 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 - [x] `npm run check` en verde: lint, formato, build de los 5 workspaces,
       41/41 tests
 
-## Fase 4 — Módulo de autenticación
+## Fase 4 — Módulo de autenticación ✅ completo
 
-- [ ] `auth` module: JWT (access + refresh) + Passport.js (ADR-001, ADR-003
-      del stack original)
-- [ ] Endpoints de registro/login diferenciados institución vs. tutor (ver
+- [x] `auth` module: JWT (access + refresh) + Passport.js — registro
+      (institución + tutor, con reutilización de cuenta condicionada a
+      contraseña, ADR-028 punto 2), login, refresh, verificación de correo,
+      reenvío con límite 3/hora + cooldown 60s
+- [x] Endpoints de registro/login diferenciados institución vs. tutor (ver
       `docs/design-brief.md`, sección "Acceso")
-- [ ] Servicio de activación por token unificado (verificación de correo +
-      aceptación de invitación de personal/tutor, parametrizado por si define
-      contraseña o no; ver ADR-022, punto 3)
-- [ ] `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
-      ADR-022 punto 4; ver `docs/arquitectura.md`) — lo consumen todos los
-      módulos de la Fase 5 en adelante
-- [ ] Implementación concreta de `EmailProvider` (Resend) — los 6 `kind` de
-      `EmailMessage` ya están definidos en `packages/shared/src/ports/`
+- [x] Servicio de activación por token unificado (`ActivationTokenService`),
+      diseñado extensible a invitaciones de personal/tutor sin rediseño
+      (ADR-022 punto 3) — el endpoint de aceptación en sí queda para Fase 5
+- [x] Errores de la API con `{ code, message }` en inglés (ADR-028 punto 1);
+      `code` `ACCOUNT_SUSPENDED` reutilizado consistentemente entre
+      `login` y `refresh`
+- [x] `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API,
+      ADR-022 punto 4) — implementado y probado con mocks, sin consumidores
+      todavía (los módulos de Fase 5 lo cablean); `@InstitutionResource`
+      decorator para rutas por recurso, comportamiento por defecto para
+      rutas anidadas
+- [x] Columna compañera `institutionId` (solo lectura) agregada a
+      `institution_member`, `delivery_point`, `dismissal_window`,
+      `dismissal_exception`, `enrollment` (ADR-029) — necesaria para que
+      `@InstitutionResource` no requiera cargar la relación completa
+- [x] Los 7 índices únicos parciales + GIN (ADR-018, ADR-024, ADR-026)
+      declarados también como `@Index()` en las entidades, espejo exacto
+      del SQL crudo ya aplicado — elimina el diff fantasma que
+      `migration:generate` proponía en cada corrida (verificado: migración
+      vacía tras el cambio)
+- [x] `ResendEmailProvider` implementado (los 6 `kind` de `EmailMessage` con
+      templates en español, tono del design-brief); swap por variable de
+      entorno dedicada `EMAIL_PROVIDER=console|resend` (default `console`);
+      `ConsoleEmailProvider` se mantiene para desarrollo/tests
 
 ## Fase 5 — Módulos CRUD core
 
@@ -219,4 +237,4 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
-| Refresh token stateless (JWT sin tabla de revocación) — limitación real: un token robado de una cuenta que **sigue `active`** no se puede invalidar antes de que expire; una cuenta `suspended` sí queda bloqueada en el siguiente refresh (retraso máximo = TTL del access token, 15 min) | ADR-019, punto 3 (enmienda, Fase 4) | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado de una cuenta que sigue activa |
+| Refresh token stateless (JWT sin tabla de revocación) | ADR-019, punto 3 | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado antes de que expire |

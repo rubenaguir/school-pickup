@@ -1267,3 +1267,67 @@ registrado. Se resuelven ambas aquí antes de implementar Fase 4.
   verificación de contraseña como condición de la reutilización (antes solo
   decía "reutilizado si ya existía", sin ese detalle).
 - Ningún cambio de esquema de base de datos.
+
+## ADR-029 — Columna compañera de solo lectura `institutionId` en 5 entidades, para `InstitutionMembershipGuard`
+
+**Contexto.** Al implementar `InstitutionMembershipGuard` (ADR-022 punto 4) en
+su modo `@InstitutionResource` se detectó que las entidades candidatas a
+usarlo (`InstitutionMember`, `DeliveryPoint`, `DismissalWindow`,
+`DismissalException`, `Enrollment`) solo exponían la institución vía la
+relación TypeORM `institution: Institution` (`@ManyToOne` + `@JoinColumn`).
+El guard, para no forzar un join a `institutions` en cada request que solo
+necesita el `institutionId` como escalar, necesita poder leerlo sin cargar
+la relación completa.
+
+Nota de precisión: esto **no es el mismo problema** que resolvió
+`pickup_requests.institution_id` (ADR-018 punto 4). Ahí se agregó una
+relación directa nueva a `institutions` para evitar el join
+**multi-hop** `pickup_request → enrollment → institution`. Las 5 entidades
+de aquí ya tienen una relación **directa, de un solo salto** a
+`institutions` — no hay múltiples hops que evitar. El problema es distinto
+y más acotado: leer el valor escalar de un FK ya directo sin instanciar el
+objeto relacionado completo.
+
+**Decisión.** Se agrega, en las 5 entidades, una propiedad TypeORM
+compañera de solo lectura que mapea a la **misma columna física** ya usada
+por la relación `institution` existente — no una columna nueva:
+
+```typescript
+@Column({ name: 'institution_id', type: 'uuid', nullable: true, insert: false, update: false })
+institutionId!: string;
+
+@ManyToOne(() => Institution, ...)
+@JoinColumn({ name: 'institution_id' })
+institution!: Institution;
+```
+
+`insert: false, update: false` asegura que solo la relación controla
+escrituras; la propiedad plana es puramente de lectura. `nullable: true` es
+deliberado: refleja la nulabilidad real que ya tiene la columna física hoy
+(el `@ManyToOne` de las 5 entidades no fija `nullable: false`, así que la
+columna FK subyacente ya admite `NULL` a nivel de esquema, aunque las
+specs y la capa de servicio garanticen que en la práctica siempre está
+poblada). Endurecer esa opción a `nullable: false` habría producido una
+migración real (intento de agregar una constraint `NOT NULL`) — se
+verificó explícitamente que no es el caso (ver Consecuencias).
+
+`InstitutionMembershipGuard` (`institution-membership.guard.ts`) no cambia:
+ya soportaba este caso genéricamente vía `institutionColumn` (default
+`'institutionId'`) con resolución dot-path. Esta ronda solo hace que el
+caso común (columna plana, sin necesidad de dot-path) funcione out-of-the-box
+para estas 5 entidades.
+
+**Consecuencias.**
+- Sin cambio de esquema real: se verificó corriendo
+  `migration:generate` antes y después del cambio de entidades — el
+  diff generado es **idéntico** en ambos casos (mismo conjunto de `DROP
+  INDEX` sobre los índices únicos parciales/GIN que ya existían como drift
+  preexistente y documentado entre las entidades TypeORM y las migraciones
+  SQL manuales de ADR-024/ADR-025 — ninguna línea nueva relacionada con
+  `institution_id`). Ese drift preexistente es un asunto aparte, no
+  introducido ni agravado por este ADR, y queda fuera de alcance aquí.
+- `specs/entities/institution_member.md`, `delivery_point.md`,
+  `dismissal_window.md`, `dismissal_exception.md` y `enrollment.md` ganan
+  una nota en "Invariantes de negocio" documentando la propiedad compañera.
+- Ningún cambio en `InstitutionMembershipGuard` ni en su contrato
+  (`InstitutionResourceOptions`).

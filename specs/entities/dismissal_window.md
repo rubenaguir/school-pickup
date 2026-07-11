@@ -31,6 +31,7 @@ que un `pickup_requests` tiene sentido. Ver ADR-015.
 - `weekday` debe estar en el rango `0–6`; se recomienda `CHECK (weekday BETWEEN 0 AND 6)`.
 - Permite múltiples ventanas nombradas por institución (ej. una para primaria, otra para preescolar), diferenciadas por `level` y `label`. Ver ADR-015.
 - `status = paused` permite desactivar temporalmente una ventana sin borrarla (se conserva el historial de configuración).
+- La entidad TypeORM expone, además de la relación `institution`, una propiedad compañera `institutionId` de solo lectura (`insert: false, update: false`) que mapea a la misma columna física `institution_id` — no es una columna nueva ni una decisión de modelo de datos, es una segunda forma de leer el mismo FK sin cargar la relación completa. Existe para que `InstitutionMembershipGuard` pueda resolver el `institutionId` de este recurso en su modo `@InstitutionResource` sin un join a `institutions`. Ver ADR-029.
 
 ## Enums
 

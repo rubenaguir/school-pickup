@@ -22,12 +22,24 @@ import { PICKUP_REQUEST_STATUS_VALUES } from './pickup-request-status.values';
 
 const ARRIVAL_MODE_VALUES: readonly ArrivalMode[] = ['vehicle', 'walking'];
 
-// Two partial unique indexes from the spec are deliberately absent here (go in a
-// future migration as raw SQL, not as entity decorators):
-//   UNIQUE (enrollment_id) WHERE status IN ('en_route','arriving','arrived')
-//   UNIQUE (institution_id, delivery_code) WHERE status IN ('en_route','arriving','arrived')
+// Espejo declarativo de los índices ya aplicados en la migración
+// 1783697356401-PartialUniqueAndGinIndexes.ts — el SQL crudo de esa
+// migración sigue siendo la fuente de verdad; estos decoradores solo evitan
+// que TypeORM proponga recrearlos. Ver ADR-024, ADR-025.
 @Entity('pickup_requests')
 @Index(['institution', 'status'])
+@Index('IDX_pickup_requests_active_per_enrollment', ['enrollment'], {
+  unique: true,
+  where: `"status" IN ('en_route', 'arriving', 'arrived')`,
+})
+@Index(
+  'IDX_pickup_requests_active_delivery_code_per_institution',
+  ['institution', 'deliveryCode'],
+  {
+    unique: true,
+    where: `"status" IN ('en_route', 'arriving', 'arrived')`,
+  },
+)
 export class PickupRequest {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
