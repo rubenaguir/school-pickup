@@ -500,6 +500,20 @@ implementación. Se resuelven aquí.
    backlog: agregar una entidad de revocación (ej. `revoked_tokens` o lista
    de sesiones activas) en una ronda futura si se requiere endurecer la
    seguridad antes de producción.
+
+   **Enmienda (Fase 4, implementación del módulo `auth`).** Aunque no existe
+   tabla de revocación, `POST /auth/refresh` sí valida `users.status` (y que
+   el `users` referido por el `sub` del token siga existiendo) en cada uso, y
+   rechaza la renovación: `403 ACCOUNT_SUSPENDED` si el usuario está
+   `suspended` (mismo `code` que usa `POST /auth/login` para el mismo caso),
+   o `401 INVALID_REFRESH_TOKEN` si ya no existe. Esto matiza, sin
+   contradecir, la limitación descrita arriba: una suspensión **sí** bloquea
+   la renovación de sesión, con un retraso máximo igual al TTL del access
+   token vigente (15 minutos, `JWT_ACCESS_TTL`) — no hasta que expire el
+   refresh token (30 días). La limitación aceptada que permanece
+   sin cambios es más estrecha de lo que sugiere el punto 3: un refresh token
+   **robado de una cuenta que sigue `active`** no puede invalidarse antes de
+   su expiración; el caso de una cuenta ya suspendida no está expuesto.
 4. **Visibilidad de instituciones no aprobadas.** Solo instituciones con
    `status = approved` son buscables por nombre o aceptan su `join_code`
    para iniciar una solicitud de `enrollment`. Instituciones en `pending` o
@@ -1212,3 +1226,44 @@ origen), consistente con ADR-018, ADR-024, ADR-025, ADR-026 y
   `student_guardian.added`) permanecen explícitamente en singular — no se
   confunden con la nomenclatura de tablas pese a la coincidencia sintáctica
   superficial (`tabla.columna` vs. `entidad.verbo`).
+
+## ADR-028 — Idioma de errores de la API y reutilización de cuenta en registro de institución
+
+**Contexto.** Al preparar la implementación del núcleo de autenticación
+(registro, login, verificación de correo — `specs/features/001-003`, `007`)
+surgieron 2 ambigüedades no resueltas por ningún ADR previo: en qué idioma
+va el contenido de los mensajes de error de la API, y cómo conciliar que
+`specs/features/001-registro-institucion.md` dice que el `users` se "crea o
+reutiliza, si ya existía la cuenta" mientras que
+`specs/api-contracts/auth.md` documenta 409 sin excepción para email ya
+registrado. Se resuelven ambas aquí antes de implementar Fase 4.
+
+**Decisión.**
+1. **Errores de la API: `message` en inglés + campo `code` machine-readable
+   en inglés; la traducción a español vive en cada frontend.** Mismo patrón
+   ya establecido en `docs/design-brief.md` para los estados de
+   `pickup_request` (texto de UI en español, identificador interno en
+   inglés): la API no decide en qué idioma habla a 3 frontends distintos:
+   cada frontend traduce por `code` en su propia capa de i18n. `message`
+   queda como texto de desarrollo/logs (consistente con "código en inglés"
+   de `CLAUDE.md`), nunca se muestra directo al usuario final.
+2. **Registro de institución: reutilizar cuenta existente solo si la
+   contraseña coincide.** Si el email del administrador ya existe como
+   `users` y la contraseña enviada coincide con esa cuenta, se reutiliza:
+   se crea la `institutions` + `institution_members` (`role = admin`) sobre
+   el `users` existente, sin nueva verificación de correo (la contraseña
+   correcta ya prueba posesión de la cuenta). Si el email existe y la
+   contraseña NO coincide, 409 (mismo comportamiento que hoy). Justificación
+   de negocio: el proyecto ya asume que una persona puede tener varios roles
+   con la misma cuenta (tutor + admin de institución, ver ADR-004 y el
+   modelo de `users` único); sin la verificación de contraseña, "reutilizar"
+   sería una vulnerabilidad de apropiación de cuenta.
+
+**Consecuencias.**
+- `specs/api-contracts/auth.md` gana el campo `code` en las respuestas de
+  error de los 6 endpoints de este contrato, y su endpoint de registro de
+  institución documenta el flujo de reutilización condicionada a contraseña.
+- `specs/features/001-registro-institucion.md` se ajusta para especificar la
+  verificación de contraseña como condición de la reutilización (antes solo
+  decía "reutilizado si ya existía", sin ese detalle).
+- Ningún cambio de esquema de base de datos.

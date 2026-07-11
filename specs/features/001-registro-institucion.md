@@ -30,12 +30,21 @@ institución: no existe un flujo separado de "crear cuenta" seguido de
   unicidad y sufijo aleatorio en caso de colisión. El formulario de alta no
   captura este campo; el admin puede regenerarlo después desde la
   configuración de la institución (fuera de este slice).
-- Se crea (o reutiliza, si ya existía la cuenta) una fila en `users`.
-- **El `users` administrador queda en `status = invited`** (ADR-019, punto
-  2), no `active`: al completar el registro se le envía un correo de
-  verificación vía el port `EmailProvider` (ver ADR-017) con un token
-  firmado de corta duración (24h). No puede iniciar sesión hasta verificar
-  su correo — ver `specs/features/007-verificacion-correo.md`.
+- Se crea una fila en `users`, salvo que `admin.email` ya exista **y**
+  `admin.password` coincida con la contraseña de esa cuenta — en ese caso se
+  reutiliza el `users` existente en vez de crear uno nuevo (ADR-028, punto
+  2: la contraseña correcta prueba posesión de la cuenta; sin esa
+  verificación, "reutilizar" sería una vulnerabilidad de apropiación de
+  cuenta). Si `admin.email` ya existe pero la contraseña no coincide, ver
+  el caso de error más abajo.
+- **Alta nueva:** el `users` administrador queda en `status = invited`
+  (ADR-019, punto 2), no `active`: al completar el registro se le envía un
+  correo de verificación vía el port `EmailProvider` (ver ADR-017) con un
+  token firmado de corta duración (24h). No puede iniciar sesión hasta
+  verificar su correo — ver `specs/features/007-verificacion-correo.md`.
+  **Reutilización de cuenta (ADR-028, punto 2):** el `users` reutilizado
+  conserva su `status` actual tal cual estaba (`invited` o `active`) — no se
+  reinicia el flujo de verificación ni se envía un correo nuevo.
 - Se crea una fila en `institution_members` vinculando ese `users` con la
   nueva `institutions` y `role = admin` (ver ADR-011: el `role` es
   organizacional; `admin` es el rol correcto para quien da de alta el
@@ -74,13 +83,30 @@ Then el sistema agrega un sufijo aleatorio y reintenta hasta encontrar un
       punto 1)
 ```
 
-### Caso: email de administrador ya registrado
+### Caso: email de administrador ya registrado, contraseña coincide (reutilización)
 
 ```
 Given ya existe un user con ese email
+  And la contraseña enviada coincide con la contraseña de esa cuenta
+When se envía el formulario de registro de institución
+Then se reutiliza el user existente (sin crear uno nuevo)
+  And se crea institution con status = pending y join_code autogenerado
+  And se crea institution_member con role = admin vinculando ambos
+  And no se envía un nuevo correo de verificación (el user conserva su
+      status actual, invited o active)
+  And la respuesta es 201 con el mismo shape que el caso de alta nueva
+```
+Ver ADR-028, punto 2.
+
+### Caso: email de administrador ya registrado, contraseña no coincide
+
+```
+Given ya existe un user con ese email
+  And la contraseña enviada NO coincide con la contraseña de esa cuenta
 When se envía el formulario de registro de institución
 Then la operación falla sin crear ningún registro
-  And se devuelve un error indicando que el correo ya está en uso
+  And se devuelve 409 EMAIL_ALREADY_REGISTERED indicando que el correo ya
+      está en uso
 ```
 
 ## Referencia a contrato de API
@@ -100,6 +126,8 @@ No aplica: este feature no publica ni consume ningún topic MQTT.
   decisión de super-admin).
 - ADR-019 (autogeneración de `join_code`; `users.status = invited` en
   auto-registro).
+- ADR-028 (reutilización de cuenta existente condicionada a contraseña
+  coincidente; forma de los errores con `code`).
 - `specs/entities/institution.md`, `specs/entities/institution_member.md`,
   `specs/entities/user.md`.
 - `specs/features/007-verificacion-correo.md`.

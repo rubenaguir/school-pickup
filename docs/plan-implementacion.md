@@ -219,4 +219,4 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
-| Refresh token stateless (JWT sin tabla de revocación) | ADR-019, punto 3 | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado antes de que expire |
+| Refresh token stateless (JWT sin tabla de revocación) — limitación real: un token robado de una cuenta que **sigue `active`** no se puede invalidar antes de que expire; una cuenta `suspended` sí queda bloqueada en el siguiente refresh (retraso máximo = TTL del access token, 15 min) | ADR-019, punto 3 (enmienda, Fase 4) | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado de una cuenta que sigue activa |

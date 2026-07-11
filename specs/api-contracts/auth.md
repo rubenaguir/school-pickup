@@ -15,6 +15,14 @@ reciben el token de verificación de correo (JWT de corta duración, ver
 ADR-019) como credencial de un solo propósito, distinta del access/refresh
 token de sesión.
 
+**Forma de los errores (ADR-028, punto 1).** Toda respuesta de error de
+este contrato es `{ "code": "string", "message": "string" }`. `code` es un
+identificador machine-readable en inglés (ver las tablas de cada endpoint
+abajo); `message` es texto de desarrollo/logs en inglés, no una traducción
+lista para mostrar al usuario final. Cada frontend traduce por `code` en su
+propia capa de i18n — la API no decide en qué idioma habla a 3 frontends
+distintos.
+
 ## `POST /auth/register/institution`
 
 Registra una institución junto con su primer administrador. Ver feature 001.
@@ -51,13 +59,25 @@ punto 1).
 ```
 
 La respuesta indica `users.status = invited`: se envió un correo de
-verificación (ver `POST /auth/verify-email` abajo).
+verificación (ver `POST /auth/verify-email` abajo) — salvo en el caso de
+reutilización de cuenta descrito abajo, donde `user.status` refleja el
+estado ya existente de esa cuenta (`invited` o `active`) y no se envía un
+correo nuevo.
+
+**Reutilización de cuenta existente (ADR-028, punto 2).** Si `admin.email`
+ya existe en `users` y `admin.password` coincide con el hash guardado, la
+cuenta se reutiliza: se crea la `institution` y el `institution_member`
+(`role = admin`) sobre ese `users` existente, y la respuesta es 201 igual
+que en el caso de alta nueva, sin enviar un nuevo correo de verificación (la
+contraseña correcta ya prueba posesión de la cuenta). Si `admin.email` ya
+existe pero `admin.password` **no** coincide, la operación falla con 409
+(ver tabla de errores).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 409 | `email` del administrador ya registrado |
-| 400 | payload inválido (campos requeridos faltantes, `type` fuera del enum) |
+| Código | `code` | Caso |
+|---|---|---|
+| 409 | `EMAIL_ALREADY_REGISTERED` | `email` del administrador ya registrado con una contraseña distinta a la enviada |
+| 400 | `INVALID_PAYLOAD` | payload inválido (campos requeridos faltantes, `type` fuera del enum) |
 
 ## `POST /auth/register/guardian`
 
@@ -84,10 +104,10 @@ La respuesta indica `users.status = invited`: se envió un correo de
 verificación (ver `POST /auth/verify-email` abajo).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 409 | `email` ya registrado |
-| 400 | payload inválido |
+| Código | `code` | Caso |
+|---|---|---|
+| 409 | `EMAIL_ALREADY_REGISTERED` | `email` ya registrado |
+| 400 | `INVALID_PAYLOAD` | payload inválido |
 
 ## `POST /auth/login`
 
@@ -119,11 +139,11 @@ No incluye `institutionId` ni `role`: se resuelven por request contra
 justificación en `specs/features/003-login.md`).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | credenciales inválidas (email no existe o password incorrecto — mensaje genérico) |
-| 403 | `users.status = suspended` |
-| 403 | `users.status = invited` — mensaje específico indicando que falta verificar el correo (distinto del 401 genérico de credenciales), con referencia a `POST /auth/resend-verification` |
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | `INVALID_CREDENTIALS` | credenciales inválidas (email no existe o password incorrecto — mensaje genérico) |
+| 403 | `ACCOUNT_SUSPENDED` | `users.status = suspended` |
+| 403 | `EMAIL_NOT_VERIFIED` | `users.status = invited` — mensaje específico indicando que falta verificar el correo (distinto del 401 genérico de credenciales), con referencia a `POST /auth/resend-verification` |
 
 ## `POST /auth/refresh`
 
@@ -138,12 +158,18 @@ justificación en `specs/features/003-login.md`).
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | refresh token inválido, expirado o mal formado |
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | `INVALID_REFRESH_TOKEN` | refresh token inválido, expirado o mal formado; o con firma y expiración válidas pero cuyo `users` referido (`sub`) ya no existe |
+| 403 | `ACCOUNT_SUSPENDED` | token con firma y expiración válidas, pero el `users` referido (`sub`) tiene `status = suspended` — mismo `code` que usa `POST /auth/login` para el mismo caso |
 
 Nota: al ser stateless (ver feature 003), no existe un endpoint de logout
-que invalide el refresh token del lado del servidor en este slice.
+que invalide el refresh token del lado del servidor en este slice. Sin
+embargo, cada uso de este endpoint sí revalida `users.status` contra la
+base de datos (no solo la firma/expiración del JWT): una suspensión
+posterior a la emisión del refresh token bloquea la renovación en el
+siguiente intento, con un retraso máximo igual al TTL del access token
+vigente. Ver ADR-019, punto 3 (enmienda).
 
 ## `POST /auth/verify-email`
 
@@ -170,10 +196,10 @@ Idempotente: si el `users` ya está `active`, responde 200 igual (ver caso
 "verificación repetida" en feature 007).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 400 | token con firma inválida o malformado |
-| 410 | token con firma válida pero expirado (más de 24h) |
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_VERIFICATION_TOKEN` | token con firma inválida o malformado |
+| 410 | `VERIFICATION_TOKEN_EXPIRED` | token con firma válida pero expirado (más de 24h) |
 
 ## `POST /auth/resend-verification`
 
@@ -199,10 +225,10 @@ Responde 200 genérico incluso si el email no existe o el `users` ya está
 `POST /auth/login`).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 400 | payload inválido |
-| 429 | límite de tasa excedido (más de 3 solicitudes en la última hora, o
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | payload inválido |
+| 429 | `RATE_LIMIT_EXCEEDED` | límite de tasa excedido (más de 3 solicitudes en la última hora, o
       menos de 60 segundos desde la anterior, para el mismo email) |
 
 ## Referencias
@@ -216,6 +242,9 @@ Responde 200 genérico incluso si el email no existe o el `users` ya está
 - ADR-017 (`EmailProvider` como port).
 - ADR-019 (autogeneración de `join_code`; `users.status = invited` hasta
   verificar correo; refresh token stateless aceptado).
+- ADR-028 (forma de los errores con `code` en inglés; reutilización de
+  cuenta existente condicionada a contraseña coincidente en registro de
+  institución).
 
 ## Preguntas abiertas
 
