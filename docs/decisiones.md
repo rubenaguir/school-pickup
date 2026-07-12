@@ -1331,3 +1331,71 @@ para estas 5 entidades.
   una nota en "Invariantes de negocio" documentando la propiedad compañera.
 - Ningún cambio en `InstitutionMembershipGuard` ni en su contrato
   (`InstitutionResourceOptions`).
+
+## ADR-030 — `users.full_name` pasa a nullable
+
+**Contexto.** Mismo problema que resolvió `password_hash` (ADR-022 punto 2),
+detectado en Fase 5 al implementar la invitación de tutores autorizados
+(`specs/features/015-invitar-tutor-autorizado.md`): cuando
+`POST /students/:id/guardians/invite` recibe un correo que no corresponde a
+ningún `users` existente, se crea un `users` nuevo con `status = invited`
+antes de que esa persona haya podido decir cuál es su nombre — el
+`fullName` recién se conoce cuando acepta la invitación
+(`POST /invitations/:token/accept`, feature 016), momento en el que también
+define su contraseña por primera vez. Como `full_name` era `NOT NULL` sin
+default, la implementación inicial insertaba `''` (string vacío) como
+valor transitorio — un placeholder falso, visible en cualquier lectura
+directa de la fila mientras la invitación sigue pendiente, exactamente el
+problema que ADR-022 punto 2 ya había resuelto para `password_hash` con la
+misma mecánica de invitación.
+
+El mismo problema aplica en principio a `institution_members` (feature 012,
+rama de correo nuevo) aunque ese módulo no está implementado todavía: la
+invitación de personal tampoco captura un nombre en el alta, solo en la
+aceptación.
+
+**Decisión.** `users.full_name` pasa de `NOT NULL` a **nullable**, mismo
+patrón y misma justificación que `password_hash`:
+- Es `NULL` mientras el `users` fue creado por invitación
+  (`student_guardians` o, en el futuro, `institution_members`) y esa
+  persona todavía no acepta.
+- Se llena por primera vez al aceptar la invitación
+  (`POST /invitations/:token/accept`), en el mismo paso donde se define la
+  contraseña para un `users` que nace sin ella.
+- Invariante asociada, igual que la de `password_hash`: un `users` con
+  `status = active` debe tener `full_name` no nulo. No se implementa como
+  `CHECK` constraint; se valida en la capa de servicio al activar la cuenta
+  (auto-registro, que siempre captura el nombre de entrada, o aceptación de
+  invitación, que lo define por primera vez), consistente con ADR-017.
+- El auto-registro (features 001/002) sigue capturando `full_name` en el
+  formulario de alta, así que en ese camino nunca es nulo.
+
+Se prefiere `NULL` explícito sobre cualquier placeholder (string vacío,
+email, etc.): `NULL` es la representación honesta de "este dato no existe
+todavía", consistente con el criterio ya sentado por ADR-022 punto 2 — no
+se introduce un criterio distinto para un problema idéntico.
+
+**Consecuencias.**
+- `users.full_name`: `varchar(255) NOT NULL` → `varchar(255) NULL`.
+  Migración `UserFullNameNullable1783826146163` (`ALTER TABLE "users" ALTER
+  COLUMN "full_name" DROP NOT NULL`); se verificó corriendo
+  `migration:generate` después de aplicarla — el diff resultante es vacío
+  ("No changes in database schema were found"), confirmando que no queda
+  ningún cambio de esquema adicional no intencionado.
+- Actualiza `specs/entities/user.md` (fila `full_name` e invariante nueva) y
+  `docs/modelo-datos.md`.
+- `apps/api/src/student-guardians/student-guardians.service.ts`: el `users`
+  nuevo creado en `invite()` deja de insertar `fullName: ''`; ahora no
+  provee el campo (`NULL` por default de columna). El flujo de
+  `POST /invitations/:token/accept` no cambia: ya definía `fullName` cuando
+  `passwordHash` nace `null`, solo que ahora escribe sobre un valor `NULL`
+  real en vez de sobrescribir un placeholder falso.
+- `specs/api-contracts/student-guardians.md` e `institution-members.md`:
+  el campo `fullName` en las respuestas de `GET .../guardians` /
+  `GET .../members` puede ser `null` mientras el `users` referenciado no ha
+  aceptado su invitación (`status = invited`) — se documenta explícitamente
+  en ambos contratos en vez de dejarlo como string garantizado.
+- Regla de negocio nueva a forzar por test (ADR-021): `invite()` con correo
+  nuevo persiste `full_name = null` (no `''`); toda lectura de un guardián o
+  miembro invitado-no-aceptado debe manejar `fullName: null` explícitamente
+  en el cliente.

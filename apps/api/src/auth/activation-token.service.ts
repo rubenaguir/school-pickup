@@ -3,16 +3,21 @@ import { JwtService } from '@nestjs/jwt';
 import { ACTIVATION_JWT_SERVICE } from './jwt.tokens';
 
 export type ActivationTokenKind =
-  | 'email_verification'
-  // Reserved for Phase 5 (feature 013/016) — no endpoint uses these yet.
-  // Adding support requires only a new caller that issues/verifies this kind,
-  // not a change to this service.
-  | 'institution_member_invitation'
-  | 'student_guardian_invitation';
+  'email_verification' | 'institution_member_invitation' | 'student_guardian_invitation';
 
 export interface ActivationTokenPayload {
   sub: string; // users.id
   kind: ActivationTokenKind;
+  // Identifies the specific student_guardians row this invitation activates
+  // (kind: 'student_guardian_invitation' only) — a user can have multiple
+  // pending invitations across different students, so `sub` alone doesn't
+  // disambiguate which one to accept. See ADR-023 point 4.
+  studentGuardianId?: string;
+  // Identifies the specific institution_members row this invitation activates
+  // (kind: 'institution_member_invitation' only) — a user can have multiple
+  // pending institution-member invitations across institutions, so `sub`
+  // alone doesn't disambiguate which one to accept. See ADR-030.
+  institutionMemberId?: string;
 }
 
 @Injectable()

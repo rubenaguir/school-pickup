@@ -13,7 +13,7 @@ existencia de filas en `student_guardians`.
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `email` | `varchar(255)` | NOT NULL, único | login |
 | `password_hash` | `varchar(255)` | nullable | hash Argon2; `NULL` mientras el usuario está `invited` sin haber definido contraseña. Ver ADR-022 |
-| `full_name` | `varchar(255)` | NOT NULL | |
+| `full_name` | `varchar(255)` | nullable | `NULL` mientras el usuario fue creado por invitación (`student_guardians`, feature 015, o `institution_members`, feature 012) y todavía no acepta — su nombre real recién se conoce en ese momento. Ver ADR-030 |
 | `phone` | `varchar(30)` | nullable | |
 | `status` | `enum` (`active`, `invited`, `suspended`) | NOT NULL, default `invited` | |
 | `is_super_admin` | `boolean` | NOT NULL, default `false` | operador de la plataforma |
@@ -48,6 +48,7 @@ existencia de filas en `student_guardians`.
 - La autenticación biométrica ("inicio con huella") es responsabilidad exclusiva del cliente (WebAuthn/plataforma) y no tiene representación en esta tabla. Ver ADR-016.
 - La mayoría de los FK hacia `users` en el resto del modelo asumen borrado lógico (`status = suspended`), no borrado físico — de ahí que la mayoría de relaciones entrantes usen `ON DELETE RESTRICT`/`SET NULL` en vez de `CASCADE`.
 - `password_hash` es nullable: es `NULL` para un `users` invitado por un admin (`institution_members`) o por otro tutor (`student_guardians`) que aún no define contraseña. Invariante: un `users` con `status = active` debe tener `password_hash` no nulo. No se implementa como `CHECK` constraint; se valida en la capa de servicio al activar la cuenta (auto-registro con contraseña de entrada, o aceptación de invitación que la define por primera vez), consistente con ADR-017. Ver ADR-022.
+- `full_name` es nullable, mismo patrón y misma razón que `password_hash`: es `NULL` para un `users` creado por invitación (`student_guardians` o `institution_members`) cuyo nombre real todavía no se captura — se llena al aceptar la invitación. Invariante: un `users` con `status = active` debe tener `full_name` no nulo (misma validación en capa de servicio al activar, no `CHECK` de BD). Ver ADR-030.
 
 ## Enums
 

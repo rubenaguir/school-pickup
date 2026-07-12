@@ -61,6 +61,45 @@ en el cliente antes de enviar; `joinCode` se resuelve en el servidor).
 | 404 | `institutionId` no corresponde a ninguna institución `approved` |
 | 409 | ya existe un `enrollments` para ese `(studentId, institutionId)` |
 
+## `GET /enrollments/mine`
+
+Lista de solicitudes propias (perspectiva del tutor). Ver feature 005. A
+diferencia de `GET /enrollments` (perspectiva de institución, más abajo), no
+recibe `institutionId`: el alcance es siempre el usuario autenticado. Incluye
+toda solicitud donde el usuario sea guardián activo (`student_guardians.status
+= active`) del `students` asociado — no solo las que él mismo solicitó
+(`requested_by_user_id`), consistente con la regla de "Reglas de
+autorización" arriba.
+
+**Query params**
+| Param | Requerido | Notas |
+|---|---|---|
+| `status` | no | filtra por `pending`/`approved`/`rejected`; sin filtro, devuelve todos |
+
+**Response 200**
+```json
+{
+  "enrollments": [
+    {
+      "id": "uuid",
+      "studentId": "uuid",
+      "studentFullName": "string",
+      "institutionId": "uuid",
+      "status": "pending | approved | rejected",
+      "gradeOrGroup": "string | null",
+      "enrollmentCode": "string",
+      "requestedAt": "string (timestamptz)",
+      "reviewedAt": "string (timestamptz) | null"
+    }
+  ]
+}
+```
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 401 | no autenticado |
+
 ## `GET /enrollments?status=pending&institutionId=...`
 
 Bandeja de solicitudes para revisión (perspectiva de institución). Ver
@@ -167,6 +206,11 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 - ADR-018 (condición de aprobación; `rejected` terminal).
 - ADR-019 (visibilidad de instituciones no aprobadas; restricción de
   `role = admin` para aprobar/rechazar).
+- `GET /enrollments/mine` documentado a posteriori, al implementar la mitad
+  tutor de feature 005: la sección "Reglas de autorización" ya prometía
+  lectura al tutor pero no existía un endpoint que la respaldara — el único
+  `GET /enrollments` documentado en este archivo es, y siempre fue, el de
+  feature 006 (bandeja de staff).
 - ADR-025 (punto 5: `institutions.status != approved` → 422; punto 6: registro en
   `audit_log` de `enrollment.approved` / `enrollment.rejected`).
 

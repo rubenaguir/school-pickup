@@ -34,7 +34,7 @@ Cuenta de autenticación para todos los roles.
 | `id` | uuid (PK) | |
 | `email` | varchar | único |
 | `password_hash` | varchar | nullable; Argon2. `NULL` mientras `status = invited` sin contraseña definida — ver ADR-022 |
-| `full_name` | varchar | |
+| `full_name` | varchar | nullable; `NULL` mientras el usuario fue creado por invitación (`student_guardians` o `institution_members`) y aún no acepta — ver ADR-030 |
 | `phone` | varchar | nullable |
 | `status` | enum | `active`, `invited`, `suspended` |
 | `is_super_admin` | boolean | operador de la plataforma |

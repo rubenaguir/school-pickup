@@ -5,13 +5,20 @@ instituciones (escuelas y extracurriculares) en CDMX. Un tutor avisa que va en
 camino ("ya voy"), el sistema calcula un ETA y la institución prepara al alumno,
 mostrándolo en un tablero estilo "llegadas de aeropuerto".
 
-> Estado actual: **backend con esquema real** (Fases 0–3 completas). El
-> modelo de datos (14 tablas), las entidades de TypeORM, las migraciones
-> versionadas y los fundamentos de código compartido (tipos, máquina de
-> estados de `pickup_request`, ports) ya existen y corren contra PostgreSQL+
-> PostGIS. Los módulos de NestJS (auth, CRUD, MQTT real) se construyen ahora
-> sobre esta base (Fase 4 en adelante). Ver `docs/` y `CLAUDE.md`, y
-> `docs/plan-implementacion.md` para el detalle fase por fase.
+> Estado actual: **backend con dominio funcional completo** (Fases 0–5
+> completas). El modelo de datos (14 tablas), las entidades de TypeORM, las
+> migraciones versionadas, los fundamentos de código compartido (tipos,
+> máquina de estados de `pickup_request`, ports), el módulo de
+> autenticación (JWT, registro, login, verificación de correo vía Resend,
+> `InstitutionMembershipGuard` para aislamiento multi-tenant), y los 6
+> módulos CRUD de dominio (`institutions`, `delivery-points`,
+> `dismissal-windows`/`dismissal-exceptions`, `students`/
+> `student-guardians`, `institution-members`, `vehicles`, `enrollments`
+> con su bandeja de aprobación) ya existen y funcionan de punta a punta.
+> El flujo de recogida en tiempo real (`pickup_request` + proceso `worker`
+> con MQTT) se construye ahora sobre esta base (Fase 6 en adelante). Ver
+> `docs/` y `CLAUDE.md`, y `docs/plan-implementacion.md` para el detalle
+> fase por fase.
 
 ## Estructura
 
@@ -70,6 +77,20 @@ vive en migraciones versionadas de TypeORM bajo `apps/api/src/database/`.
 Ver `docs/modelo-datos.md` para el modelo entidad-relación y
 `docs/decisiones.md` (ADR-018, ADR-024, ADR-026, ADR-027) para el porqué de
 cada decisión de esquema.
+
+## Correo transaccional
+
+El envío de correo (verificación de cuenta, invitaciones, aprobación de
+`enrollment`) usa el port `EmailProvider` (`packages/shared`). Dos
+implementaciones, seleccionadas por la variable `EMAIL_PROVIDER`:
+
+- `console` (default) — loguea el mensaje completo a consola, sin enviar
+  nada real. No requiere cuenta de Resend.
+- `resend` — envía correo real vía Resend. Requiere `RESEND_API_KEY` en
+  `.env` (cuenta gratuita, permiso "Sending access" recomendado). Mientras
+  el dominio `mail.casillego.com.mx` no esté verificado en Resend, el envío
+  real solo llega al correo asociado a la cuenta de Resend usada (limitación
+  de Resend, no del código).
 
 ## MQTT
 

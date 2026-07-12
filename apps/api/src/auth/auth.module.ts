@@ -11,6 +11,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { InstitutionMembershipGuard } from './guards/institution-membership.guard';
 import { ResendVerificationThrottlerGuard } from './guards/resend-verification-throttler.guard';
 import { ActivationTokenService } from './activation-token.service';
 import { ACCESS_JWT_SERVICE, ACTIVATION_JWT_SERVICE, REFRESH_JWT_SERVICE } from './jwt.tokens';
@@ -33,6 +34,7 @@ const ONE_MINUTE_MS = 60 * 1000;
     AuthService,
     JwtStrategy,
     JwtAuthGuard,
+    InstitutionMembershipGuard,
     ResendVerificationThrottlerGuard,
     ActivationTokenService,
     {
@@ -60,6 +62,6 @@ const ONE_MINUTE_MS = 60 * 1000;
         }),
     },
   ],
-  exports: [JwtAuthGuard],
+  exports: [JwtAuthGuard, InstitutionMembershipGuard, ActivationTokenService],
 })
 export class AuthModule {}

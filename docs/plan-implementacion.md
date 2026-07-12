@@ -28,7 +28,7 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–029 (`docs/decisiones.md`)
+- [x] ADRs 001–030 (`docs/decisiones.md`)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
       el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
@@ -146,18 +146,47 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
       entorno dedicada `EMAIL_PROVIDER=console|resend` (default `console`);
       `ConsoleEmailProvider` se mantiene para desarrollo/tests
 
-## Fase 5 — Módulos CRUD core
+## Fase 5 — Módulos CRUD core ✅ completo
 
-Orden sugerido por dependencia funcional (no todos son bloqueantes entre sí,
-pero este orden minimiza retrabajo). Todos protegidos por
-`InstitutionMembershipGuard` (Fase 4) donde aplique aislamiento multi-tenant.
+Todos protegidos por `InstitutionMembershipGuard` (Fase 4) donde aplique
+aislamiento multi-tenant.
 
-- [ ] `institutions` (incluye geocerca, horarios, puntos de entrega)
-- [ ] `delivery-points`
-- [ ] `dismissal-windows` + `dismissal-exceptions`
-- [ ] `students` + `student-guardians`
-- [ ] `vehicles`
-- [ ] `enrollments` (flujo de aprobación — pantalla hero del portal)
+- [x] `institutions` (perfil/geocerca, regeneración de `join_code`; caso
+      degenerado de `@InstitutionResource` para el id de la propia
+      institución)
+- [x] `delivery-points` (caso normal de `@InstitutionResource` vía la
+      columna compañera de ADR-029; validación cruzada de
+      `operatorUserId` → 422 `OPERATOR_NOT_INSTITUTION_MEMBER`)
+- [x] `dismissal-windows` + `dismissal-exceptions` (borrado físico solo en
+      exceptions; validación de conflicto `level = null` vs. específico en
+      capa de servicio → 422 `CONFLICTING_DISMISSAL_EXCEPTION`, distinto
+      del duplicado exacto atrapado por constraint → 409
+      `DUPLICATE_DISMISSAL_EXCEPTION`; ver enmienda a ADR-026 punto 3)
+- [x] `students` + `student-guardians` (alta transaccional de alumno +
+      guardián primario `active`; invitar/revocar/reasignar tutores
+      autorizados; endpoint compartido `POST /invitations/:token/accept`
+      con punto de extensión explícito para `institution_member_invitation`
+      — ya completado, ver abajo; `users.full_name` nullable, ADR-030,
+      mismo criterio que `password_hash` ADR-022)
+- [x] `institution-members` (invitar/listar/cambiar rol/dar de baja
+      personal; estado "invitado" derivado de `users.status`, sin columna
+      propia — a diferencia de `student_guardians`; protección del último
+      admin en `PATCH` y `DELETE` vía `422 LAST_ADMIN_PROTECTED`; endpoint
+      compartido de aceptación completado, ya no responde `501` para este
+      caso)
+- [x] `vehicles` (catálogo del tutor, sin `InstitutionMembershipGuard` —
+      autorización por ownership; promoción de principal en `PATCH`
+      desmarca-luego-marca, en `DELETE` borra-principal-luego-marca-nuevo
+      para no violar el índice parcial sin paso intermedio; `422
+      NEW_PRIMARY_VEHICLE_REQUIRED`/`NEW_PRIMARY_VEHICLE_INVALID`)
+- [x] `enrollments` (flujo completo: `POST`/`GET /enrollments/mine` lado
+      tutor, bandeja de aprobación lado institución con `role = admin`;
+      `422 INSTITUTION_NOT_APPROVED` / `409 ENROLLMENT_NOT_PENDING`
+      consistentes con la convención ampliada de ADR-022 punto 5;
+      `audit_log` + correo de aprobación/rechazo en la misma transacción;
+      tercer patrón de resolución de `institutionId` — colección filtrada
+      por query param, verificación manual fuera del guard compartido,
+      documentado en `docs/arquitectura.md`)
 
 ## Fase 6 — Flujo de recogida (`pickup_request`) + `worker`
 
@@ -232,6 +261,7 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 | Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
 | Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
+| Endpoint de búsqueda de instituciones por nombre (`institutions`) — solo existe alta por `joinCode`/`institutionId` ya conocido; falta para la pantalla "Asociar a institución" | Fase 7 (necesita spec antes) | Abierto — detectado al implementar `enrollments` |
 
 ## Backlog técnico (no bloquea, pero no debe olvidarse)
 

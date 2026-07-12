@@ -41,7 +41,7 @@ ver `specs/entities/institution_member.md`).
       "institutionId": "uuid",
       "userId": "uuid",
       "role": "admin | gate_operator | coordinator | teacher",
-      "fullName": "string",
+      "fullName": "string | null",
       "email": "string",
       "userStatus": "active | invited | suspended",
       "createdAt": "string (timestamptz)"
@@ -52,13 +52,20 @@ ver `specs/entities/institution_member.md`).
 
 `userStatus` proviene de `users.status` (join con `users`), no de una columna de
 `institution_members`. Un miembro con `userStatus = invited` es el que la UI
-muestra como "Invitado".
+muestra como "Invitado". `fullName` es `null` cuando el `users` referenciado
+fue creado por invitación (feature 012, rama de correo nuevo) y todavía no
+acepta — su nombre real recién se conoce al aceptar
+(`POST /invitations/:token/accept`, feature 013). Ver ADR-030.
 
 **Errores**
 | Código | Caso |
 |---|---|
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 404 | la institución no existe |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `POST /institutions/:id/members/invite`
 
@@ -110,8 +117,12 @@ todavía `invited` que ya era miembro (reenvío, ADR-022 punto 5).
 | 400 | payload inválido (`email` mal formado, `role` fuera del enum) |
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
-| 404 | la institución no existe |
 | 409 | el `users` invitado ya es `institution_members` **activo** de esa institución (un miembro todavía `invited` no da 409: se reenvía la invitación, ADR-022 punto 5) |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `POST /invitations/:token/accept`
 
@@ -135,8 +146,16 @@ se resuelve **según el tipo de invitación**, no siempre contra `users.status`:
 
 **Request**
 ```json
-{ "password": "string" }
+{ "password": "string", "fullName": "string" }
 ```
+
+Para la invitación de personal, `fullName` es siempre obligatorio junto con
+`password`: el único origen de un `institution_member_invitation` es la rama
+de correo nuevo (feature 012), donde `users.password_hash` y `users.full_name`
+nacen `NULL` y se llenan por primera vez en este paso (ADR-022 punto 2,
+ADR-030). (La rama de tutor sí puede recibir un `users` ya `active` desde
+antes — ver `specs/api-contracts/student-guardians.md` — pero ese caso no
+aplica a personal.)
 
 **Response 200**
 ```json
@@ -246,6 +265,8 @@ recurso (ADR-022 punto 4), igual que el `PATCH`.
   `institution_member.removed`; punto 7: chequeo de "ya aceptada" según el tipo de
   invitación en `POST /invitations/:token/accept`; punto 9: endpoint
   `DELETE /institution-members/:id` con protección del último admin).
+- ADR-030 (`users.full_name` nullable — mismo patrón que `password_hash`,
+  ADR-022 punto 2 — mientras un `users` invitado no acepta).
 - `specs/entities/audit_log.md`.
 
 ## Preguntas abiertas

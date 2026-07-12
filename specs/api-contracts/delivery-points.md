@@ -53,7 +53,11 @@ grupos (ADR-012).
 | Código | Caso |
 |---|---|
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 404 | la institución no existe |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `POST /institutions/:id/delivery-points`
 
@@ -91,8 +95,12 @@ opcional (texto libre, ADR-012).
 | 400 | payload inválido (`name` faltante, tipos incorrectos) |
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
-| 404 | la institución no existe |
-| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
+| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `PATCH /delivery-points/:id`
 
@@ -131,7 +139,7 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
 | 403 | el usuario autenticado no es `institution_members` de la institución del `delivery_points` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | el `delivery_points` no existe |
-| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5) |
+| 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
 
 ## Referencias
 

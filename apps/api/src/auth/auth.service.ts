@@ -20,6 +20,7 @@ import { ACCESS_JWT_SERVICE, REFRESH_JWT_SERVICE } from './jwt.tokens';
 import { ActivationTokenService } from './activation-token.service';
 import { hashPassword, verifyPassword } from './password.util';
 import { generateUniqueJoinCode, randomJoinCodeSuffix } from './join-code.util';
+import { isUniqueViolation } from '../common/db-errors.util';
 import { RegisterInstitutionDto } from './dto/register-institution.dto';
 import { RegisterGuardianDto } from './dto/register-guardian.dto';
 import { LoginDto } from './dto/login.dto';
@@ -41,12 +42,6 @@ const EMAIL_ALREADY_REGISTERED = {
 } as const;
 
 const MAX_JOIN_CODE_INSERT_ATTEMPTS = 5;
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
-  );
-}
 
 @Injectable()
 export class AuthService {

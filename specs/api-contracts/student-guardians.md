@@ -39,7 +39,7 @@ Lista los tutores autorizados del alumno. Ver feature 017.
     {
       "id": "uuid",
       "guardianUserId": "uuid",
-      "fullName": "string",
+      "fullName": "string | null",
       "email": "string",
       "relationship": "mother | father | grandparent | driver | other",
       "isPrimary": "boolean",
@@ -50,7 +50,10 @@ Lista los tutores autorizados del alumno. Ver feature 017.
 ```
 
 `fullName` y `email` provienen del `users` vinculado (join); el resto, de la fila
-`student_guardians`.
+`student_guardians`. `fullName` es `null` cuando el `users` referenciado fue
+creado por invitación (feature 015, rama de correo nuevo) y todavía no acepta
+(`status = invited`) — su nombre real recién se conoce al aceptar
+(`POST /invitations/:token/accept`, feature 016). Ver ADR-030.
 
 **Errores**
 | Código | Caso |
@@ -206,6 +209,8 @@ Ver `specs/features/016-aceptar-invitacion-tutor.md`.
 - ADR-026 (punto 1: índice único parcial que excluye `revoked`; punto 3:
   protección del principal y reasignación a no `active` → 422; punto 5: prefijo
   canónico `student_guardian.*` en `audit_log.action`).
+- ADR-030 (`users.full_name` nullable — mismo patrón que `password_hash`,
+  ADR-022 punto 2 — mientras un `users` invitado no acepta).
 
 ## Preguntas abiertas
 

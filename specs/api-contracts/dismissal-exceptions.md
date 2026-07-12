@@ -51,7 +51,11 @@ Lista las excepciones de horario de la institución. Ver feature 011.
 | Código | Caso |
 |---|---|
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 404 | la institución no existe |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `POST /institutions/:id/dismissal-exceptions`
 
@@ -85,9 +89,13 @@ Crea una excepción de horario. Ver feature 011.
 | 400 | payload inválido (`date`/`time` mal formados, `name` faltante) |
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
-| 404 | la institución no existe |
 | 409 | ya existe una excepción para ese `(institutionId, date, level)` (restricción única, ADR-018 punto 10) |
-| 409 | colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación, ADR-018 punto 10 — no la atrapa el unique constraint) |
+| 422 | colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación que consulta otras filas de `dismissal_exceptions`, ADR-018 punto 10 — no la atrapa el unique constraint; 422 por ADR-022 punto 5 ampliado por ADR-026 punto 3, mismo patrón que la reasignación de primariedad en `student_guardians` y `vehicles.newPrimaryVehicleId`, no 409) |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `PATCH /dismissal-exceptions/:id`
 
@@ -123,7 +131,7 @@ Edita una excepción. Ver feature 011.
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | la excepción no existe |
 | 409 | la edición choca con la restricción única `(institutionId, date, level)` (ADR-018 punto 10) |
-| 409 | la edición produce la colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación, ADR-018 punto 10) |
+| 422 | la edición produce la colisión `level = null` vs. nivel específico en la misma fecha (validación de capa de aplicación que consulta otras filas de `dismissal_exceptions`, ADR-018 punto 10; 422 por ADR-022 punto 5 ampliado por ADR-026 punto 3) |
 
 ## `DELETE /dismissal-exceptions/:id`
 
@@ -153,7 +161,10 @@ de fondo vuelve a regir esa fecha.
   validación de capa de aplicación para `level = NULL`).
 - ADR-019 (punto 5: restricción a `role = admin`).
 - ADR-022 (punto 1: escritura exige `role = admin`; punto 4:
-  `InstitutionMembershipGuard`).
+  `InstitutionMembershipGuard`; punto 5, ampliado por ADR-026 punto 3: 422
+  para la colisión `level = null` vs. nivel específico, por ser una regla
+  que consulta otra fila de la misma tabla, no el propio estado del
+  recurso).
 
 ## Preguntas abiertas
 

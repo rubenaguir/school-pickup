@@ -116,13 +116,43 @@ NestJS, ejecutado inmediatamente después del guard de autenticación JWT en
 cualquier ruta que opere sobre datos de una institución. Verifica que exista
 un `institution_member` con `(userId, institutionId)` antes de dejar pasar
 el request; si no existe, corta con `403` antes de llegar al controller.
-Dos estrategias de resolución de `institutionId` según el tipo de ruta:
+Dos estrategias de resolución de `institutionId` soportadas por el guard,
+según el tipo de ruta:
 - **Rutas anidadas** (`/institutions/:institutionId/...`): el guard lee
   `institutionId` directo del parámetro de ruta.
 - **Rutas por recurso** (`PATCH /delivery-points/:id`,
   `PATCH /dismissal-windows/:id`, etc.): el guard resuelve la institución
   del recurso con una consulta mínima al repositorio correspondiente antes
   de comparar contra las membresías del usuario.
+- **Colecciones filtradas por query param, fuera del guard** (ej.
+  `GET /enrollments?institutionId=...`): no es ni ruta anidada ni `:id` de
+  recurso — `institutionId` llega como parámetro de query sobre una
+  colección, un caso que `InstitutionMembershipGuard` no resuelve (solo lee
+  de `request.params` o de un recurso puntual por `:id`, nunca de la query
+  string). Estas rutas no pasan por el guard: la verificación de membresía
+  se hace a mano dentro del `service` correspondiente, contra
+  `institution_member`, replicando el mismo `403 NOT_INSTITUTION_MEMBER` —
+  ver `EnrollmentsService` como referencia. Es la excepción, no la regla:
+  los dos patrones anteriores siguen siendo la forma preferida siempre que
+  la forma de la ruta lo permita; extender el guard compartido para cubrir
+  también este caso exigiría distinguir "ruta mal configurada" de "cliente
+  omitió el query param" en un archivo usado por ocho módulos, para
+  resolver una necesidad de uno solo.
+
+**Rutas anidadas: 403 no distingue "institución inexistente" de "sin
+membresía".** En modo ruta anidada el guard solo consulta
+`institution_member(institutionId, userId)` — nunca consulta `institutions`
+para confirmar que ese `institutionId` existe. Si el id no corresponde a
+ninguna institución, simplemente no hay fila de membresía que coincida, y el
+resultado es el mismo `403 NOT_INSTITUTION_MEMBER` que para un usuario real
+sin acceso: ambos casos son indistinguibles para quien llama. Es
+deliberado, no un hueco a corregir: no revela si un id de institución existe
+a alguien sin derecho a verlo, mismo principio ya aplicado en login y
+`resend-verification` (ADR-019) — ver `specs/api-contracts/auth.md`. Por
+esto los `api-contracts` de rutas anidadas bajo `/institutions/:institutionId/...`
+no documentan un `404` separado para "la institución no existe" en sus
+endpoints `GET`/`POST`; solo las rutas por recurso (que sí resuelven y
+existencia-verifican una entidad concreta) tienen un `404` alcanzable.
 
 Complemento obligatorio, en la capa de servicio: cada `service` construye
 sus queries filtrando siempre por el `institutionId` del contexto

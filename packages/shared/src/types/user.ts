@@ -4,7 +4,7 @@ export interface User {
   id: string;
   email: string;
   passwordHash?: string;
-  fullName: string;
+  fullName?: string;
   phone?: string;
   status: UserStatus;
   isSuperAdmin: boolean;

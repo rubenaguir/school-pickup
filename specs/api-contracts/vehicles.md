@@ -134,8 +134,8 @@ Reglas:
 | 401 | no autenticado |
 | 403 | el `vehicles` pertenece a otro `guardian_user_id` |
 | 404 | el `vehicles` no existe |
-| 422 | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (obliga a reasignar la primariedad a otra fila `vehicles`; regla que cruza hacia otra entidad; ADR-023 punto 1, corregido de 409 a 422 en ADR-026 punto 3) |
-| 422 | `newPrimaryVehicleId` no refiere a otro vehículo del tutor (regla cruzada entre entidades; ADR-025 punto 5) |
+| 422 `NEW_PRIMARY_VEHICLE_REQUIRED` | se borra el vehículo principal habiendo otros y no se designó `newPrimaryVehicleId` (obliga a reasignar la primariedad a otra fila `vehicles`; regla que cruza hacia otra entidad; ADR-023 punto 1, corregido de 409 a 422 en ADR-026 punto 3) |
+| 422 `NEW_PRIMARY_VEHICLE_INVALID` | `newPrimaryVehicleId` no refiere a otro vehículo del tutor: no pertenece al mismo `guardian_user_id`, o es el mismo vehículo que se está borrando (regla cruzada entre entidades; ADR-025 punto 5) |
 
 ## Referencias
 

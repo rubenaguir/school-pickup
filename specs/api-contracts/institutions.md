@@ -109,10 +109,10 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
 |---|---|
 | 400 | payload inválido (tipos incorrectos, radios no enteros, etc.) |
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1); `code: ADMIN_ROLE_REQUIRED` |
 | 404 | la institución no existe |
-| 409 | se envió `category` no nula en una institución con `type = school` (invariante intra-entidad de `specs/entities/institution.md`; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
-| 409 | `institutions.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2) |
+| 409 | se envió `category` no nula en una institución con `type = school` (invariante intra-entidad de `specs/entities/institution.md`; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2); `code: CATEGORY_NOT_ALLOWED_FOR_TYPE` |
+| 409 | `institutions.status != approved` (la edición de perfil requiere institución aprobada, ver feature 008; conflicto del recurso con su propio estado → 409, ADR-022 punto 5 ampliado por ADR-026 punto 2); `code: INSTITUTION_NOT_APPROVED` |
 
 ## `POST /institutions/:id/regenerate-join-code`
 
@@ -131,7 +131,7 @@ aleatorio ante colisión) es el mismo que en el alta.
 | Código | Caso |
 |---|---|
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-019 punto 1 atribuye la regeneración al admin) |
+| 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-019 punto 1 atribuye la regeneración al admin); `code: ADMIN_ROLE_REQUIRED` |
 | 404 | la institución no existe |
 
 ## Referencias

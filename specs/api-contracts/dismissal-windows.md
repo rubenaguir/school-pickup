@@ -50,7 +50,11 @@ Lista las ventanas de salida recurrentes de la institución. Ver feature 010.
 | Código | Caso |
 |---|---|
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
-| 404 | la institución no existe |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `POST /institutions/:id/dismissal-windows`
 
@@ -89,7 +93,11 @@ Crea una ventana de salida recurrente. Ver feature 010.
 | 400 | payload inválido (`weekday` fuera de 0–6, `label` faltante, horas mal formadas) |
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
-| 404 | la institución no existe |
+
+No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
+`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
+inexistente de institución existente sin membresía — ambos casos devuelven
+`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
 
 ## `PATCH /dismissal-windows/:id`
 

@@ -30,8 +30,11 @@ export class User {
   @Column({ name: 'password_hash', type: 'varchar', length: 255, nullable: true })
   passwordHash!: string | null;
 
-  @Column({ name: 'full_name', type: 'varchar', length: 255 })
-  fullName!: string;
+  // Nullable: NULL while a user invited as a student_guardian (feature 015)
+  // hasn't accepted yet and their real name isn't known — see ADR-030,
+  // same pattern as password_hash (ADR-022 point 2).
+  @Column({ name: 'full_name', type: 'varchar', length: 255, nullable: true })
+  fullName!: string | null;
 
   @Column({ name: 'phone', type: 'varchar', length: 30, nullable: true })
   phone!: string | null;
