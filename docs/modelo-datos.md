@@ -208,8 +208,9 @@ Evento central: "voy en camino".
 | `started_at` | timestamptz | |
 | `estimated_arrival_at` | timestamptz | nullable |
 | `eta_seconds` | int | nullable (último ETA calculado) |
+| `eta_calculated_at` | timestamptz | nullable — momento del último recálculo de ETA. Estado persistido del throttling del `worker`: la mitad temporal (≥ 20 s) se evalúa contra esta columna, la espacial (≥ 150 m) contra `last_location`. Ver ADR-024 punto 2 y ADR-031 |
 | `last_location` | geography(Point,4326) | nullable (última posición) |
-| `delivery_code` | varchar | código de 4 dígitos: el tutor lo muestra en su app, el staff lo verifica antes de entregar al alumno. Ver ADR-013 |
+| `delivery_code` | varchar | código de 4 dígitos: el tutor lo muestra en su app, el staff lo verifica antes de entregar al alumno. Generado en el servidor con reintento ante colisión contra el índice único parcial — ver `specs/entities/pickup_request.md`. Ver ADR-013 |
 | `arrival_mode` | enum | `vehicle`, `walking` — nullable/opcional, ver nota. Ver ADR-013 |
 | `vehicle_id` | uuid (FK) | nullable — vehículo guardado en el perfil del tutor (`vehicles`), si se seleccionó uno; nulo si camina o usa un vehículo no guardado. Ver ADR-014 |
 | `vehicle_description` | varchar | nullable — snapshot del vehículo al momento del viaje (ver nota). Ver ADR-014 |

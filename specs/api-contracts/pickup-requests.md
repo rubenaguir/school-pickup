@@ -25,9 +25,42 @@ Como el access token no fija `institutionId` ni `role` (ver
 `specs/api-contracts/auth.md`), cada endpoint valida la relación (propiedad del
 tutor, o membresía a la institución) contra el `pickup_requests` en cuestión.
 
+### Mecanismo por endpoint
+
+| Endpoint | Mecanismo |
+|---|---|
+| `POST /pickup-requests` | verificación manual en el `service`: el usuario autenticado debe ser `student_guardians` en `status = active` del alumno del `enrollments` |
+| `GET /pickup-requests/:id` | verificación manual en el `service`: **OR** entre tutor dueño y miembro de la institución (ver abajo) |
+| `GET /pickup-requests?enrollmentId=` | verificación manual en el `service`: mismo **OR**, resuelto sobre el `enrollments` (ver abajo) |
+| `PATCH /pickup-requests/:id/arrived` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
+| `PATCH /pickup-requests/:id/deliver` | **`InstitutionMembershipGuard`** en modo ruta por recurso: `@InstitutionResource({ entity: PickupRequest })` resuelve el `pickup_requests` por su `:id`, lee su `institution_id` (denormalizado, ADR-018 punto 4) y verifica la membresía antes de llegar al controller. Sin restricción de `role` (ADR-011) |
+| `PATCH /pickup-requests/:id/cancel` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
+
+**Los dos `GET` usan el patrón de verificación manual OR**, no el guard
+compartido: la lectura la permite el tutor dueño **o** cualquier
+`institution_members` de la institución — una disyunción que
+`InstitutionMembershipGuard` no expresa (solo sabe verificar membresía, y
+rechazaría al tutor, que no es miembro de la institución). Es el mismo patrón ya
+resuelto en `GET /enrollments?institutionId=`: la verificación se hace a mano
+dentro del `service`, replicando los mismos `code` de error. Ver
+`docs/arquitectura.md` § "Aislamiento multi-tenant vía
+`InstitutionMembershipGuard`", tercer patrón ("colecciones filtradas por query
+param, fuera del guard"), y `EnrollmentsService` como referencia.
+
 Toda transición de `status` se valida contra la máquina de estados compartida en
 `packages/shared` (`pickup-request-status-machine.ts`, ADR-017); un intento de
-transición inválida devuelve 409.
+transición inválida devuelve `409 INVALID_STATUS_TRANSITION`.
+
+### Forma de los errores
+
+Como en todo el API (ADR-028), el cuerpo de error es
+`{ "code": "string", "message": "string" }`, con `code` en inglés y estable
+(cada frontend traduce por `code`). Los `code` de este contrato se fijaron en
+ADR-031 punto 1: cuatro nuevos (`ENROLLMENT_NOT_APPROVED`,
+`ACTIVE_PICKUP_REQUEST_EXISTS`, `INVALID_STATUS_TRANSITION`,
+`INVALID_DELIVERY_CODE`) y seis reutilizados de fases anteriores sin cambio
+(`NOT_STUDENT_GUARDIAN`, `GUARDIAN_NOT_ACTIVE`, `NOT_INSTITUTION_MEMBER`,
+`NOT_VEHICLE_OWNER`, `RESOURCE_NOT_FOUND`, `INVALID_PAYLOAD`).
 
 ## `POST /pickup-requests`
 
@@ -77,14 +110,21 @@ derivan/generan en el servidor (denormalización de `institution_id`, resolució
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 400 | payload inválido (`enrollmentId` faltante, `arrivalMode` fuera del enum, o combinación de campos de vehículo inválida: `vehicleId` junto con `vehicleDescription`/`vehiclePlate`) |
-| 401 | no autenticado |
-| 403 | el usuario autenticado no es `student_guardians` activo del alumno del `enrollments` |
-| 404 | el `enrollments` no existe |
-| 422 | el `enrollments` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
-| 422 | ya existe un `pickup_requests` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | payload inválido (`enrollmentId` faltante, `arrivalMode` fuera del enum, o combinación de campos de vehículo inválida: `vehicleId` junto con `vehicleDescription`/`vehiclePlate`) |
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_STUDENT_GUARDIAN` | el usuario autenticado no es `student_guardians` del alumno del `enrollments` |
+| 403 | `GUARDIAN_NOT_ACTIVE` | el usuario autenticado es `student_guardians` del alumno pero su `status` es `invited`/`revoked`, no `active` |
+| 403 | `NOT_VEHICLE_OWNER` | el `vehicleId` indicado existe pero pertenece al catálogo de otro tutor |
+| 404 | `RESOURCE_NOT_FOUND` | el `enrollments` no existe, o el `vehicleId` indicado no existe |
+| 422 | `ENROLLMENT_NOT_APPROVED` | el `enrollments` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
+| 422 | `ACTIVE_PICKUP_REQUEST_EXISTS` | ya existe un `pickup_requests` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
+
+Los dos errores de `vehicleId` (`404 RESOURCE_NOT_FOUND` si no existe,
+`403 NOT_VEHICLE_OWNER` si es de otro tutor) aplican **solo** a la vía de
+catálogo. La captura libre (`vehicleDescription`/`vehiclePlate` sin `vehicleId`)
+no consulta `vehicles` y no puede producirlos.
 
 `activationRadiusMeters` no se valida en el servidor: es afordance de cliente
 (ADR-024 punto 7). El servidor no exige que el tutor esté dentro del radio para
@@ -124,11 +164,11 @@ operador lo compare con el que muestra el tutor. La verificación de la entrega
 sigue siendo server-side vía `PATCH .../deliver` (ADR-024 punto 4).
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | no autenticado |
-| 403 | el usuario no es el tutor dueño ni `institution_members` de la institución del `pickup_requests` |
-| 404 | el `pickup_requests` no existe |
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es el tutor dueño **ni** `institution_members` de la institución del `pickup_requests` (falla el OR; se replica el mismo `code` que usa el guard compartido, ADR-031 punto 1) |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
 
 ## `GET /pickup-requests?enrollmentId=...`
 
@@ -164,11 +204,12 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 400 | `enrollmentId` faltante |
-| 401 | no autenticado |
-| 403 | el usuario no es guardián del alumno ni miembro de la institución del `enrollments` |
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | `enrollmentId` faltante o mal formado |
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es guardián del alumno **ni** miembro de la institución del `enrollments` (falla el OR) |
+| 404 | `RESOURCE_NOT_FOUND` | el `enrollments` indicado no existe |
 
 ## `PATCH /pickup-requests/:id/arrived`
 
@@ -182,17 +223,23 @@ El tutor confirma "ya llegué". Ver feature 021. Transición a `arrived`.
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | no autenticado |
-| 403 | el usuario autenticado no es el `guardian_user_id` dueño |
-| 404 | el `pickup_requests` no existe |
-| 409 | transición inválida según la máquina de estados compartida (ADR-017) |
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_STUDENT_GUARDIAN` | el usuario autenticado no es el `guardian_user_id` dueño |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | transición inválida según la máquina de estados compartida (ADR-017): ya está en `arrived`, o en un estado terminal |
 
 ## `PATCH /pickup-requests/:id/deliver`
 
 El staff confirma la entrega verificando el `delivery_code`. Ver feature 021.
 Transición a `delivered`.
+
+Único endpoint del contrato protegido por **`InstitutionMembershipGuard`** (modo
+ruta por recurso: el guard resuelve el `pickup_requests` por su `:id` y compara
+la membresía contra su `institution_id` denormalizado, ADR-018 punto 4). El guard
+absorbe el `404 RESOURCE_NOT_FOUND` y el `403 NOT_INSTITUTION_MEMBER`, y no impone
+ninguna restricción por `role` (ADR-011).
 
 **Request**
 ```json
@@ -205,18 +252,36 @@ Transición a `delivered`.
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | no autenticado |
-| 403 | el usuario no es `institution_members` de la institución del `pickup_requests` (cualquier `role` sirve, ADR-011) |
-| 404 | el `pickup_requests` no existe |
-| 409 | transición inválida según la máquina de estados compartida (ADR-017) |
-| 422 | el `deliveryCode` ingresado no coincide con el del `pickup_requests` |
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | `deliveryCode` faltante o que no es una cadena de 4 dígitos |
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 401 | `INVALID_DELIVERY_CODE` | el `deliveryCode` ingresado no coincide con el del `pickup_requests` |
+| 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es `institution_members` de la institución del `pickup_requests` (cualquier `role` sirve, ADR-011) |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | transición inválida según la máquina de estados compartida (ADR-017): el `pickup_requests` no está en `arrived` |
+
+**`INVALID_DELIVERY_CODE` es `401`, no `422`** (ADR-031 punto 2). Es una
+categoría propia —verificación de una credencial o secreto compartido— y no
+encaja en las dos anteriores: comparar el código tecleado contra
+`pickup_requests.delivery_code` de la misma fila es autoconsulta (lo que por la
+lectura estricta lo llevaría a `409`), pero el recurso **no está en conflicto con
+su estado**: sigue en `arrived`, perfectamente válido, y lo que falló fue un
+secreto que no coincide. Mismo principio que `INVALID_CREDENTIALS` en el login,
+aplicado a una acción concreta en vez de a la sesión.
+
+El orden de validación importa: el estado se valida **antes** que el código, de
+modo que teclear un código sobre un `pickup_requests` ya `delivered` o
+`cancelled` responde `409 INVALID_STATUS_TRANSITION`, no `401`.
 
 Ante un `deliveryCode` incorrecto **no hay bloqueo ni límite de reintentos**
-(verificación presencial, ADR-024 punto 4): el staff puede reintentar. Cada
-intento fallido se registra en `audit_log`
-(`action = pickup_request.delivery_code_mismatch`).
+(verificación presencial, ADR-024 punto 4): el staff puede reintentar. El
+`pickup_requests` permanece en `arrived`, no se fija `completed_at` y no se crea
+fila de `pickup_request_status_history`. Cada intento fallido **sí** se registra
+en `audit_log` con `action = pickup_request.delivery_code_mismatched`,
+`entity_type = 'pickup_request'`, `entity_id` = el id del `pickup_requests` y
+`metadata = null` — no se guarda el código incorrecto tecleado (minimización de
+datos; ADR-031 puntos 7 y 8, `specs/entities/audit_log.md`).
 
 ## `PATCH /pickup-requests/:id/cancel`
 
@@ -230,12 +295,12 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
 ```
 
 **Errores**
-| Código | Caso |
-|---|---|
-| 401 | no autenticado |
-| 403 | el usuario autenticado no es el `guardian_user_id` dueño |
-| 404 | el `pickup_requests` no existe |
-| 409 | transición inválida (ya está en un estado terminal), según la máquina de estados compartida (ADR-017) |
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_STUDENT_GUARDIAN` | el usuario autenticado no es el `guardian_user_id` dueño |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | transición inválida (ya está en un estado terminal), según la máquina de estados compartida (ADR-017) |
 
 ## Referencias
 
@@ -261,10 +326,18 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   exposición del `deliveryCode` al dueño y a los miembros de la institución).
 - ADR-025 (punto 3: captura libre de vehículo vía `vehicleDescription`/`vehiclePlate`;
   punto 5: `enrollments` no aprobado → 422).
+- ADR-028 (forma de los errores: `{ code, message }` en inglés).
+- ADR-031 (punto 1: `code` exacto de cada error, nuevos y reutilizados; punto 2:
+  `INVALID_DELIVERY_CODE` como `401`, tercera categoría de la convención HTTP;
+  puntos 7 y 8: nombre y contenido de la fila de `audit_log`).
+- `docs/arquitectura.md` (§`InstitutionMembershipGuard`: los tres patrones de
+  resolución de `institutionId`, incluido el de verificación manual OR que usan
+  los dos `GET` de este contrato).
 
 ## Preguntas abiertas
 
 Ninguna: la exposición del `deliveryCode` en lectura (dueño + cualquier
 `institution_members` de la institución, sin restricción de `role`) se resolvió en
 ADR-024 (punto 11). El resto de dudas del contrato se resolvieron en ADR-024
-(puntos 1, 4, 7 y 9).
+(puntos 1, 4, 7 y 9) y en ADR-031 (códigos de error exactos, clasificación HTTP
+del `deliveryCode` incorrecto, y mecanismo de autorización de cada endpoint).

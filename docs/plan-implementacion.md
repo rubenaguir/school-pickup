@@ -193,22 +193,40 @@ aislamiento multi-tenant.
 El corazón del producto. Depende de que Fase 5 esté completa (necesita
 `enrollments` aprobados y `delivery_points` configurados).
 
+Los huecos que una revisión previa encontró en las specs de esta fase quedaron
+resueltos en **ADR-031** (códigos de error, estructura del `worker`, suscripción
+por comodín, `eta_calculated_at`, `StubMapsProvider`, nombre y contenido de la
+fila de `audit_log`). Las specs ya reflejan esas decisiones; esta fase solo
+implementa.
+
+- [ ] Migración de la columna `pickup_requests.eta_calculated_at` (timestamptz,
+      nullable; ADR-031 punto 5) — no existe en `InitSchema`
+- [ ] Dependencia `mqtt` (librería de Node) e implementación concreta del port
+      `MqttClient`, consumida por `api` y `worker` (hoy solo existe la interfaz)
+- [ ] `parseLocationTopic()` en `packages/shared`: parser inverso del topic de
+      ubicación, compañero de los builders (ADR-031 punto 4)
 - [ ] `pickups` module en `api`: creación de `pickup_request`, resolución
-      automática de `delivery_point_id` (ADR-012), `delivery_code`, soporte
-      de captura libre de vehículo (ADR-026 punto 3 vía ADR-014)
+      automática de `delivery_point_id` (ADR-012), `delivery_code` con reintento
+      ante colisión (`specs/entities/pickup_request.md`), soporte de captura
+      libre de vehículo (ADR-026 punto 3 vía ADR-014), códigos de error de
+      ADR-031 punto 1
 - [ ] `pickup_request_status_history`: registro de transiciones, usando la
       máquina de estados ya implementada en `packages/shared`
-- [ ] `worker`: suscripción MQTT (usando `MqttClient` y los builders de
-      topics ya implementados), ingesta de ubicación, cálculo de ETA con
-      throttling (20 s / 150 m, ADR-024 punto 2), implementación concreta de
-      `MapsProvider`
+- [ ] `worker`: suscripción MQTT por comodín (ADR-031 punto 4, usando
+      `MqttClient` y los builders/parser de topics), ingesta de ubicación,
+      cálculo de ETA con throttling (20 s / 150 m, ADR-024 punto 2, contra
+      `eta_calculated_at` y `last_location`), y `StubMapsProvider` como
+      implementación de `MapsProvider` (ADR-031 punto 6). Estructura de módulos y
+      ciclo de vida MQTT en `docs/arquitectura.md` § "Estructura del proceso
+      `worker`"
 - [ ] Publicación a topics de tablero y de punto de entrega (ADR-012,
       `docs/arquitectura.md`)
 - [ ] Job programado diario de purga de `location_updates` a 90 días
-      (ADR-018 punto 8, ADR-024 punto 6)
+      (ADR-018 punto 8, ADR-024 punto 6) — requiere `@nestjs/schedule` en el
+      `worker`
 - [ ] `audit_log`: instrumentar en las acciones sensibles ya identificadas
       (aprobaciones, altas/bajas de tutores y de personal,
-      `pickup_request.delivery_code_mismatch`)
+      `pickup_request.delivery_code_mismatched`)
 
 ## Fase 7 — Frontend: `apps/portal`
 
@@ -259,7 +277,7 @@ El corazón del producto. Depende de que Fase 5 esté completa (necesita
 | Pendiente | Bloquea | Estado |
 |---|---|---|
 | Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
-| Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
+| Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto — **ya no bloquea**: `StubMapsProvider` (haversine a velocidad fija, sin proveedor externo ni API key) permite construir y testear todo el slice de Fase 6, igual que `ConsoleEmailProvider` frente a `ResendEmailProvider`. La decisión de fondo sigue pendiente; al tomarla se sustituye la implementación sin tocar a quien la consume. Ver ADR-031 punto 6 |
 | Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
 | Endpoint de búsqueda de instituciones por nombre (`institutions`) — solo existe alta por `joinCode`/`institutionId` ya conocido; falta para la pantalla "Asociar a institución" | Fase 7 (necesita spec antes) | Abierto — detectado al implementar `enrollments` |
 

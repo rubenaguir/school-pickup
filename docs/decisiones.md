@@ -687,6 +687,22 @@ Se resuelven aquí.
        principal sin reasignar antes, o reasignar la primariedad a un guardián
        no activo.
 
+     **Segunda ampliación (revisión previa de Fase 6, ADR-031 punto 2).** Se
+     reconoce una **tercera categoría**, que no encajaba en ninguna de las dos
+     anteriores:
+     - **401**: **fallo de verificación de una credencial o secreto
+       compartido** sobre una acción específica. No es autenticación de sesión
+       (el usuario está autenticado y autorizado), pero responde al mismo
+       principio que `INVALID_CREDENTIALS` en el login: el valor secreto que se
+       presenta no coincide con el almacenado. El caso que la motiva es
+       `INVALID_DELIVERY_CODE` (`PATCH /pickup-requests/:id/deliver`, ADR-031
+       punto 1): comparar el `deliveryCode` tecleado contra
+       `pickup_requests.delivery_code` de esa misma fila es autoconsulta —lo
+       que por la lectura estricta lo llevaría a 409—, pero un código
+       equivocado no es un conflicto de estado del recurso: el recurso está
+       perfectamente en `arrived` y sigue estándolo. Es un secreto que no
+       coincide.
+
      Nota: esta ampliación aclara —sin requerir cambio de código— que
      `specs/api-contracts/institutions.md` (bloqueo de `PATCH` si
      `institution.status != approved`) y la validación de `category`/`type` en
@@ -830,7 +846,9 @@ specs deliberadamente no inventaron. Se resuelven aquí.
    bloquear generaría fricción con niños esperando por un error de tecleo. No hay
    límite de reintentos. Cada intento fallido se registra en `audit_log` con
    `action = pickup_request.delivery_code_mismatch` (convención libre `entity.verb`,
-   ADR-018 punto 9) para trazabilidad.
+   ADR-018 punto 9) para trazabilidad. [Nota: renombrado a
+   delivery_code_mismatched por ADR-031 punto 7, forma participio consistente
+   con el resto de audit_log.action]
 5. **"Reportar incidencia": fuera de alcance.** El botón visible en las pantallas
    diseñadas no tiene entidad ni campo en el modelo. Se confirma fuera de alcance
    de este slice; cuando se aborde será su propio ADR + entidad nueva, no una
@@ -888,6 +906,8 @@ specs deliberadamente no inventaron. Se resuelven aquí.
   `specs/api-contracts/institutions.md`).
 - **Nuevo `action` de `audit_log`:** `pickup_request.delivery_code_mismatch` (sin
   cambio de esquema; `audit_log.action` es convención libre, ADR-018 punto 9).
+  [Nota: renombrado a delivery_code_mismatched por ADR-031 punto 7, forma
+  participio consistente con el resto de audit_log.action]
 - Las 8 specs del slice dejan de marcar preguntas abiertas (salvo la #5 y la #10,
   que quedan como decisiones explícitas: fuera de alcance / diferido a Fase 7–9,
   no como pendientes).
@@ -1399,3 +1419,161 @@ se introduce un criterio distinto para un problema idéntico.
   nuevo persiste `full_name = null` (no `''`); toda lectura de un guardián o
   miembro invitado-no-aceptado debe manejar `fullName: null` explícitamente
   en el cliente.
+
+## ADR-031 — Resolución de los huecos de la revisión previa de Fase 6
+
+**Contexto.** Antes de escribir una sola línea del slice de `pickup_requests`
+(features 018–023 + `worker`) se corrió una revisión previa exhaustiva de sus
+specs contra el código ya construido en las Fases 2–5, con el mismo criterio de
+"spec antes que código" (ADR-021) que se aplicó en las fases anteriores. La
+revisión confirmó que las piezas centrales están sanas —la máquina de estados de
+`packages/shared` coincide transición por transición con ADR-024 punto 8; los
+builders de topics producen exactamente los strings documentados; los índices
+únicos parciales excluyen los estados terminales— pero encontró **cuatro huecos
+bloqueantes** y varios menores que, de no resolverse aquí, se habrían "acuñado
+sobre la marcha" durante la implementación:
+
+1. `specs/api-contracts/pickup-requests.md` documenta ~20 filas de error y
+   **ninguna** tiene el string `code` exacto, solo el status HTTP — exactamente
+   el patrón que en la Fase 5 dejó 36 códigos vivos en el código y ausentes de
+   toda spec.
+2. El `worker` es un esqueleto (`app.module.ts` con `imports: []` y un service
+   placeholder) sin ninguna spec que defina su estructura de módulos, el ciclo
+   de vida de su conexión MQTT ni el wiring de sus ports — el mismo tipo de
+   hueco que `InstitutionMembershipGuard` tuvo antes de construirse.
+3. No existe implementación concreta de `MqttClient` en ningún proceso, ni la
+   dependencia `mqtt` en ningún `package.json`, pese a que la feature 018 exige
+   que el **`api`** publique al crear la recogida.
+4. El throttling de ETA de ADR-024 punto 2 ("20 s **o** 150 m") no tiene dónde
+   guardar su mitad temporal: los 150 m se computan contra `last_location`, pero
+   no existe ninguna columna que registre **cuándo** fue el último recálculo.
+
+**Decisión.**
+
+1. **Códigos de error de `pickup_requests`.** Se acuñan cuatro códigos nuevos:
+   - `ENROLLMENT_NOT_APPROVED` (**422**) — el `enrollments` no está en
+     `status = approved`; cruza hacia otra entidad.
+   - `ACTIVE_PICKUP_REQUEST_EXISTS` (**422**) — ya hay un `pickup_requests` no
+     terminal para ese `enrollment_id`; se decide consultando **otra fila** de la
+     misma tabla, no el estado del recurso propio (que ni existe todavía).
+   - `INVALID_STATUS_TRANSITION` (**409**) — la transición pedida no es válida
+     según la máquina de estados compartida; autoconsulta del estado propio del
+     recurso.
+   - `INVALID_DELIVERY_CODE` (**401**) — el `deliveryCode` tecleado no coincide;
+     categoría nueva, ver punto 2.
+
+   Y se **reutilizan sin cambio** los ya acuñados en la Fase 5:
+   `NOT_STUDENT_GUARDIAN`, `GUARDIAN_NOT_ACTIVE`, `NOT_INSTITUTION_MEMBER`,
+   `NOT_VEHICLE_OWNER`, `RESOURCE_NOT_FOUND` e `INVALID_PAYLOAD`. Reutilizar es
+   deliberado: un frontend que ya traduce `NOT_INSTITUTION_MEMBER` no debe
+   aprender un sinónimo por cada módulo nuevo (ADR-028).
+
+2. **`INVALID_DELIVERY_CODE` inaugura una tercera categoría HTTP: `401` para
+   verificación de credencial/secreto compartido.** La convención de ADR-022
+   punto 5 (ya ampliada por ADR-026) reconocía dos categorías —409 para el
+   conflicto con el estado propio, 422 para la regla que cruza hacia otra
+   entidad o fila— y el `deliveryCode` incorrecto no encaja limpiamente en
+   ninguna: comparar el código tecleado contra `pickup_requests.delivery_code` de
+   la misma fila es formalmente autoconsulta (→ 409), pero el recurso **no está
+   en conflicto con su estado**: sigue en `arrived`, perfectamente válido, y lo
+   que falló fue un secreto que no coincide. Es el mismo principio que
+   `INVALID_CREDENTIALS` en el login, aplicado a una acción concreta en vez de a
+   la sesión. Se documenta como tercera categoría en ADR-022 punto 5.
+
+   Consistente con ADR-024 punto 4, **no hay bloqueo ni límite de reintentos**:
+   la verificación es presencial (tutor y staff cara a cara), no fuerza bruta
+   remota. Cada intento fallido se registra en `audit_log` (puntos 7 y 8).
+
+3. **La estructura del `worker` se documenta en `docs/arquitectura.md`, no como
+   spec aparte.** Mismo tratamiento que recibió la "forma concreta" de
+   `InstitutionMembershipGuard`: es infraestructura de un proceso, no una feature
+   de negocio, y `specs/features/` describe comportamiento observable, no
+   cableado de módulos. La sección expandida cubre la estructura de módulos
+   NestJS standalone, el ciclo de vida de la conexión MQTT (conexión inicial,
+   reconexión, manejo de desconexión, shutdown graceful) y cómo se inyectan
+   `MqttClient` y `MapsProvider`.
+
+4. **El `worker` se suscribe por comodín, no dinámicamente.** Una sola
+   suscripción al patrón MQTT `school-pickup/institution/+/pickup/+/location`
+   (con wildcards `+` de un solo nivel), hecha al arrancar, en vez de
+   suscribirse/desuscribirse a un topic concreto por cada `pickup_requests` que
+   nace y termina. La alternativa dinámica obliga al `worker` a enterarse de cada
+   alta (que ocurre en el `api`, otro proceso) y a reconstruir su set de
+   suscripciones tras cada reconexión o reinicio: complejidad y modos de falla
+   nuevos sin beneficio real, dado que el ACL del broker ya acota qué puede
+   publicar cada cliente.
+
+   Consecuencia directa: el `worker` recibe el `institutionId` y el
+   `pickupRequestId` **solo en el string del topic** (el payload no los lleva), así
+   que hace falta un **parser inverso** en `packages/shared`, compañero de los
+   builders ya existentes. Contradice el criterio original de no construirlo
+   (YAGNI: mientras nadie consumiera topics con comodín, un parser era código sin
+   consumidor) — se justifica ahora precisamente porque aparece el primer
+   consumidor real.
+
+5. **El estado del throttling de ETA vive en una columna, no en la memoria del
+   proceso.** Se agrega `pickup_requests.eta_calculated_at` (`timestamptz`,
+   nullable): marca cuándo se recalculó el ETA por última vez, y es contra ella
+   que el `worker` evalúa la mitad temporal del throttling de ADR-024 punto 2
+   (≥ 20 s). La mitad espacial (≥ 150 m) ya era computable contra `last_location`.
+   Es el mismo patrón que `last_location`, `estimated_arrival_at` y `eta_seconds`:
+   estado del trayecto, persistido en la fila del trayecto.
+
+   Mantenerlo en memoria del `worker` se descarta: se pierde en cada reinicio
+   (tras el cual el proceso recalcularía el ETA en la primera lectura de **cada**
+   trayecto activo, un pico de llamadas facturables al `MapsProvider`) y no
+   sobrevive a una segunda instancia del proceso.
+
+6. **`StubMapsProvider` para no bloquear la Fase 6.** Implementación concreta de
+   `MapsProvider` que estima el ETA por distancia haversine entre origen y
+   destino a una velocidad promedio asumida, sin llamar a ningún proveedor
+   externo ni requerir API key. Mismo patrón, y misma justificación, que
+   `ConsoleEmailProvider` frente a `ResendEmailProvider` (ADR-009): el port ya
+   está definido (ADR-017), así que el resto del slice puede construirse y
+   testearse completo contra una implementación trivial.
+
+   **No resuelve la decisión de fondo:** el proveedor real (Google Maps vs.
+   Mapbox) sigue abierto en la tabla de pendientes de
+   `docs/plan-implementacion.md`. El stub solo evita que esa decisión abierta
+   bloquee el corazón del producto; el día que se elija proveedor, se sustituye
+   la implementación sin tocar a quien la consume.
+
+7. **La acción de auditoría se renombra a forma participio.**
+   `pickup_request.delivery_code_mismatch` (sustantivo) pasa a
+   **`pickup_request.delivery_code_mismatched`** (participio), consistente con
+   todas las acciones ya existentes: `enrollment.approved`,
+   `student_guardian.added`, `institution.suspended`. La convención `entity.verb`
+   de ADR-018 punto 9 pedía un verbo y se había colado un sustantivo; se corrige
+   antes de que exista una sola fila con el nombre viejo, no después.
+
+8. **Contenido de la fila de `audit_log` para esa acción.**
+   `entity_type = 'pickup_request'`; `entity_id` = el id del `pickup_requests`
+   sobre el que se intentó la entrega; `metadata = null`. **No se registra el
+   código incorrecto que se tecleó**: minimización de datos (LFPDPPP): saber que
+   hubo un intento fallido sobre ese trayecto, cuándo y quién lo hizo es todo el
+   valor forense que la fila necesita aportar; el dígito equivocado no agrega
+   ninguno.
+
+**Consecuencias.**
+- **Cambio de esquema:** nueva columna `pickup_requests.eta_calculated_at`
+  (`timestamptz`, nullable). Actualiza `specs/entities/pickup_request.md` y
+  `docs/modelo-datos.md`. **Sin migración todavía:** las tablas de
+  `pickup_requests` ya existen desde `InitSchema`, así que la columna se agrega
+  con su propia migración al implementar el módulo `pickups` (Fase 6), no en esta
+  ronda de documentación.
+- **Nueva función en `packages/shared`** (a implementar en la ronda de código, no
+  en esta): parser inverso del topic de ubicación, compañero de los builders
+  existentes.
+- `docs/arquitectura.md` gana una sección concreta del `worker` (módulos, ciclo de
+  vida MQTT, wiring de ports) y la mención del patrón de suscripción con comodín
+  en la sección de topics.
+- La convención HTTP del proyecto pasa de tres a **cuatro** categorías
+  (400 / 401 / 409 / 422), documentadas juntas en ADR-022 punto 5.
+- `specs/api-contracts/pickup-requests.md` pasa a documentar el `code` exacto de
+  cada error, como `auth.md` — que hasta hoy era el único contrato que lo hacía.
+- Reglas nuevas a forzar por test (ADR-021): el `deliveryCode` incorrecto
+  responde `401 INVALID_DELIVERY_CODE`, deja el `pickup_requests` en `arrived`,
+  no crea fila de historial de estado y **sí** crea la fila de `audit_log` con
+  `metadata = null`; el throttling no recalcula el ETA si
+  `now() - eta_calculated_at < 20 s` y el desplazamiento contra `last_location`
+  es < 150 m.

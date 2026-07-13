@@ -34,7 +34,9 @@ seguridad"); este documento fija los topics y **una estimación** de los payload
 school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
 ```
 
-- **Publica:** la app `parent` (el tutor en camino), vía MQTT.js sobre WSS.
+- **Publica:** la app `parent` (el tutor en camino), vía MQTT.js sobre WSS. Un
+  topic concreto por trayecto, construido con `pickupLocationTopic()` de
+  `packages/shared`.
 - **Consume:** el `worker` (feature 019), que persiste cada lectura en
   `location_updates` y recalcula el ETA con throttling vía `MapsProvider`.
 
@@ -47,6 +49,43 @@ school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
   "recordedAt": "string (timestamptz)"
 }
 ```
+
+### Suscripción del `worker`: comodín, no dinámica (ADR-031 punto 4)
+
+El `worker` **no** se suscribe y desuscribe a un topic concreto por cada
+`pickup_requests` que nace y termina. Se suscribe **una sola vez, al arrancar**, al
+patrón con wildcards `+` (un solo nivel) que cubre todos los trayectos de todas
+las instituciones:
+
+```
+school-pickup/institution/+/pickup/+/location
+```
+
+La alternativa dinámica obligaría al `worker` a enterarse de cada alta —que
+ocurre en el `api`, otro proceso— y a reconstruir su set de suscripciones tras
+cada reconexión o reinicio: complejidad y modos de falla nuevos sin beneficio
+real, dado que el ACL del broker ya acota qué puede publicar cada cliente. Este
+patrón es de **suscripción del servidor**, no un topic de publicación: ningún
+cliente publica nunca a un topic con `+`.
+
+### Parser inverso en `packages/shared` (a implementar en Fase 6)
+
+Consecuencia directa del comodín: el payload de ubicación **no lleva**
+`institutionId` ni `pickupRequestId` (ambos viven solo en el string del topic),
+así que el `worker` necesita recuperarlos del topic entrante. Hace falta un
+parser inverso en `packages/shared`, compañero de los builders ya existentes
+(`pickupLocationTopic`, `boardTopic`, `deliveryPointQueueTopic`):
+
+```ts
+parseLocationTopic(topic: string): { institutionId: string; pickupRequestId: string } | null
+```
+
+Devuelve `null` —no lanza— si el topic no matchea la forma esperada: el `worker`
+descarta el mensaje y lo registra, en vez de caerse por un topic inesperado en un
+broker compartido con otras aplicaciones. Es la única función de este tipo
+prevista: los topics de tablero y de cola solo se publican desde el backend, y
+sus consumidores (`board`, consola de puerta) ya conocen su propio
+`institutionId` y `deliveryPointId` sin necesidad de parsearlos.
 
 ## Topic — feed agregado del tablero
 
@@ -135,8 +174,10 @@ el staff lo teclea).
 - ADR-017 (`MqttClient` y `MapsProvider` como ports).
 - ADR-024 (punto 10: payloads como estimación, revisión en Fase 7–9; punto 3:
   umbral `arriving_lead_minutes`).
+- ADR-031 (punto 4: suscripción del `worker` por comodín y parser inverso
+  `parseLocationTopic` en `packages/shared`).
 - `docs/arquitectura.md` (nombres de topic, ACL por tenant, flujo de tiempo
-  real).
+  real, estructura y ciclo de vida MQTT del `worker`).
 
 ## Preguntas abiertas
 

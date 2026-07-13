@@ -20,7 +20,7 @@ REST API que atiende al portal y a la app del padre. Responsabilidades:
   solo ve y gestiona lo suyo (ver detalle en "Arquitectura de capas y
   convenciones de módulos" más abajo, y ADR-022).
 
-### 2. `worker` (Node/TypeScript)
+### 2. `worker` (NestJS standalone)
 Proceso de larga duración suscrito al broker MQTT. Responsabilidades:
 - Ingerir las ubicaciones que publica la app del padre.
 - Recalcular el ETA con throttling (no en cada tick del GPS) llamando a la API
@@ -29,9 +29,14 @@ Proceso de larga duración suscrito al broker MQTT. Responsabilidades:
 - Publicar el estado actualizado al topic agregado del tablero y, cuando el
   `pickup_request` tiene `delivery_point_id` asignado, también al topic
   específico de esa cola de puerta.
+- Purgar diariamente las `location_updates` fuera de la ventana de retención de
+  90 días (feature 023).
 
 > En Node este patrón es natural (modelo orientado a eventos). Se ejecuta como
 > servicio bajo el orquestador (Docker / systemd).
+
+Su estructura concreta (módulos, ciclo de vida de la conexión MQTT, wiring de
+ports) está más abajo, en "Estructura del proceso `worker`".
 
 ### 3. `portal` (React + Vite)
 Portal administrativo web. Tres roles conviven en el mismo SPA:
@@ -90,10 +95,19 @@ institutions/
 **Inversión de dependencias solo en integraciones volátiles.** Se definen
 interfaces (ports) con implementación concreta inyectada por NestJS
 únicamente donde el proveedor externo es genuinamente propenso a cambiar:
-- `MapsProvider` — cálculo de ETA con tráfico en vivo. Implementación
-  concreta pendiente de elegir (Google Maps o Mapbox). Vive en el `worker`.
+- `MapsProvider` — cálculo de ETA con tráfico en vivo. Vive en el `worker`. La
+  elección del proveedor real (Google Maps o Mapbox) **sigue abierta** en la
+  tabla de pendientes de `docs/plan-implementacion.md`. Implementación concreta
+  actual: **`StubMapsProvider`** — estima el ETA por distancia haversine entre
+  origen y destino a una velocidad promedio asumida, sin llamar a ningún
+  proveedor externo ni requerir API key. Es el mismo patrón que
+  `ConsoleEmailProvider`: permite construir y testear el resto del slice completo
+  sin que una decisión de proveedor aún abierta bloquee el corazón del producto.
+  El día que se elija proveedor se sustituye la implementación sin tocar a quien
+  la consume. Ver ADR-031 punto 6.
 - `EmailProvider` — envío de correo transaccional. Implementación concreta
-  actual: `ResendEmailProvider` (ver ADR-009).
+  actual: `ResendEmailProvider` (ver ADR-009); en desarrollo,
+  `ConsoleEmailProvider`.
 - `MqttClient` — wrapper del cliente MQTT usado por `api` y `worker`, para
   poder testear sin un broker real.
 
@@ -206,6 +220,93 @@ etc. — todavía no existen); queda cubierto por tests unitarios con mocks
 (`apps/api/src/auth/guards/institution-membership.guard.spec.ts`), sin
 aplicarse todavía a ninguna ruta real.
 
+## Estructura del proceso `worker`
+
+Se documenta aquí, y no como una spec propia, por el mismo criterio que la
+"forma concreta" del `InstitutionMembershipGuard`: es el cableado de un proceso,
+no una feature de negocio. `specs/features/` describe comportamiento observable
+(qué se ingiere, cuándo se recalcula el ETA, cuándo se transiciona a `arriving`);
+esta sección describe cómo se ensambla el proceso que lo ejecuta. Ver ADR-031
+punto 3.
+
+**Es una aplicación NestJS standalone**, no un servidor HTTP: arranca con
+`NestFactory.createApplicationContext()` (sin `listen()`), de modo que aprovecha
+el sistema de módulos, la inyección de dependencias y los hooks de ciclo de vida
+de NestJS sin exponer ningún puerto. El `api` es su contraparte HTTP; ambos
+comparten entidades de TypeORM, ports y la máquina de estados de
+`packages/shared`.
+
+**Módulos.** Un módulo por responsabilidad, todos importados por el `AppModule`
+raíz:
+- `MqttModule` — provee la implementación concreta de `MqttClient` (el port de
+  ADR-017) y gestiona la conexión al broker. Es también el que traduce cada
+  mensaje entrante en una llamada al servicio de dominio correspondiente.
+- `LocationIngestionModule` — features 019 y 020: persiste cada lectura en
+  `location_updates`, aplica el throttling, recalcula el ETA vía `MapsProvider` y
+  evalúa la transición automática a `arriving` contra la máquina de estados
+  compartida.
+- `MapsModule` — provee la implementación concreta de `MapsProvider`
+  (`StubMapsProvider` hoy).
+- `PurgeModule` — feature 023: el job diario de retención de `location_updates`,
+  agendado con `@nestjs/schedule` (`@Cron`), de madrugada (ADR-024 punto 6).
+- `TypeOrmModule` y `ConfigModule` — mismas entidades y misma configuración de
+  base de datos que el `api`, apuntando al mismo Postgres.
+
+**Ciclo de vida de la conexión MQTT.** La conexión es un recurso del proceso, no
+de una petición, así que vive en los hooks de NestJS:
+- **Conexión inicial** en `OnModuleInit` del `MqttModule`: conecta al broker con
+  las credenciales del `.env` (nunca anónimo, siempre TLS) y se suscribe **una
+  sola vez** al patrón con comodín
+  `school-pickup/institution/+/pickup/+/location` (ADR-031 punto 4). Si la
+  conexión inicial falla, el arranque falla ruidosamente: un `worker` vivo pero
+  desconectado es peor que uno caído, porque nadie se entera.
+- **Reconexión automática**, delegada a la librería `mqtt` de Node (que ya la
+  implementa con backoff): el `worker` no reimplementa la lógica de reintento. Al
+  reconectar, la suscripción se restablece — y como es **una sola** suscripción
+  con comodín y no un set dinámico por trayecto, no hay estado que reconstruir.
+  Esa es justamente la razón de fondo del comodín.
+- **Desconexión:** las lecturas de ubicación publicadas mientras el `worker`
+  está caído se pierden (QoS 0, ver abajo). Es aceptable y deliberado: el GPS
+  del tutor emite una lectura nueva cada pocos segundos, así que el ETA se
+  recupera solo en cuanto la conexión vuelve. No se persiste una cola de
+  mensajes no procesados para ese stream. Las transiciones de estado no
+  publicadas por una desconexión, en cambio, sí importan — ver QoS 1 abajo.
+- **QoS distinto según la dirección del mensaje, no un valor único para todo
+  MQTT:**
+  - **QoS 0** ("at most once") en la ingesta de ubicación
+    (`parent → worker`, topic `.../pickup/{pickupRequestId}/location`): es un
+    stream de estado efímero donde la siguiente lectura de GPS reemplaza a la
+    anterior, no un evento transaccional. Perder una lectura no tiene
+    consecuencia — llega otra en segundos — y garantizar su entrega costaría
+    latencia y estado en el broker para nada.
+  - **QoS 1** ("at least once") en la publicación de transiciones de estado
+    (`worker`/`api` → `board` y `delivery-point/.../queue`, features 018–022):
+    a diferencia de la ubicación, una transición de `pickup_request.status`
+    ocurre **una sola vez** en la vida del trayecto — no hay "el siguiente
+    mensaje" que corrija una pérdida. Perder un `arrived` o un `delivered` por
+    QoS 0 dejaría el tablero o la consola de puerta mostrando un estado
+    obsoleto indefinidamente, sin ningún mensaje posterior que lo corrija. QoS
+    1 admite duplicados (un consumidor idempotente por `pickupRequestId` +
+    `status` los absorbe sin problema), pero no admite pérdidas silenciosas.
+  - La fuente de verdad del trayecto sigue siendo Postgres, no el broker, en
+    ambos casos: MQTT es el canal de tiempo real, no el sistema de registro.
+- **Shutdown graceful:** `app.enableShutdownHooks()` ya está activo; en
+  `OnModuleDestroy` el `MqttModule` cierra la conexión limpiamente
+  (`MqttClient.disconnect()`) para no dejar sesiones colgadas en el broker.
+
+**Wiring de los ports.** Los tres se inyectan por token (`Symbol`), nunca por su
+clase concreta, exactamente como el `api` inyecta `EmailProvider`:
+- `MQTT_CLIENT` → la implementación concreta sobre la librería `mqtt` de Node.
+- `MAPS_PROVIDER` → `StubMapsProvider` (ver arriba; el proveedor real sigue
+  pendiente).
+- `EmailProvider` **no se inyecta en el `worker`**: ninguna de sus features
+  (019–023) envía correo. Si en el futuro lo necesitara, se importa el mismo
+  módulo que ya usa el `api`.
+
+Los consumidores (`LocationIngestionModule`, `PurgeModule`) dependen solo de las
+interfaces, así que los tests corren sin broker ni proveedor de mapas real,
+que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
+
 ## Flujo de tiempo real (recogida)
 
 1. El tutor toca "voy en camino" y elige la institución (el alumno asiste a
@@ -246,6 +347,18 @@ aplicarse todavía a ninguna ruta real.
   school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
       # ubicación publicada por la app del padre
   ```
+- **Patrón de suscripción del `worker` (comodín).** El `worker` no se suscribe a
+  un topic de ubicación por cada trayecto: se suscribe una sola vez, al arrancar,
+  al patrón con wildcards `+` (un solo nivel) que los cubre todos:
+  ```
+  school-pickup/institution/+/pickup/+/location
+  ```
+  Es un patrón de **suscripción del servidor**, no un topic de publicación:
+  ningún cliente publica jamás a un topic con `+`. Como el payload no lleva
+  `institutionId` ni `pickupRequestId` (viven solo en el string del topic), el
+  `worker` los recupera con un parser inverso en `packages/shared`, compañero de
+  los builders de topics. Ver ADR-031 punto 4 y
+  `specs/api-contracts/pickup-realtime-mqtt.md`.
 - **ACL por tenant** en el broker: cada cliente solo puede publicar/suscribirse
   a los topics de la institución a la que pertenece. Un tutor de una institución
   NO debe poder suscribirse a los topics de otra. Cualquier `institution_member`
@@ -294,6 +407,7 @@ El código es visible, vía `GET`, tanto para el tutor dueño del
 asociada, sin restricción de `role` — consistente con ADR-011 (acceso
 abierto a la consola de puerta). Un `delivery_code` incorrecto no bloquea ni
 limita reintentos (es verificación presencial, no un vector de ataque
-remoto): cada intento fallido se registra en `audit_log`
-(`pickup_request.delivery_code_mismatch`) para trazabilidad. Ver ADR-024,
-puntos 4 y 11.
+remoto): cada intento fallido responde `401 INVALID_DELIVERY_CODE` y se registra
+en `audit_log` (`pickup_request.delivery_code_mismatched`, con `metadata = null`:
+no se guarda el código tecleado) para trazabilidad. Ver ADR-024, puntos 4 y 11, y
+ADR-031, puntos 1, 2, 7 y 8.

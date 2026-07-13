@@ -62,15 +62,24 @@ contexto de verificación de identidad en el punto de entrega:
 - Se publica el estado a los topics; la app del padre recibe la confirmación al
   instante (sin push, por MQTT con la app abierta).
 
-### Ante un `delivery_code` incorrecto (ADR-024, punto 4)
+### Ante un `delivery_code` incorrecto (ADR-024, punto 4; ADR-031, puntos 2, 7 y 8)
 - **No hay bloqueo ni límite de reintentos**: es una verificación presencial
   (tutor y staff cara a cara), no fuerza bruta remota; bloquear generaría
   fricción real con niños esperando por un error de tecleo.
+- La respuesta es `401 INVALID_DELIVERY_CODE` (ADR-031 puntos 1 y 2: fallo de
+  verificación de un secreto compartido, tercera categoría de la convención HTTP
+  del proyecto — no es un conflicto con el estado del recurso, que sigue
+  perfectamente válido en `arrived`).
 - Cada intento fallido se registra en `audit_log` con
-  `action = pickup_request.delivery_code_mismatch` (convención libre
-  `entity.verb`, ADR-018 punto 9) para trazabilidad. El `pickup_requests`
-  permanece en `arrived`; no se fija `completed_at` ni se crea fila de historial
-  de estado.
+  `action = pickup_request.delivery_code_mismatched` (convención `entity.verb`
+  con el verbo en participio, ADR-018 punto 9 y ADR-031 punto 7),
+  `entity_type = 'pickup_request'`, `entity_id` = el id del `pickup_requests` y
+  `metadata = null` — **no se guarda el código incorrecto tecleado**
+  (minimización de datos, ADR-031 punto 8). El `pickup_requests` permanece en
+  `arrived`; no se fija `completed_at` ni se crea fila de historial de estado.
+- El estado se valida **antes** que el código: teclear un código sobre un
+  `pickup_requests` ya `delivered` o `cancelled` responde
+  `409 INVALID_STATUS_TRANSITION`, no `401`.
 
 ## Casos Given/When/Then
 
@@ -115,9 +124,12 @@ Given un pickup_request en status = arrived con delivery_code = C
   And quien confirma es institution_member de esa institución
 When ingresa un delivery_code distinto de C
 Then la entrega no se confirma: status permanece en arrived
+  And la respuesta es 401 INVALID_DELIVERY_CODE (ADR-031 puntos 1 y 2)
   And no se crea fila de historial de estado ni se fija completed_at
   And se registra el intento fallido en audit_log
-      (action = pickup_request.delivery_code_mismatch, ADR-024 punto 4)
+      (action = pickup_request.delivery_code_mismatched, entity_type =
+       'pickup_request', entity_id = el id del pickup_request, metadata = null
+       — ADR-024 punto 4, ADR-031 puntos 7 y 8)
   And el staff puede reintentar sin límite (verificación presencial, sin bloqueo)
 ```
 
@@ -156,6 +168,9 @@ agregado y, si hay `delivery_point_id`, a la cola del punto de entrega. Ver
 - ADR-024 (punto 4: `delivery_code` incorrecto sin bloqueo, con registro en
   `audit_log`; punto 8: `arrived` admitido desde `en_route` y desde `arriving`;
   punto 11: el `delivery_code` es visible en la consola del operador).
+- ADR-031 (puntos 1 y 2: `401 INVALID_DELIVERY_CODE` como tercera categoría de la
+  convención HTTP; punto 7: nombre de la acción en participio; punto 8:
+  `entity_type`/`entity_id`/`metadata` de la fila de `audit_log`).
 - `specs/entities/pickup_request.md`,
   `specs/entities/pickup_request_status_history.md`,
   `specs/entities/institution_member.md`,
