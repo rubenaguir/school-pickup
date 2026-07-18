@@ -63,7 +63,8 @@ apps/
   parent/     App del padre (PWA React)
   board/      Tablero de institución (React)
 packages/
-  shared/     Tipos TypeScript compartidos entre apps
+  shared/     Tipos, entidades TypeORM, ports, adapters y la máquina de
+              estados compartidos entre apps
 infra/        Referencia de infraestructura externa (postgres, mqtt, ACL)
 docs/         Documentación (español)
 ```

@@ -1267,6 +1267,20 @@ registrado. Se resuelven ambas aquí antes de implementar Fase 4.
    cada frontend traduce por `code` en su propia capa de i18n. `message`
    queda como texto de desarrollo/logs (consistente con "código en inglés"
    de `CLAUDE.md`), nunca se muestra directo al usuario final.
+
+   **Enmienda (Fase 6, `pickups`):** `INVALID_PAYLOAD` es el único `code`
+   del proyecto que es **muchos-a-uno**: cubre cualquier regla de
+   `class-validator` de cualquier DTO, a diferencia del resto de los `code`
+   (1-a-1 con su causa de negocio). Por eso, y solo para `INVALID_PAYLOAD`,
+   el body de error incluye además un campo `details` — un arreglo de
+   `{ property, constraints }`, uno por cada `ValidationError` que reporta
+   `class-validator` — para poder distinguir cuál campo/regla falló sin
+   leer el código fuente del validador. `constraints` sigue el mismo
+   criterio que `message` arriba: texto de desarrollo/logs, no listo para
+   mostrar al usuario final sin traducción del frontend. El resto de los
+   `code` del proyecto permanece como `{ code, message }` sin este campo,
+   por ser ya suficientemente específicos por sí mismos. Shape documentado
+   una sola vez en `specs/api-contracts/README.md`.
 2. **Registro de institución: reutilizar cuenta existente solo si la
    contraseña coincide.** Si el email del administrador ya existe como
    `users` y la contraseña enviada coincide con esa cuenta, se reutiliza:
@@ -1288,7 +1302,7 @@ registrado. Se resuelven ambas aquí antes de implementar Fase 4.
   decía "reutilizado si ya existía", sin ese detalle).
 - Ningún cambio de esquema de base de datos.
 
-## ADR-029 — Columna compañera de solo lectura `institutionId` en 5 entidades, para `InstitutionMembershipGuard`
+## ADR-029 — Columna compañera de solo lectura `institutionId` en 6 entidades, para `InstitutionMembershipGuard`
 
 **Contexto.** Al implementar `InstitutionMembershipGuard` (ADR-022 punto 4) en
 su modo `@InstitutionResource` se detectó que las entidades candidatas a
@@ -1351,6 +1365,19 @@ para estas 5 entidades.
   una nota en "Invariantes de negocio" documentando la propiedad compañera.
 - Ningún cambio en `InstitutionMembershipGuard` ni en su contrato
   (`InstitutionResourceOptions`).
+
+[Nota: extendido a una 6ª entidad, `PickupRequest`, al implementar
+`PATCH /pickup-requests/:id/deliver` (feature 021) — `pickup_requests`
+también tiene una relación directa de un solo salto a `institutions`
+(`institution_id`, denormalizada por ADR-018 punto 4 para evitar el join
+multi-hop vía `enrollments`, no para este propósito), y quedó fuera de la
+lista original de 5 solo porque el guard todavía no tenía ningún endpoint
+`@InstitutionResource` sobre `pickup_requests` en ese momento. Mismo patrón,
+misma columna física, mismo `insert:false, update:false` — salvo que aquí
+`nullable` se omite porque `institution_id` ya es `NOT NULL` en el esquema
+de `pickup_requests`. Verificado sin cambio de esquema, igual que las 5
+originales. `specs/entities/pickup_request.md` gana la nota
+correspondiente.]
 
 ## ADR-030 — `users.full_name` pasa a nullable
 
@@ -1511,6 +1538,16 @@ sobre la marcha" durante la implementación:
    consumidor) — se justifica ahora precisamente porque aparece el primer
    consumidor real.
 
+   **Ampliación (implementación del adapter concreto).** El QoS por dirección
+   ya estaba decidido arriba (0 para ubicación, 1 para transiciones de
+   estado), pero no se había anticipado que fuera el propio port quien debía
+   exponerlo por llamada — se descubrió al implementar la clase concreta de
+   `MqttClient`. El port `MqttClient.publish()` expone `qos: 0 | 1` como
+   parámetro **requerido** (sin default), para que cada caller decida
+   explícitamente en vez de heredar un valor implícito: evita que una
+   transición de estado se publique por error con QoS 0 (pérdida silenciosa)
+   por un olvido del caller.
+
 5. **El estado del throttling de ETA vive en una columna, no en la memoria del
    proceso.** Se agrega `pickup_requests.eta_calculated_at` (`timestamptz`,
    nullable): marca cuándo se recalculó el ETA por última vez, y es contra ella
@@ -1537,6 +1574,15 @@ sobre la marcha" durante la implementación:
    `docs/plan-implementacion.md`. El stub solo evita que esa decisión abierta
    bloquee el corazón del producto; el día que se elija proveedor, se sustituye
    la implementación sin tocar a quien la consume.
+
+   **Enmienda — valores concretos del stub.** Velocidad promedio asumida:
+   30 km/h (`STUB_AVERAGE_SPEED_KMH`,
+   `apps/worker/src/maps/stub-maps.provider.ts`). Destino del cálculo:
+   `institutions.location` (confirmado contra
+   `specs/features/020-transicion-arriving.md`, que ya compara
+   `last_location` contra la ubicación de la institución). Ambos son
+   constantes del stub únicamente — no representan ninguna decisión sobre el
+   proveedor real (Google/Mapbox), que sigue abierta.
 
 7. **La acción de auditoría se renombra a forma participio.**
    `pickup_request.delivery_code_mismatch` (sustantivo) pasa a
@@ -1577,3 +1623,178 @@ sobre la marcha" durante la implementación:
   `metadata = null`; el throttling no recalcula el ETA si
   `now() - eta_calculated_at < 20 s` y el desplazamiento contra `last_location`
   es < 150 m.
+
+## ADR-032 — Institución no aprobada también bloquea la creación de `pickup_request`
+
+**Contexto.** Al implementar la feature 018 (`POST /pickup-requests`) se
+encontró un hueco antes de escribir código: la precondición documentada
+("el `enrollments` debe estar en `status = approved`", ADR-018 punto 2) solo
+verifica el estado del `enrollments`, nunca el de su `institutions`. Pero
+`institutions.status` puede transicionar `approved → suspended` **después**
+de que sus `enrollments` ya fueron aprobados (ADR-018 punto 2 solo condiciona
+la transición `pending → approved` del enrollment en el momento de su
+aprobación, no impide que la institución se suspenda más tarde). Ni
+`specs/features/018-crear-pickup-request.md` ni la tabla de errores de
+`specs/api-contracts/pickup-requests.md` contemplan re-verificar
+`institutions.status` en cada creación de `pickup_request`, dejando abierta la
+posibilidad de que un tutor inicie una recogida sobre una institución
+suspendida mientras el `enrollments` subyacente sigue en `approved`.
+
+**Decisión.** Se agrega una verificación cruzada adicional al crear un
+`pickup_request`: además de `enrollments.status = approved`, se exige
+`institutions.status = approved` para la institución del enrollment
+(denormalizada en `pickup_requests.institution_id`, ADR-018 punto 4). Se
+**reutiliza** el `code` `INSTITUTION_NOT_APPROVED` (**422**) ya acuñado en la
+Fase 5 para el mismo tipo de chequeo en `EnrollmentsService.approve()` — mismo
+criterio de reutilización de ADR-031 punto 1: un frontend que ya traduce ese
+`code` no debe aprender un sinónimo para la misma situación de negocio en un
+endpoint distinto.
+
+Queda fijado el orden de validación de `POST /pickup-requests`: ownership del
+guardián (`NOT_STUDENT_GUARDIAN`/`GUARDIAN_NOT_ACTIVE`) → `enrollment.status`
+(`ENROLLMENT_NOT_APPROVED`) → `institution.status`
+(`INSTITUTION_NOT_APPROVED`) → recogida activa duplicada para el mismo
+`enrollment_id` (`ACTIVE_PICKUP_REQUEST_EXISTS`).
+
+**Consecuencias.**
+- `specs/features/018-crear-pickup-request.md` gana una precondición nueva y
+  un caso Given/When/Then de rechazo simétrico al de "enrollment no
+  aprobado".
+- `specs/api-contracts/pickup-requests.md` gana una fila nueva en la tabla de
+  errores de `POST /pickup-requests`: `422 INSTITUTION_NOT_APPROVED`.
+- Regla nueva a forzar por test (ADR-021): crear un `pickup_request` sobre un
+  `enrollments` en `status = approved` cuya institución está `suspended`
+  responde `422 INSTITUTION_NOT_APPROVED`, no `201`.
+- No se modifica `ADR-018` ni `ADR-031`: las ADRs de este proyecto son
+  append-only; esta corrección se documenta como decisión nueva, mismo
+  tratamiento que ADR-025/026 sobre huecos de ADR-018.
+
+## ADR-033 — Las entidades de TypeORM se mudan a `packages/shared`, tras un subpath
+
+**Contexto.** El `worker` necesita las mismas entidades de TypeORM que el `api`
+(`PickupRequest`, `LocationUpdate`, `Institution` y
+`PickupRequestStatusHistory` como mínimo, para las features 019–023), pero las
+14 entidades vivían solo en `apps/api/src/database/entities/`. `apps/worker` no
+depende de `@casillego/api`, y `@casillego/api` es `private` y sin campo
+`exports`: no había forma de importarlas sin duplicarlas —dos definiciones del
+mismo esquema divergiendo en silencio— o sin acoplar un proceso al otro.
+Detectado en la revisión previa a la implementación del `worker`, junto con dos
+deudas que se arrastran en el mismo cambio: la columna `eta_calculated_at`
+(decidida en ADR-031 punto 5, documentada en specs, nunca implementada — su
+migración quedó huérfana entre dos tareas, porque el módulo `pickups` de
+creación no la necesitaba) y las dependencias faltantes de `apps/worker`.
+
+`docs/arquitectura.md` ya afirmaba que `api` y `worker` "comparten entidades de
+TypeORM, ports y la máquina de estados de `packages/shared`". Era falso para las
+entidades; esta decisión lo vuelve cierto.
+
+**Decisión.**
+
+1. **Las 14 entidades se mudan a `packages/shared/src/entities/`**, junto con
+   `pickup-request-status.values.ts` (valor en runtime que consumen dos de
+   ellas). Se mueven **las 14 completas**, no solo las que el `worker` necesita
+   hoy: tener el esquema partido entre dos ubicaciones es peor que cualquiera de
+   las dos ubicaciones por separado. El criterio es *framework-light* —las
+   entidades dependen de `typeorm`, no de NestJS—, el mismo que ya permite un
+   adapter concreto (`node-mqtt-client.ts`) en `packages/shared`.
+
+2. **Se exponen tras el subpath `@casillego/shared/entities`, NO desde el barrel
+   raíz `index.ts`.** Es el punto del que depende todo lo demás, y hay dos
+   razones independientes, ambas bloqueantes:
+   - **Colisión de nombres.** `packages/shared/src/types/*` ya exporta interfaces
+     llamadas `User`, `Institution`, `PickupRequest`… — los mismos 14 nombres que
+     las clases de entidad. Un `export * from './entities'` en el barrel raíz
+     colisiona 14 veces. Los dos modelos son legítimos y distintos (la interfaz
+     es la forma de cable, con `createdAt: string` ISO; la entidad es el mapeo de
+     BD, con `Date`), así que conviven — pero no en el mismo barrel.
+   - **Los frontends.** `portal`, `parent` y `board` dependen de
+     `@casillego/shared` y heredan el `paths` de `tsconfig.base.json`
+     (`@casillego/shared` → `packages/shared/src/index.ts`), así que su
+     `tsc --noEmit` typechequea el **fuente** de shared, no su `dist`. Sin
+     `experimentalDecorators` y con `useDefineForClassFields: true`, cualquier
+     entidad en el barrel raíz rompe los tres builds con TS1240 — y `vite build`
+     además arrastraría `typeorm` (Node-only) al bundle del navegador.
+
+   **La analogía con `mqtt` no aplica, y conviene decirlo:** MQTT.js es
+   isomórfico —los frontends lo usan legítimamente sobre WSS, es su cliente de
+   tiempo real—, mientras que `typeorm` no tiene nada que hacer en un navegador.
+   Que `mqtt` esté en el barrel raíz no autoriza a que `typeorm` lo esté.
+
+3. **El subpath es CJS-only.** `tsconfig.esm.json` excluye `src/entities/**`.
+   Sus únicos consumidores (`api` y `worker`) resuelven por `require`, y un doble
+   build CJS+ESM produciría **dos identidades de clase distintas** para el
+   registro global de metadata de TypeORM, que es un singleton de proceso. La
+   copia ESM sería peso muerto cuyo único efecto posible es romper algo.
+
+   El subpath se sirve bajo la condición **`default`**, no bajo `require`: vitest
+   resuelve con la condición `import` y fallaba con `"./entities" is not exported
+   under the conditions ["node","development","import"]`. La respuesta correcta
+   **no** es compilar también a ESM —eso reintroduce exactamente la doble
+   identidad que este punto evita—, sino servir **el mismo y único** artefacto CJS
+   a cualquier condición. Un solo build, una sola identidad de clase, alcanzable
+   desde herramientas ESM.
+
+4. **Hacen falta `exports` y `typesVersions`, no solo `exports`.** `apps/api` y
+   `apps/worker` compilan con `moduleResolution: "Node"` (node10), que **ignora
+   el campo `exports`**. Node en runtime sí lo respeta; TypeScript no. Sin
+   `typesVersions`, el subpath resuelve en ejecución pero no typechequea.
+
+5. **`data-source.ts` deja de usar un glob.** Usaba
+   `join(__dirname, 'entities', '*.entity.{ts,js}')`. Tras la mudanza eso resuelve
+   a **cero entidades**, y TypeORM **no falla con un set vacío**: trataría el
+   esquema como inexistente y `migration:generate` emitiría una migración que
+   DROPea las 14 tablas. Pasa a `Object.values(entities)` sobre el import
+   explícito, como ya hacía `database.module.ts`. De aquí se sigue un invariante:
+   **`src/entities/index.ts` exporta solo las 14 clases** — nada de
+   `PICKUP_REQUEST_STATUS_VALUES`, que TypeORM recibiría como si fuera una
+   entidad más.
+
+6. **`geo-point.ts` se muda también**, pero a `packages/shared/src/types/` y **sí**
+   entra al barrel raíz: es una interfaz pura (la forma de cable de las columnas
+   `geography(Point,4326)`), sin dependencia de typeorm, y `api` la necesita fuera
+   de las entidades para su mapper de `LatLng`.
+
+**Enmienda (extracción del patrón de transición compartido).** Al extraer
+`applyPickupRequestTransition` (status + fila de historial, ver `packages/shared/src/pickup-request-transition.ts`)
+apareció un tercer subpath, **`@casillego/shared/pickup-request-transition`**,
+mismo mecanismo que `./entities` en los puntos 2–4 de arriba: condición
+`default` + `typesVersions`, excluido del build ESM. La razón es la misma que
+la del punto 2: `pickup-request-transition.ts` recibe un `EntityManager` de
+`typeorm` y usa `PickupRequest`/`PickupRequestStatusHistory` como **valores**
+(`manager.getRepository(...)`), no solo como tipos — igual que las entidades
+mismas, no puede vivir en el barrel raíz sin reintroducir `typeorm` al bundle
+de los 3 frontends. `pickup-request-payloads.ts` (los builders de payload de
+board/cola, extraídos en el mismo cambio) sí vive en el barrel raíz: es
+*framework-free*, sin un solo import de `typeorm`.
+
+**Alternativas descartadas.**
+- **Barrel raíz con las entidades renombradas** (`UserEntity`, …): resuelve la
+  colisión pero no el problema real — los frontends seguirían typechequeando
+  decoradores y `typeorm` seguiría entrando al bundle.
+- **Paquete aparte `@casillego/db`**: más limpio en el grafo de dependencias
+  (shared nunca declararía `typeorm`), pero un workspace nuevo por un problema que
+  el subpath ya resuelve. Reconsiderable si `packages/shared` acumulara más
+  dependencias Node-only.
+
+**Consecuencias.**
+- `packages/shared` gana `typeorm` y `reflect-metadata` como dependencias, y
+  `experimentalDecorators`/`emitDecoratorMetadata` en sus **tres** tsconfigs
+  (`tsconfig.cjs.json`, `tsconfig.json` y el que resuelven eslint y vitest). **No**
+  se hoistean a `tsconfig.base.json`: se los impondría a los frontends.
+- Los ~60 archivos de `apps/api` que importaban entidades por ruta profunda pasan a
+  `@casillego/shared/entities`. Las migraciones no se tocan (son SQL crudo, no
+  importan entidades).
+- `packages/shared` pasa a alojar dos modelos paralelos de las mismas 14 tablas
+  (interfaces en `types/`, clases en `entities/`). Es deliberado: sirven a
+  consumidores distintos y ninguno puede sustituir al otro.
+- El orden de `npm run check` (lint → format → build → test) se vuelve más frágil:
+  el lint type-aware resuelve `@casillego/shared/entities` contra `dist/`, así que
+  en árbol limpio hay que correr `npm run build:shared` antes. Ya era cierto para el
+  barrel raíz; ahora aplica a más código.
+- La columna `eta_calculated_at` queda por fin creada (migración
+  `1784268553792-EtaCalculatedAt`). `specs/entities/pickup_request.md` y
+  `docs/modelo-datos.md` ya la documentaban desde ADR-031: no se tocan.
+- `apps/worker` gana `typeorm`, `@nestjs/typeorm`, `pg` (mismas versiones que el
+  `api`) y `@nestjs/schedule` (feature 023, aún sin consumir). **Sin
+  `@nestjs/config`**: el `worker` usará `process.loadEnvFile()`, igual que el `api`
+  — que nunca usó `ConfigModule`, pese a que `docs/arquitectura.md` lo afirmaba.

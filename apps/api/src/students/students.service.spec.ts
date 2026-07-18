@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { StudentsService } from './students.service';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
+import { Student, StudentGuardian } from '@casillego/shared/entities';
 
 function buildStudentGuardianLink(overrides?: Partial<StudentGuardian>): StudentGuardian {
   return {

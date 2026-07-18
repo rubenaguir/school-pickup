@@ -7,8 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, IsNull, LessThanOrEqual, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import { isUniqueViolation } from '../common/db-errors.util';
-import { DismissalException } from '../database/entities/dismissal-exception.entity';
-import type { Institution } from '../database/entities/institution.entity';
+import { DismissalException, type Institution } from '@casillego/shared/entities';
 import { CreateDismissalExceptionDto } from './dto/create-dismissal-exception.dto';
 import { UpdateDismissalExceptionDto } from './dto/update-dismissal-exception.dto';
 import type { DismissalExceptionResponse, ListDismissalExceptionsResponse } from './dto/responses';

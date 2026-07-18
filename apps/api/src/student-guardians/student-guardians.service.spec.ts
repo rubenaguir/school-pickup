@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { StudentGuardiansService } from './student-guardians.service';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
-import { User } from '../database/entities/user.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import { Student, StudentGuardian, User, AuditLog } from '@casillego/shared/entities';
 import type { ActivationTokenPayload } from '../auth/activation-token.service';
 
 function buildStudent(overrides?: Partial<Student>): Student {

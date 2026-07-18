@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import type { InstitutionMember } from '../database/entities/institution-member.entity';
+import { type InstitutionMember } from '@casillego/shared/entities';
 
 interface InstitutionScopedRequest {
   institutionMembership?: InstitutionMember;

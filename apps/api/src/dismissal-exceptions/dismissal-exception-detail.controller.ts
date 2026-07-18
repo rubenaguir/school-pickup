@@ -12,8 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
 import { InstitutionResource } from '../auth/guards/institution-resource.decorator';
-import { DismissalException } from '../database/entities/dismissal-exception.entity';
-import type { InstitutionMember } from '../database/entities/institution-member.entity';
+import { DismissalException, type InstitutionMember } from '@casillego/shared/entities';
 import { DismissalExceptionsService } from './dismissal-exceptions.service';
 import { assertAdmin } from './assert-admin.util';
 import { UpdateDismissalExceptionDto } from './dto/update-dismissal-exception.dto';

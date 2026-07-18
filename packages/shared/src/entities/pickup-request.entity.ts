@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { ArrivalMode, PickupRequestStatus } from '@casillego/shared';
+import type { ArrivalMode, PickupRequestStatus } from '../types/pickup-request';
 import { GeoPoint } from '../types/geo-point';
 import { Enrollment } from './enrollment.entity';
 import { Institution } from './institution.entity';
@@ -56,6 +56,14 @@ export class PickupRequest {
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
 
+  // Read-only companion of the `institution` relation above, same physical
+  // column (ADR-029, extended here): lets InstitutionMembershipGuard's
+  // @InstitutionResource read the FK as a scalar without eager-loading
+  // Institution. Not nullable, unlike the other 5 ADR-029 entities — this
+  // column is already NOT NULL in the schema.
+  @Column({ name: 'institution_id', type: 'uuid', insert: false, update: false })
+  institutionId!: string;
+
   @ManyToOne(() => User, (user) => user.pickupRequests, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'guardian_user_id' })
   guardian!: User;
@@ -85,6 +93,13 @@ export class PickupRequest {
 
   @Column({ name: 'eta_seconds', type: 'int', nullable: true })
   etaSeconds!: number | null;
+
+  // Persisted throttling state for the worker's ETA recalculation: the time half
+  // (>= 20 s) is evaluated against this column, the spatial half (>= 150 m)
+  // against last_location. Kept on the row, not in worker memory, so it survives
+  // a restart and a second process instance. See ADR-024 pt.2 and ADR-031 pt.5.
+  @Column({ name: 'eta_calculated_at', type: 'timestamptz', nullable: true })
+  etaCalculatedAt!: Date | null;
 
   @Column({
     name: 'last_location',

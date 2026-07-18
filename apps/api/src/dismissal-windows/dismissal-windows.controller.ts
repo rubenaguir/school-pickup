@@ -1,7 +1,7 @@
 import { Body, Controller, Param, Post, Query, Req, UseGuards, Get } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import type { InstitutionMember } from '../database/entities/institution-member.entity';
+import { type InstitutionMember } from '@casillego/shared/entities';
 import { DismissalWindowsService } from './dismissal-windows.service';
 import { assertAdmin } from './assert-admin.util';
 import { CreateDismissalWindowDto } from './dto/create-dismissal-window.dto';

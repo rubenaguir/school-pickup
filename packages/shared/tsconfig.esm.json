@@ -6,5 +6,15 @@
     "outDir": "./dist/esm",
     "rootDir": "./src"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  // TypeORM entities are CJS-only: api and worker are their only consumers and
+  // both resolve via `require`. A dual build would produce two distinct class
+  // identities for TypeORM's global metadata registry. See ADR-033.
+  // pickup-request-transition.ts (and its .test.ts) import those entity
+  // classes as values, so both are excluded for the same reason.
+  "exclude": [
+    "src/entities/**",
+    "src/pickup-request-transition.ts",
+    "src/pickup-request-transition.test.ts"
+  ]
 }

@@ -10,10 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
-import { User } from '../database/entities/user.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import { Student, StudentGuardian, User, AuditLog } from '@casillego/shared/entities';
 import {
   ActivationTokenService,
   type ActivationTokenPayload,

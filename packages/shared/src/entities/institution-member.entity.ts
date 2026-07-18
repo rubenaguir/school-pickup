@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { InstitutionMemberRole } from '@casillego/shared';
+import type { InstitutionMemberRole } from '../types/institution-member';
 import { Institution } from './institution.entity';
 import { User } from './user.entity';
 

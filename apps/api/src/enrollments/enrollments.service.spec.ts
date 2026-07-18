@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EnrollmentsService } from './enrollments.service';
-import { Enrollment } from '../database/entities/enrollment.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
-import type { Institution } from '../database/entities/institution.entity';
-import type { Student } from '../database/entities/student.entity';
-import type { User } from '../database/entities/user.entity';
+import {
+  Enrollment,
+  AuditLog,
+  type Institution,
+  type Student,
+  type User,
+} from '@casillego/shared/entities';
 
 function buildInstitution(overrides?: Partial<Institution>): Institution {
   return {

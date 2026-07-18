@@ -1,7 +1,7 @@
 import { Body, Controller, Param, Post, Query, Req, UseGuards, Get } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import type { InstitutionMember } from '../database/entities/institution-member.entity';
+import { type InstitutionMember } from '@casillego/shared/entities';
 import { DeliveryPointsService } from './delivery-points.service';
 import { assertAdmin } from './assert-admin.util';
 import { CreateDeliveryPointDto } from './dto/create-delivery-point.dto';

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DeliveryPoint } from '../database/entities/delivery-point.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { DeliveryPoint, InstitutionMember } from '@casillego/shared/entities';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryPointsController } from './delivery-points.controller';
 import { DeliveryPointsDetailController } from './delivery-point-detail.controller';

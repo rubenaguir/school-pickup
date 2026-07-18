@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Institution } from '../database/entities/institution.entity';
+import { Institution } from '@casillego/shared/entities';
 import { generateUniqueJoinCode, randomJoinCodeSuffix } from '../auth/join-code.util';
 import { isUniqueViolation } from '../common/db-errors.util';
 import { geoPointToLatLng, latLngToGeoPoint } from './geo-point.mapper';

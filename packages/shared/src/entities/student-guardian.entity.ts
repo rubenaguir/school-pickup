@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { StudentGuardianRelationship, StudentGuardianStatus } from '@casillego/shared';
+import type { StudentGuardianRelationship, StudentGuardianStatus } from '../types/student-guardian';
 import { Student } from './student.entity';
 import { User } from './user.entity';
 

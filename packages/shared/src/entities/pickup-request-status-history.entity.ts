@@ -1,5 +1,5 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import type { PickupRequestStatus } from '@casillego/shared';
+import type { PickupRequestStatus } from '../types/pickup-request';
 import { PickupRequest } from './pickup-request.entity';
 import { User } from './user.entity';
 import { PICKUP_REQUEST_STATUS_VALUES } from './pickup-request-status.values';

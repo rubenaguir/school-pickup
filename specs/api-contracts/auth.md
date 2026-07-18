@@ -23,6 +23,11 @@ lista para mostrar al usuario final. Cada frontend traduce por `code` en su
 propia capa de i18n — la API no decide en qué idioma habla a 3 frontends
 distintos.
 
+`INVALID_PAYLOAD` de este contrato incluye además el campo `details` (uno
+por cada campo/regla de `class-validator` que falló) — shape compartido con
+el resto del API, documentado una sola vez en
+`specs/api-contracts/README.md`, no repetido aquí.
+
 ## `POST /auth/register/institution`
 
 Registra una institución junto con su primer administrador. Ver feature 001.

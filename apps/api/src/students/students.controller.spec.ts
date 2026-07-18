@@ -10,8 +10,7 @@ import request from 'supertest';
 import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
+import { Student, StudentGuardian } from '@casillego/shared/entities';
 
 interface StudentRecord {
   id: string;

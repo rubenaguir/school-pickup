@@ -9,10 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { EMAIL_PROVIDER, type EmailProvider, type InstitutionMemberRole } from '@casillego/shared';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { User } from '../database/entities/user.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import { InstitutionMember, Institution, User, AuditLog } from '@casillego/shared/entities';
 import {
   ActivationTokenService,
   type ActivationTokenPayload,

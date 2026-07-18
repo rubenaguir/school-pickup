@@ -5,18 +5,18 @@ instituciones (escuelas y extracurriculares) en CDMX. Un tutor avisa que va en
 camino ("ya voy"), el sistema calcula un ETA y la institución prepara al alumno,
 mostrándolo en un tablero estilo "llegadas de aeropuerto".
 
-> Estado actual: **backend con dominio funcional completo** (Fases 0–5
-> completas). El modelo de datos (14 tablas), las entidades de TypeORM, las
-> migraciones versionadas, los fundamentos de código compartido (tipos,
-> máquina de estados de `pickup_request`, ports), el módulo de
-> autenticación (JWT, registro, login, verificación de correo vía Resend,
-> `InstitutionMembershipGuard` para aislamiento multi-tenant), y los 6
-> módulos CRUD de dominio (`institutions`, `delivery-points`,
-> `dismissal-windows`/`dismissal-exceptions`, `students`/
-> `student-guardians`, `institution-members`, `vehicles`, `enrollments`
-> con su bandeja de aprobación) ya existen y funcionan de punta a punta.
-> El flujo de recogida en tiempo real (`pickup_request` + proceso `worker`
-> con MQTT) se construye ahora sobre esta base (Fase 6 en adelante). Ver
+> Estado actual: **backend completo, incluido el flujo de recogida en
+> tiempo real** (Fases 0–6 completas). El modelo de datos (14 tablas), las
+> entidades de TypeORM (movidas a `packages/shared` para ser compartidas
+> entre `api` y `worker`), las migraciones versionadas, el módulo de
+> autenticación con `InstitutionMembershipGuard`, los 6 módulos CRUD de
+> dominio, y el flujo completo de `pickup_request` (creación, ingesta de
+> ubicación en tiempo real vía MQTT, cálculo de ETA con throttling,
+> transición automática a `arriving`, las transiciones manuales
+> `arrived`/`deliver`/`cancel`, y la purga diaria de `location_updates`)
+> ya existen y funcionan de punta a punta. El proceso `worker` ya es un
+> proceso real, no un esqueleto. Los frontends (`portal`, `parent`,
+> `board`) se construyen ahora sobre esta base (Fase 7 en adelante). Ver
 > `docs/` y `CLAUDE.md`, y `docs/plan-implementacion.md` para el detalle
 > fase por fase.
 
@@ -30,7 +30,8 @@ apps/
   parent/     App del padre (PWA React)
   board/      Tablero de institución (PWA React)
 packages/
-  shared/     Tipos y constantes TypeScript compartidos (@casillego/shared)
+  shared/     Tipos, entidades TypeORM, ports, adapters y la máquina de
+              estados compartidos entre apps (@casillego/shared)
 infra/        Referencia de infraestructura externa (postgres, mqtt, ACL)
 docs/         Documentación (español)
 ```

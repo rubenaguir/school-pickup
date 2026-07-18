@@ -2,9 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { ActivationTokenService } from './activation-token.service';
-import { User } from '../database/entities/user.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { User, Institution, InstitutionMember } from '@casillego/shared/entities';
 import { hashPassword } from './password.util';
 
 function buildAuthService(overrides?: {

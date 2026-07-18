@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DismissalWindowsService } from './dismissal-windows.service';
-import { DismissalWindow } from '../database/entities/dismissal-window.entity';
-import { Institution } from '../database/entities/institution.entity';
+import { DismissalWindow, Institution } from '@casillego/shared/entities';
 
 function buildDismissalWindow(overrides?: Partial<DismissalWindow>): DismissalWindow {
   return {

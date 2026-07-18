@@ -2,10 +2,12 @@ import { Injectable, NotFoundException, UnprocessableEntityException } from '@ne
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { DeliveryPointStatus } from '@casillego/shared';
-import { DeliveryPoint } from '../database/entities/delivery-point.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import type { Institution } from '../database/entities/institution.entity';
-import type { User } from '../database/entities/user.entity';
+import {
+  DeliveryPoint,
+  InstitutionMember,
+  type Institution,
+  type User,
+} from '@casillego/shared/entities';
 import { CreateDeliveryPointDto } from './dto/create-delivery-point.dto';
 import { UpdateDeliveryPointDto } from './dto/update-delivery-point.dto';
 import type { DeliveryPointResponse, ListDeliveryPointsResponse } from './dto/responses';

@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InstitutionMembersService } from './institution-members.service';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { User } from '../database/entities/user.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import { InstitutionMember, User, AuditLog } from '@casillego/shared/entities';
 import type { ActivationTokenPayload } from '../auth/activation-token.service';
 
 function buildUser(overrides?: Partial<User>): User {

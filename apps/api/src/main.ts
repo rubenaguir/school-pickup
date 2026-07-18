@@ -1,8 +1,9 @@
 import 'reflect-metadata';
 import { join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
-import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { createValidationPipe } from './common/create-validation-pipe';
 
 try {
   process.loadEnvFile(join(__dirname, '../../../.env'));
@@ -12,19 +13,9 @@ try {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      exceptionFactory: () =>
-        new BadRequestException({
-          code: 'INVALID_PAYLOAD',
-          message: 'The request payload is invalid.',
-        }),
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
 
   const port = Number(process.env.API_PORT ?? 3000);
   await app.listen(port);

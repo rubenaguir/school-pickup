@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DismissalException } from '../database/entities/dismissal-exception.entity';
+import { DismissalException } from '@casillego/shared/entities';
 import { AuthModule } from '../auth/auth.module';
 import { DismissalExceptionsController } from './dismissal-exceptions.controller';
 import { DismissalExceptionsDetailController } from './dismissal-exception-detail.controller';

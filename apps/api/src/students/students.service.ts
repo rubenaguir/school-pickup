@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
-import type { User } from '../database/entities/user.entity';
+import { Student, StudentGuardian, type User } from '@casillego/shared/entities';
 import { CreateStudentDto } from './dto/create-student.dto';
 import type { ListMyStudentsResponse, StudentResponse } from './dto/responses';
 

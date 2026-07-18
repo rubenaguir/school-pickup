@@ -25,6 +25,11 @@ publica el estado inicial en tiempo real para el tablero y la consola de puerta.
   `specs/entities/student_guardian.md`). Un guardián `invited`/`revoked` no puede.
 - El `enrollments` debe estar en `status = approved` (ADR-018, punto 2): no se
   puede iniciar una recogida sobre una asociación pendiente o rechazada.
+- La `institutions` del `enrollments` (denormalizada, ADR-018 punto 4) debe
+  estar en `status = approved` (ADR-032): un `enrollments` aprobado no
+  garantiza que su institución siga aprobada, porque `institutions.status`
+  puede pasar a `suspended` después. No se puede iniciar una recogida sobre
+  una institución suspendida.
 - El `guardian_user_id` del `pickup_requests` es el usuario autenticado.
 - **No debe existir ya un `pickup_requests` activo (no terminal:
   `en_route`/`arriving`/`arrived`) para el mismo `enrollment_id`** (ADR-024,
@@ -42,8 +47,17 @@ publica el estado inicial en tiempo real para el tablero y la consola de puerta.
     inmutable después (ADR-018, punto 4).
   - `delivery_point_id` **resuelto automáticamente** haciendo match entre
     `enrollments.grade_or_group` y `delivery_points.assigned_groups` de la
-    institución (ADR-012). Queda `null` si la institución no tiene puntos
-    configurados o no hay match; el tutor no lo elige ni lo cambia.
+    institución (ADR-012), considerando **solo** `delivery_points` con
+    `status = 'active'`: un punto `inactive` nunca se asigna automáticamente
+    a una recogida nueva, aunque su `assigned_groups` matchee — contradiría
+    el propósito de desactivar un punto (`specs/entities/delivery_point.md`).
+    Queda `null` si la institución no tiene puntos activos configurados o no
+    hay match; el tutor no lo elige ni lo cambia. Si **más de un** punto
+    activo matchea el mismo grupo (mala configuración de la institución, sin
+    catálogo curado), se toma el de `created_at` más antiguo — criterio
+    **arbitrario**, sin ninguna prioridad de negocio detrás: solo garantiza
+    que el resultado sea determinista y reproducible, no que sea "el
+    correcto" entre los que se solapan.
   - `delivery_code`: código de 4 dígitos generado en el servidor, **único solo
     entre los `pickup_requests` en `status` `en_route`/`arriving`/`arrived` de la
     misma institución** (índice único parcial, ADR-018 punto 3). No es único
@@ -133,6 +147,27 @@ Then la operación se rechaza (ADR-018 punto 2: no se opera sobre un enrollment
      no aprobado)
 ```
 
+### Caso: punto de entrega inactivo no se asigna
+
+```
+Given un enrollment con status = approved
+  And el grade_or_group del enrollment hace match con assigned_groups de un
+      delivery_point de la institución cuyo status = inactive
+When crea el pickup_request
+Then delivery_point_id queda null (un punto inactive nunca se asigna,
+     equivalente a "sin match")
+```
+
+### Caso: institución suspendida
+
+```
+Given un enrollment con status = approved
+  And la institución de ese enrollment tiene status = suspended
+When se intenta crear un pickup_request para ese enrollment
+Then la operación se rechaza (ADR-032: una institución suspendida no admite
+     recogidas nuevas aunque el enrollment siga approved)
+```
+
 ### Caso: quien crea no es guardián activo del alumno
 
 ```
@@ -183,6 +218,8 @@ Ver `specs/api-contracts/pickup-realtime-mqtt.md` para el payload.
 - ADR-024 (punto 1: bloqueo de recogida activa duplicada; punto 7:
   `activation_radius_meters` solo afordance de cliente).
 - ADR-025 (punto 3: captura libre de vehículo sin `vehicle_id`).
+- ADR-032 (institución no aprobada también bloquea la creación, reutilizando
+  `INSTITUTION_NOT_APPROVED`).
 - `specs/entities/pickup_request.md`,
   `specs/entities/pickup_request_status_history.md`,
   `specs/entities/enrollment.md`, `specs/entities/student_guardian.md`,

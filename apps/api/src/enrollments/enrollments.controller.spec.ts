@@ -11,10 +11,12 @@ import { EMAIL_PROVIDER } from '@casillego/shared';
 import { EnrollmentsController } from './enrollments.controller';
 import { EnrollmentsService } from './enrollments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Enrollment } from '../database/entities/enrollment.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
+import {
+  Enrollment,
+  Institution,
+  InstitutionMember,
+  StudentGuardian,
+} from '@casillego/shared/entities';
 
 interface InstitutionRecord {
   id: string;

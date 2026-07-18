@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Institution } from '../database/entities/institution.entity';
+import { Institution } from '@casillego/shared/entities';
 import { AuthModule } from '../auth/auth.module';
 import { InstitutionsController } from './institutions.controller';
 import { InstitutionsService } from './institutions.service';

@@ -13,8 +13,7 @@ import { DismissalWindowsDetailController } from './dismissal-window-detail.cont
 import { DismissalWindowsService } from './dismissal-windows.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { DismissalWindow } from '../database/entities/dismissal-window.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { DismissalWindow, InstitutionMember } from '@casillego/shared/entities';
 
 interface DismissalWindowRecord {
   id: string;

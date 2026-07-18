@@ -89,8 +89,10 @@ Ejemplo ilustrativo para el módulo `institutions`:
 institutions/
   institutions.controller.ts
   institutions.service.ts
-  institution.entity.ts
 ```
+Las entidades de TypeORM **no** viven dentro de la carpeta de su módulo: las 14
+están juntas en `packages/shared/src/entities/`, compartidas por `api` y
+`worker`, y se importan desde `@casillego/shared/entities` (ADR-033).
 
 **Inversión de dependencias solo en integraciones volátiles.** Se definen
 interfaces (ports) con implementación concreta inyectada por NestJS
@@ -109,7 +111,10 @@ interfaces (ports) con implementación concreta inyectada por NestJS
   actual: `ResendEmailProvider` (ver ADR-009); en desarrollo,
   `ConsoleEmailProvider`.
 - `MqttClient` — wrapper del cliente MQTT usado por `api` y `worker`, para
-  poder testear sin un broker real.
+  poder testear sin un broker real. `publish()` exige `qos: 0 | 1` como
+  parámetro explícito por llamada (sin default) — el port no decide de
+  negocio, así que es el caller quien elige la garantía de entrega según la
+  dirección del mensaje. Ver ADR-031 punto 4.
 
 `LocationProvider` (ver sección de `parent` arriba y ADR-002) es parte de la
 misma familia de decisión, aunque vive en el frontend y no en el backend.
@@ -236,6 +241,16 @@ de NestJS sin exponer ningún puerto. El `api` es su contraparte HTTP; ambos
 comparten entidades de TypeORM, ports y la máquina de estados de
 `packages/shared`.
 
+**De dónde salen las piezas compartidas** (todas en `packages/shared`, ADR-033):
+- **Entidades de TypeORM** — `packages/shared/src/entities/`, importadas desde el
+  subpath **`@casillego/shared/entities`**, no desde el barrel raíz: `typeorm` no
+  puede entrar al grafo de los frontends, que consumen `@casillego/shared`. Ver
+  ADR-033 punto 2.
+- **Adapter concreto de `MqttClient`** — `packages/shared/src/adapters/node-mqtt-client.ts`
+  (`NodeMqttClient`, sobre la librería `mqtt` de Node), compartido con el `api`.
+  Este sí se exporta desde el barrel raíz.
+- **Máquina de estados y ports** — barrel raíz de `@casillego/shared`.
+
 **Módulos.** Un módulo por responsabilidad, todos importados por el `AppModule`
 raíz:
 - `MqttModule` — provee la implementación concreta de `MqttClient` (el port de
@@ -249,8 +264,14 @@ raíz:
   (`StubMapsProvider` hoy).
 - `PurgeModule` — feature 023: el job diario de retención de `location_updates`,
   agendado con `@nestjs/schedule` (`@Cron`), de madrugada (ADR-024 punto 6).
-- `TypeOrmModule` y `ConfigModule` — mismas entidades y misma configuración de
-  base de datos que el `api`, apuntando al mismo Postgres.
+- `TypeOrmModule` — mismas entidades (`@casillego/shared/entities`) y misma
+  configuración de base de datos que el `api`, apuntando al mismo Postgres.
+
+**Configuración: `process.loadEnvFile()`, no `ConfigModule`.** El `worker` lee el
+`.env` con `process.loadEnvFile()` al arrancar, exactamente como el `api` (ver
+`apps/api/src/database/data-source.ts`). **`@nestjs/config` no se usa en ningún
+proceso del proyecto** y no está instalado: no hace falta un módulo de
+configuración con DI para leer un puñado de variables de entorno al arranque.
 
 **Ciclo de vida de la conexión MQTT.** La conexión es un recurso del proceso, no
 de una petición, así que vive en los hooks de NestJS:
@@ -296,7 +317,9 @@ de una petición, así que vive en los hooks de NestJS:
 
 **Wiring de los ports.** Los tres se inyectan por token (`Symbol`), nunca por su
 clase concreta, exactamente como el `api` inyecta `EmailProvider`:
-- `MQTT_CLIENT` → la implementación concreta sobre la librería `mqtt` de Node.
+- `MQTT_CLIENT` → `NodeMqttClient`, la implementación concreta sobre la librería
+  `mqtt` de Node, en `packages/shared/src/adapters/node-mqtt-client.ts`
+  (compartida con el `api`, ver arriba).
 - `MAPS_PROVIDER` → `StubMapsProvider` (ver arriba; el proveedor real sigue
   pendiente).
 - `EmailProvider` **no se inyecta en el `worker`**: ninguna de sus features

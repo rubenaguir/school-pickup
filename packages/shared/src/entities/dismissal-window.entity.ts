@@ -1,5 +1,5 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import type { DismissalWindowStatus } from '@casillego/shared';
+import type { DismissalWindowStatus } from '../types/dismissal-window';
 import { Institution } from './institution.entity';
 
 const DISMISSAL_WINDOW_STATUS_VALUES: readonly DismissalWindowStatus[] = ['active', 'paused'];

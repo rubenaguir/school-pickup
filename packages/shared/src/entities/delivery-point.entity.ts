@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { DeliveryPointStatus } from '@casillego/shared';
+import type { DeliveryPointStatus } from '../types/delivery-point';
 import { Institution } from './institution.entity';
 import { User } from './user.entity';
 import { PickupRequest } from './pickup-request.entity';

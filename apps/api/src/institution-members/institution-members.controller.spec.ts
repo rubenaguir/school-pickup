@@ -15,10 +15,7 @@ import { InstitutionMembersService } from './institution-members.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
 import { ActivationTokenService } from '../auth/activation-token.service';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { User } from '../database/entities/user.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import { InstitutionMember, Institution, User, AuditLog } from '@casillego/shared/entities';
 
 interface MemberRecord {
   id: string;

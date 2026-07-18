@@ -6,8 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Not, Repository } from 'typeorm';
-import { Vehicle } from '../database/entities/vehicle.entity';
-import { User } from '../database/entities/user.entity';
+import { Vehicle, User } from '@casillego/shared/entities';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { DeleteVehicleDto } from './dto/delete-vehicle.dto';

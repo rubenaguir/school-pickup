@@ -13,8 +13,7 @@ import { DismissalExceptionsDetailController } from './dismissal-exception-detai
 import { DismissalExceptionsService } from './dismissal-exceptions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { DismissalException } from '../database/entities/dismissal-exception.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { DismissalException, InstitutionMember } from '@casillego/shared/entities';
 
 interface DismissalExceptionRecord {
   id: string;

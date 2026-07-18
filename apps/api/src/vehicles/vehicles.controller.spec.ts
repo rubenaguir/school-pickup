@@ -10,7 +10,7 @@ import request from 'supertest';
 import { VehiclesController } from './vehicles.controller';
 import { VehiclesService } from './vehicles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Vehicle } from '../database/entities/vehicle.entity';
+import { Vehicle } from '@casillego/shared/entities';
 
 interface VehicleRecord {
   id: string;

@@ -10,13 +10,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
 import { isUniqueViolation } from '../common/db-errors.util';
-import { AuditLog } from '../database/entities/audit-log.entity';
-import { Enrollment } from '../database/entities/enrollment.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { Student } from '../database/entities/student.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
-import type { User } from '../database/entities/user.entity';
+import {
+  AuditLog,
+  Enrollment,
+  Institution,
+  InstitutionMember,
+  Student,
+  StudentGuardian,
+  type User,
+} from '@casillego/shared/entities';
 import { generateUniqueEnrollmentCode } from './enrollment-code.util';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { ListMyEnrollmentsQueryDto } from './dto/list-my-enrollments-query.dto';

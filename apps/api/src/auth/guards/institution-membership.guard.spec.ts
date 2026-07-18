@@ -3,8 +3,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { InstitutionMembershipGuard } from './institution-membership.guard';
 import { InstitutionResource } from './institution-resource.decorator';
-import { InstitutionMember } from '../../database/entities/institution-member.entity';
-import { DeliveryPoint } from '../../database/entities/delivery-point.entity';
+import { InstitutionMember, DeliveryPoint } from '@casillego/shared/entities';
 
 const AUTH_USER = { sub: 'user-1', email: 'a@b.com', isSuperAdmin: false };
 

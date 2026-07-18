@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { VehiclesService } from './vehicles.service';
-import { Vehicle } from '../database/entities/vehicle.entity';
-import { User } from '../database/entities/user.entity';
+import { Vehicle, User } from '@casillego/shared/entities';
 
 function buildVehicle(overrides?: Partial<Vehicle>): Vehicle {
   return {

@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DeliveryPointsService } from './delivery-points.service';
-import { DeliveryPoint } from '../database/entities/delivery-point.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { User } from '../database/entities/user.entity';
+import { DeliveryPoint, Institution, User } from '@casillego/shared/entities';
 
 function buildDeliveryPoint(overrides?: Partial<DeliveryPoint>): DeliveryPoint {
   return {

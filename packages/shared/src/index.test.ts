@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MQTT_TOPIC_ROOT, boardTopic, deliveryPointQueueTopic, pickupLocationTopic } from './index';
+import {
+  MQTT_TOPIC_ROOT,
+  boardTopic,
+  deliveryPointQueueTopic,
+  parseLocationTopic,
+  pickupLocationTopic,
+} from './index';
 
 // Expected strings are copied literally from docs/arquitectura.md ("Estructura
 // de topics MQTT y seguridad"), not regenerated with the same builders under
@@ -33,5 +39,38 @@ describe('MQTT_TOPIC_ROOT', () => {
     expect(boardTopic('inst-1').startsWith(MQTT_TOPIC_ROOT)).toBe(true);
     expect(pickupLocationTopic('inst-1', 'pickup-1').startsWith(MQTT_TOPIC_ROOT)).toBe(true);
     expect(deliveryPointQueueTopic('inst-1', 'dp-1').startsWith(MQTT_TOPIC_ROOT)).toBe(true);
+  });
+});
+
+describe('parseLocationTopic', () => {
+  it('extracts institutionId and pickupRequestId from a matching topic', () => {
+    expect(parseLocationTopic('school-pickup/institution/inst-1/pickup/pickup-1/location')).toEqual(
+      { institutionId: 'inst-1', pickupRequestId: 'pickup-1' },
+    );
+  });
+
+  it('is the exact inverse of pickupLocationTopic', () => {
+    const topic = pickupLocationTopic('inst-42', 'pickup-99');
+    expect(parseLocationTopic(topic)).toEqual({
+      institutionId: 'inst-42',
+      pickupRequestId: 'pickup-99',
+    });
+  });
+
+  it('returns null for a topic of a different type', () => {
+    expect(parseLocationTopic(boardTopic('inst-1'))).toBeNull();
+    expect(parseLocationTopic(deliveryPointQueueTopic('inst-1', 'dp-1'))).toBeNull();
+  });
+
+  it('returns null for a malformed topic', () => {
+    expect(parseLocationTopic('school-pickup/institution/inst-1/pickup/location')).toBeNull();
+    expect(
+      parseLocationTopic('school-pickup/institution/inst-1/pickup/pickup-1/location/extra'),
+    ).toBeNull();
+    expect(parseLocationTopic('not-even-close')).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(parseLocationTopic('')).toBeNull();
   });
 });

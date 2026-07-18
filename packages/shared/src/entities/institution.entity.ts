@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { InstitutionStatus, InstitutionType } from '@casillego/shared';
+import type { InstitutionStatus, InstitutionType } from '../types/institution';
 import { GeoPoint } from '../types/geo-point';
 import { InstitutionMember } from './institution-member.entity';
 import { DeliveryPoint } from './delivery-point.entity';

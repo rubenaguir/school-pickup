@@ -13,8 +13,7 @@ import { DeliveryPointsDetailController } from './delivery-point-detail.controll
 import { DeliveryPointsService } from './delivery-points.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { DeliveryPoint } from '../database/entities/delivery-point.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { DeliveryPoint, InstitutionMember } from '@casillego/shared/entities';
 
 interface DeliveryPointRecord {
   id: string;

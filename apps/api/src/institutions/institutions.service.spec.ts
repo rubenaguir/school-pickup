@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InstitutionsService } from './institutions.service';
-import { Institution } from '../database/entities/institution.entity';
+import { Institution } from '@casillego/shared/entities';
 
 function buildInstitution(overrides?: Partial<Institution>): Institution {
   return {

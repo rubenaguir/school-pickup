@@ -28,7 +28,7 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
 ## Fase 0 — Fundamentos documentales ✅ completo
 
 - [x] Modelo de datos (`docs/modelo-datos.md`), 14 entidades
-- [x] ADRs 001–030 (`docs/decisiones.md`)
+- [x] ADRs 001–033 (`docs/decisiones.md`)
 - [x] Arquitectura y flujo de tiempo real (`docs/arquitectura.md`), incluyendo
       el `InstitutionMembershipGuard` (aislamiento multi-tenant a nivel API)
 - [x] `specs/entities/*.md` — las 14 entidades especificadas con campos,
@@ -188,45 +188,90 @@ aislamiento multi-tenant.
       por query param, verificación manual fuera del guard compartido,
       documentado en `docs/arquitectura.md`)
 
-## Fase 6 — Flujo de recogida (`pickup_request`) + `worker`
+## Fase 6 — Flujo de recogida (`pickup_request`) + `worker` ✅ completo
 
-El corazón del producto. Depende de que Fase 5 esté completa (necesita
-`enrollments` aprobados y `delivery_points` configurados).
+El corazón del producto: creación de la recogida, ingesta de ubicación en
+tiempo real, cálculo de ETA, transición automática a `arriving`, las tres
+transiciones manuales (`arrived`/`deliver`/`cancel`), y la purga de datos.
 
-Los huecos que una revisión previa encontró en las specs de esta fase quedaron
-resueltos en **ADR-031** (códigos de error, estructura del `worker`, suscripción
-por comodín, `eta_calculated_at`, `StubMapsProvider`, nombre y contenido de la
-fila de `audit_log`). Las specs ya reflejan esas decisiones; esta fase solo
-implementa.
+- [x] `pickups` module en `api`: creación de `pickup_request`, resolución
+      automática de `delivery_point_id` filtrando `status = 'active'` con
+      desempate determinista por `created_at`, `delivery_code`, soporte
+      de captura libre de vehículo (ADR-026 punto 3 vía ADR-014); chequeo
+      de `institutions.status = 'approved'` en creación además del de
+      `enrollments.status` (ADR-032); publicación MQTT post-commit,
+      QoS 1, sin revertir la creación si el broker falla; `MqttClient`
+      real (`node-mqtt-client.ts`, `packages/shared/src/adapters/`, mqtt
+      ^5.15.2) con `parseLocationTopic()` inverso a los builders
+- [x] Sistema de errores `INVALID_PAYLOAD` con `details` por campo
+      (property + constraints reales de class-validator), único código
+      muchos-a-uno del proyecto — resto de códigos sin cambio de shape,
+      verificado estructuralmente (excepciones lanzadas a mano no pasan
+      por el `exceptionFactory`); documentado en `specs/api-contracts/README.md`
+- [x] Refactorización previa: las 14 entidades de TypeORM movidas de
+      `apps/api` a `packages/shared/src/entities/`, expuestas por subpath
+      `@casillego/shared/entities` (no en el barrel raíz — evita que
+      `typeorm` entre al bundle de los 3 frontends, ADR-033); columna
+      `eta_calculated_at` (ADR-031 punto 5, nunca migrada) creada y
+      aplicada; dependencias del worker instaladas
+      (`typeorm`/`@nestjs/typeorm`/`pg`, mismas versiones que `api`;
+      `@nestjs/schedule`; sin `@nestjs/config`, mismo patrón
+      `process.loadEnvFile()` que `api`)
+- [x] Patrón compartido en `packages/shared`: `buildBoardPayload`/
+      `buildQueuePayload` (barrel raíz, framework-free) y
+      `applyPickupRequestTransition` (subpath propio
+      `@casillego/shared/pickup-request-transition`, depende de
+      `EntityManager`/entidades como valores — mismo criterio que
+      `./entities`); `pickups.service.ts` (creación) refactorizado para
+      consumirlos, comportamiento idéntico verificado explícitamente
+- [x] `StubMapsProvider` (haversine, 30 km/h, destino `institutions.location`)
+      — app-local en `apps/worker` (un solo consumidor, mismo criterio que
+      `ConsoleEmailProvider`); desbloquea Fase 6 mientras Google/Mapbox
+      sigue abierto
+- [x] `worker`: bootstrap (`NestFactory.createApplicationContext`, shutdown
+      hooks), conexión MQTT con suscripción por comodín
+      (`school-pickup/institution/+/pickup/+/location`), ingesta de
+      ubicación con validación defensiva de payload (descarta sin tumbar
+      el proceso), throttling (20s / 150m, fórmula haversine consolidada
+      en un solo lugar del worker — sin duplicar con `StubMapsProvider`),
+      cálculo de ETA vía `MapsProvider`, transición automática a
+      `arriving` (umbral de tiempo O geocerca, sin prioridad entre
+      ambas — feature 020), publicación única a `board`/`delivery-point`
+      por mensaje reflejando el status posterior a cualquier transición
+- [x] Bug de infraestructura corregido en el camino: `NodeMqttClient` no
+      envolvía `JSON.parse` del payload entrante en `try/catch` — un
+      mensaje malformado tumbaba el proceso completo, contrario al
+      requisito explícito de feature 019. Corregido en
+      `packages/shared/src/adapters/node-mqtt-client.ts`.
 
-- [ ] Migración de la columna `pickup_requests.eta_calculated_at` (timestamptz,
-      nullable; ADR-031 punto 5) — no existe en `InitSchema`
-- [ ] Dependencia `mqtt` (librería de Node) e implementación concreta del port
-      `MqttClient`, consumida por `api` y `worker` (hoy solo existe la interfaz)
-- [ ] `parseLocationTopic()` en `packages/shared`: parser inverso del topic de
-      ubicación, compañero de los builders (ADR-031 punto 4)
-- [ ] `pickups` module en `api`: creación de `pickup_request`, resolución
-      automática de `delivery_point_id` (ADR-012), `delivery_code` con reintento
-      ante colisión (`specs/entities/pickup_request.md`), soporte de captura
-      libre de vehículo (ADR-026 punto 3 vía ADR-014), códigos de error de
-      ADR-031 punto 1
-- [ ] `pickup_request_status_history`: registro de transiciones, usando la
-      máquina de estados ya implementada en `packages/shared`
-- [ ] `worker`: suscripción MQTT por comodín (ADR-031 punto 4, usando
-      `MqttClient` y los builders/parser de topics), ingesta de ubicación,
-      cálculo de ETA con throttling (20 s / 150 m, ADR-024 punto 2, contra
-      `eta_calculated_at` y `last_location`), y `StubMapsProvider` como
-      implementación de `MapsProvider` (ADR-031 punto 6). Estructura de módulos y
-      ciclo de vida MQTT en `docs/arquitectura.md` § "Estructura del proceso
-      `worker`"
-- [ ] Publicación a topics de tablero y de punto de entrega (ADR-012,
-      `docs/arquitectura.md`)
+### Transiciones manuales (`api`) ✅ completo
+
+- [x] `PATCH /pickup-requests/:id/arrived` — solo el `guardian_user_id`
+      dueño, sin `InstitutionMembershipGuard`; salto directo desde
+      `en_route` o `arriving` permitido (ADR-024 punto 8)
+- [x] `PATCH /pickup-requests/:id/cancel` — mismo dueño, desde cualquiera
+      de los 3 estados no terminales; fija `completed_at`
+- [x] `PATCH /pickup-requests/:id/deliver` — `InstitutionMembershipGuard` +
+      `@InstitutionResource({ entity: PickupRequest })` sin overrides
+      (columna compañera `institutionId` extendida a esta entidad,
+      ADR-029), sin restricción de `role` (ADR-011); orden estado-antes-
+      que-código (409 `INVALID_STATUS_TRANSITION` si no está `arrived`,
+      sin evaluar `deliveryCode`); `401 INVALID_DELIVERY_CODE` sin límite
+      de reintentos, con `audit_log` en cada intento fallido
+      (`pickup_request.delivery_code_mismatched`); entrega exitosa NO
+      escribe `audit_log` (solo `pickup_request_status_history`,
+      confirmado contra `specs/entities/audit_log.md`)
+- [x] Las 3 reutilizan `applyPickupRequestTransition` +
+      `transitionAndPublish` compartido (sin duplicar orquestación de
+      transacción/publicación); bug corregido en el camino:
+      `publishRealtimeUpdate` hardcodeaba ETA `null` — ahora publica el
+      ETA real ya calculado por el `worker` si existe
+
+### Falta para cerrar Fase 6
+
 - [ ] Job programado diario de purga de `location_updates` a 90 días
-      (ADR-018 punto 8, ADR-024 punto 6) — requiere `@nestjs/schedule` en el
-      `worker`
-- [ ] `audit_log`: instrumentar en las acciones sensibles ya identificadas
-      (aprobaciones, altas/bajas de tutores y de personal,
-      `pickup_request.delivery_code_mismatched`)
+      (`@nestjs/schedule` ya instalado en el worker, ADR-018 punto 8,
+      ADR-024 punto 6)
 
 ## Fase 7 — Frontend: `apps/portal`
 
@@ -277,7 +322,7 @@ implementa.
 | Pendiente | Bloquea | Estado |
 |---|---|---|
 | Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
-| Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto — **ya no bloquea**: `StubMapsProvider` (haversine a velocidad fija, sin proveedor externo ni API key) permite construir y testear todo el slice de Fase 6, igual que `ConsoleEmailProvider` frente a `ResendEmailProvider`. La decisión de fondo sigue pendiente; al tomarla se sustituye la implementación sin tocar a quien la consume. Ver ADR-031 punto 6 |
+| Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
 | Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
 | Endpoint de búsqueda de instituciones por nombre (`institutions`) — solo existe alta por `joinCode`/`institutionId` ya conocido; falta para la pantalla "Asociar a institución" | Fase 7 (necesita spec antes) | Abierto — detectado al implementar `enrollments` |
 
@@ -286,3 +331,6 @@ implementa.
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
 | Refresh token stateless (JWT sin tabla de revocación) | ADR-019, punto 3 | Entidad de revocación (`revoked_tokens` o sesiones activas) para poder invalidar un token robado antes de que expire |
+| `apps/api/src/auth/resend-verification-throttle.spec.ts` flaky bajo carga (TTL de reloj real de `@nestjs/throttler`) | Detectado durante `npm run check` de la refactorización de entidades (no causado por ella) | Mockear el reloj del throttler en el test, o aceptar el flake documentado si es infrecuente |
+| `packages/shared` sin `sideEffects: false`; `mqtt` (vía `NodeMqttClient` en el barrel raíz) probablemente ya entra al bundle de `portal`/`parent`/`board` | Detectado durante la refactorización de entidades (preexistente, no causado por ella) | Agregar `sideEffects: false` a `packages/shared/package.json` y verificar el bundle de los 3 frontends — evaluar con calma, no mezclarlo con cambios que ya tocan el mismo `package.json` |
+| `npm run clean` roto (`rimraf` no instalado) — obligó a `rm -rf` manual de `dist/` para descartar artefactos de un build ESM fallido a medio camino | Detectado al extraer el patrón de transición compartido (preexistente, no causado por ese cambio) | Instalar `rimraf` como dev dependency y verificar que el script `clean` funcione en los 6 workspaces |

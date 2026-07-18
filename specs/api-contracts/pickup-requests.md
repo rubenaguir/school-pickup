@@ -62,6 +62,11 @@ ADR-031 punto 1: cuatro nuevos (`ENROLLMENT_NOT_APPROVED`,
 (`NOT_STUDENT_GUARDIAN`, `GUARDIAN_NOT_ACTIVE`, `NOT_INSTITUTION_MEMBER`,
 `NOT_VEHICLE_OWNER`, `RESOURCE_NOT_FOUND`, `INVALID_PAYLOAD`).
 
+`INVALID_PAYLOAD` de `POST /pickup-requests` incluye además el campo
+`details` (uno por cada campo/regla de `class-validator` que falló) — shape
+compartido con el resto del API, documentado una sola vez en
+`specs/api-contracts/README.md`, no repetido aquí.
+
 ## `POST /pickup-requests`
 
 Crea la recogida (`status = en_route`). Ver feature 018.
@@ -86,7 +91,9 @@ excluyentes (ADR-014, ADR-025):
   vehículo no guardado en el catálogo (prestado, viaje puntual); el servidor los
   toma tal cual como snapshot, sin tocar `vehicles` (ADR-014).
 - **`arrivalMode = walking`** — el tutor llega caminando: ninguno de los tres
-  campos de vehículo aplica.
+  campos de vehículo aplica. Enviar cualquiera de los tres junto con
+  `arrivalMode = walking` es un payload inválido (`400 INVALID_PAYLOAD`), no
+  un valor que el servidor ignore.
 
 `institutionId`, `deliveryPointId` y `deliveryCode` no se envían: se
 derivan/generan en el servidor (denormalización de `institution_id`, resolución de
@@ -112,13 +119,14 @@ derivan/generan en el servidor (denormalización de `institution_id`, resolució
 **Errores**
 | Código | `code` | Caso |
 |---|---|---|
-| 400 | `INVALID_PAYLOAD` | payload inválido (`enrollmentId` faltante, `arrivalMode` fuera del enum, o combinación de campos de vehículo inválida: `vehicleId` junto con `vehicleDescription`/`vehiclePlate`) |
+| 400 | `INVALID_PAYLOAD` | payload inválido (`enrollmentId` faltante, `arrivalMode` fuera del enum, combinación de campos de vehículo inválida: `vehicleId` junto con `vehicleDescription`/`vehiclePlate`, o `arrivalMode = walking` junto con cualquiera de `vehicleId`/`vehicleDescription`/`vehiclePlate`) |
 | 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
 | 403 | `NOT_STUDENT_GUARDIAN` | el usuario autenticado no es `student_guardians` del alumno del `enrollments` |
 | 403 | `GUARDIAN_NOT_ACTIVE` | el usuario autenticado es `student_guardians` del alumno pero su `status` es `invited`/`revoked`, no `active` |
 | 403 | `NOT_VEHICLE_OWNER` | el `vehicleId` indicado existe pero pertenece al catálogo de otro tutor |
 | 404 | `RESOURCE_NOT_FOUND` | el `enrollments` no existe, o el `vehicleId` indicado no existe |
 | 422 | `ENROLLMENT_NOT_APPROVED` | el `enrollments` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
+| 422 | `INSTITUTION_NOT_APPROVED` | la `institutions` del `enrollments` (denormalizada) no está en `status = approved`: puede haberse suspendido después de que el `enrollments` fue aprobado (ADR-032) |
 | 422 | `ACTIVE_PICKUP_REQUEST_EXISTS` | ya existe un `pickup_requests` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
 
 Los dos errores de `vehicleId` (`404 RESOURCE_NOT_FOUND` si no existe,
@@ -326,6 +334,8 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   exposición del `deliveryCode` al dueño y a los miembros de la institución).
 - ADR-025 (punto 3: captura libre de vehículo vía `vehicleDescription`/`vehiclePlate`;
   punto 5: `enrollments` no aprobado → 422).
+- ADR-032 (institución no aprobada también bloquea la creación de
+  `pickup_request`, reutilizando `INSTITUTION_NOT_APPROVED`).
 - ADR-028 (forma de los errores: `{ code, message }` en inglés).
 - ADR-031 (punto 1: `code` exacto de cada error, nuevos y reutilizados; punto 2:
   `INVALID_DELIVERY_CODE` como `401`, tercera categoría de la convención HTTP;

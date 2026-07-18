@@ -7,7 +7,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { EnrollmentStatus } from '@casillego/shared';
+import type { EnrollmentStatus } from '../types/enrollment';
 import { Student } from './student.entity';
 import { Institution } from './institution.entity';
 import { User } from './user.entity';

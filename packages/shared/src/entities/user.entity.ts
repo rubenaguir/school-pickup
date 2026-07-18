@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { UserStatus } from '@casillego/shared';
+import type { UserStatus } from '../types/user';
 import { InstitutionMember } from './institution-member.entity';
 import { StudentGuardian } from './student-guardian.entity';
 import { Vehicle } from './vehicle.entity';

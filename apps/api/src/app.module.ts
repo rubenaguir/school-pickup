@@ -12,12 +12,13 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { InstitutionMembersModule } from './institution-members/institution-members.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
+import { PickupsModule } from './pickups/pickups.module';
 
 /**
  * Root module. Domain modules beyond auth/institutions/delivery-points/
  * dismissal-windows/dismissal-exceptions/students/student-guardians/
- * invitations/institution-members/vehicles/enrollments (pickup-requests)
- * are added in later phases.
+ * invitations/institution-members/vehicles/enrollments/pickups are added in
+ * later phases.
  */
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
     InstitutionMembersModule,
     VehiclesModule,
     EnrollmentsModule,
+    PickupsModule,
   ],
   controllers: [HealthController],
   providers: [],

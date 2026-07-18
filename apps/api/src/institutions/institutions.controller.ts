@@ -14,8 +14,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
 import { InstitutionResource } from '../auth/guards/institution-resource.decorator';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { Institution, InstitutionMember } from '@casillego/shared/entities';
 import { InstitutionsService } from './institutions.service';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
 import type {

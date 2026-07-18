@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DismissalExceptionsService } from './dismissal-exceptions.service';
-import { DismissalException } from '../database/entities/dismissal-exception.entity';
-import { Institution } from '../database/entities/institution.entity';
+import { DismissalException, Institution } from '@casillego/shared/entities';
 
 function buildDismissalException(overrides?: Partial<DismissalException>): DismissalException {
   return {

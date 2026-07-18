@@ -14,11 +14,13 @@ import { EnrollmentsDetailController } from './enrollment-detail.controller';
 import { EnrollmentsService } from './enrollments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { Enrollment } from '../database/entities/enrollment.entity';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
-import { StudentGuardian } from '../database/entities/student-guardian.entity';
-import { AuditLog } from '../database/entities/audit-log.entity';
+import {
+  Enrollment,
+  Institution,
+  InstitutionMember,
+  StudentGuardian,
+  AuditLog,
+} from '@casillego/shared/entities';
 
 type MemberRole = 'admin' | 'gate_operator' | 'coordinator' | 'teacher';
 type EnrollmentStatus = 'pending' | 'approved' | 'rejected';

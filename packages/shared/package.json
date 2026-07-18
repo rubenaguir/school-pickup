@@ -10,6 +10,24 @@
       "types": "./dist/cjs/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./entities": {
+      "types": "./dist/cjs/entities/index.d.ts",
+      "default": "./dist/cjs/entities/index.js"
+    },
+    "./pickup-request-transition": {
+      "types": "./dist/cjs/pickup-request-transition.d.ts",
+      "default": "./dist/cjs/pickup-request-transition.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "entities": [
+        "./dist/cjs/entities/index.d.ts"
+      ],
+      "pickup-request-transition": [
+        "./dist/cjs/pickup-request-transition.d.ts"
+      ]
     }
   },
   "scripts": {
@@ -18,5 +36,10 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.2",
+    "typeorm": "^1.0.0",
+    "reflect-metadata": "^0.2.2"
   }
 }

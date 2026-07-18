@@ -11,8 +11,7 @@ import { InstitutionsController } from './institutions.controller';
 import { InstitutionsService } from './institutions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { Institution } from '../database/entities/institution.entity';
-import { InstitutionMember } from '../database/entities/institution-member.entity';
+import { Institution, InstitutionMember } from '@casillego/shared/entities';
 
 interface InstitutionRecord {
   id: string;

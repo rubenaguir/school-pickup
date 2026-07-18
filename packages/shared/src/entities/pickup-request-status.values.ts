@@ -1,4 +1,4 @@
-import type { PickupRequestStatus } from '@casillego/shared';
+import type { PickupRequestStatus } from '../types/pickup-request';
 
 export const PICKUP_REQUEST_STATUS_VALUES: readonly PickupRequestStatus[] = [
   'en_route',

@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { InstitutionMember } from '../../database/entities/institution-member.entity';
+import { InstitutionMember } from '@casillego/shared/entities';
 import {
   INSTITUTION_RESOURCE_KEY,
   InstitutionResourceOptions,
