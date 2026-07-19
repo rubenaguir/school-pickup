@@ -15,10 +15,13 @@ mostrándolo en un tablero estilo "llegadas de aeropuerto".
 > transición automática a `arriving`, las transiciones manuales
 > `arrived`/`deliver`/`cancel`, y la purga diaria de `location_updates`)
 > ya existen y funcionan de punta a punta. El proceso `worker` ya es un
-> proceso real, no un esqueleto. Los frontends (`portal`, `parent`,
-> `board`) se construyen ahora sobre esta base (Fase 7 en adelante). Ver
-> `docs/` y `CLAUDE.md`, y `docs/plan-implementacion.md` para el detalle
-> fase por fase.
+> proceso real, no un esqueleto. Los dos `GET` de `pickup-requests`
+> (detalle por `:id` y listado por `enrollmentId`) documentados en el
+> contrato de API y pendientes de la auditoría de Fase 6 ya están
+> implementados. Los frontends (`portal`, `parent`, `board`) se
+> construyen ahora sobre esta base (Fase 7 en adelante). Ver `docs/` y
+> `CLAUDE.md`, y `docs/plan-implementacion.md` para el detalle fase por
+> fase.
 
 ## Estructura
 

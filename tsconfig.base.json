@@ -14,7 +14,9 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@casillego/shared": ["packages/shared/src/index.ts"]
+      "@casillego/shared": ["packages/shared/src/index.ts"],
+      "@casillego/ui": ["packages/ui/src/index.ts"],
+      "@casillego/ui/styles.css": ["packages/ui/src/styles.css"]
     }
   }
 }

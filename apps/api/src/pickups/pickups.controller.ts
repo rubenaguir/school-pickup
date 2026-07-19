@@ -1,9 +1,12 @@
-import { Body, Controller, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
+import { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type {
+  ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
   PickupRequestCancelResponse,
+  PickupRequestDetailResponse,
   PickupRequestResponse,
 } from './dto/responses';
 import { PickupsService } from './pickups.service';
@@ -23,6 +26,22 @@ export class PickupsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PickupRequestResponse> {
     return this.pickupsService.create(request.user.sub, dto);
+  }
+
+  @Get(':id')
+  findById(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PickupRequestDetailResponse> {
+    return this.pickupsService.findById(request.user.sub, id);
+  }
+
+  @Get()
+  list(
+    @Query() query: ListPickupRequestsQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ListPickupRequestsResponse> {
+    return this.pickupsService.listByEnrollment(request.user.sub, query);
   }
 
   @Patch(':id/arrived')

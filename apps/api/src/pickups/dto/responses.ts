@@ -30,3 +30,35 @@ export interface PickupRequestDeliverResponse {
   status: PickupRequestStatus;
   completedAt: string;
 }
+
+export interface PickupRequestDetailResponse {
+  id: string;
+  enrollmentId: string;
+  institutionId: string;
+  guardianUserId: string;
+  deliveryPointId: string | null;
+  status: PickupRequestStatus;
+  deliveryCode: string;
+  arrivalMode: ArrivalMode | null;
+  vehicleDescription: string | null;
+  vehiclePlate: string | null;
+  estimatedArrivalAt: string | null;
+  etaSeconds: number | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export interface PickupRequestSummary {
+  id: string;
+  status: PickupRequestStatus;
+  startedAt: string;
+  completedAt: string | null;
+  deliveryPointId: string | null;
+}
+
+export interface ListPickupRequestsResponse {
+  pickupRequests: PickupRequestSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}

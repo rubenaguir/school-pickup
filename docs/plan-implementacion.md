@@ -266,18 +266,30 @@ transiciones manuales (`arrived`/`deliver`/`cancel`), y la purga de datos.
       transacción/publicación); bug corregido en el camino:
       `publishRealtimeUpdate` hardcodeaba ETA `null` — ahora publica el
       ETA real ya calculado por el `worker` si existe
+- [x] Job programado diario de purga de `location_updates` a 90 días
+      (`apps/worker/src/purge/purge.service.ts`,
+      `@Cron(CronExpression.EVERY_DAY_AT_3AM)`, `@nestjs/schedule`,
+      ADR-018 punto 8, ADR-024 punto 6) — ya implementado, solo faltaba
+      marcarlo aquí
 
-### Falta para cerrar Fase 6
+### Cierre de hallazgos de auditoría ✅ completo
 
-- [ ] Job programado diario de purga de `location_updates` a 90 días
-      (`@nestjs/schedule` ya instalado en el worker, ADR-018 punto 8,
-      ADR-024 punto 6)
+Hallazgo 1 de la auditoría de Fase 6 resuelto: se implementaron los dos
+`GET` de `pickup-requests` ya especificados en el contrato de API (detalle
+por `:id` y listado por `enrollmentId`), usando el patrón de verificación
+manual OR (tutor dueño / institution_member) ya documentado en
+`docs/arquitectura.md` § "colecciones filtradas por query param" — sin
+nueva decisión de arquitectura, sin ADR nuevo. Hallazgo 2 (comentario
+obsoleto en migración 401) corregido.
 
 ## Fase 7 — Frontend: `apps/portal`
 
-- [ ] Resolver tokens del design system antes de esta fase (pendiente:
-      pedirlos al chat del proyecto de Claude Design)
-- [ ] `.claude/rules/design-system.md` con los tokens reales
+- [x] Resolver tokens del design system antes de esta fase — el proyecto
+      "CasiLlego Design System" (`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`)
+      ya existe; tokens, fuentes y los 10 componentes base se portaron a
+      `packages/ui` (`@casillego/ui`, ver ADR-036). Pendiente aún: construir
+      las pantallas reales de `ui_kits/portal-admin` (ver ítem de abajo).
+- [x] `.claude/rules/design-system.md` con los tokens reales
 - [ ] Pantallas en orden de prioridad del `design-brief.md`: bandeja de
       aprobación de alumnos (★) → perfil de institución/geocerca → puntos de
       entrega → consola de puerta → horarios → personal → reportes
@@ -321,7 +333,6 @@ transiciones manuales (`arrived`/`deliver`/`cancel`), y la purga de datos.
 
 | Pendiente | Bloquea | Estado |
 |---|---|---|
-| Tokens del design system | Fase 7 | Abierto — pendiente pedirlos en el chat del proyecto de Claude Design |
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
 | Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
 | Endpoint de búsqueda de instituciones por nombre (`institutions`) — solo existe alta por `joinCode`/`institutionId` ya conocido; falta para la pantalla "Asociar a institución" | Fase 7 (necesita spec antes) | Abierto — detectado al implementar `enrollments` |
@@ -334,3 +345,4 @@ transiciones manuales (`arrived`/`deliver`/`cancel`), y la purga de datos.
 | `apps/api/src/auth/resend-verification-throttle.spec.ts` flaky bajo carga (TTL de reloj real de `@nestjs/throttler`) | Detectado durante `npm run check` de la refactorización de entidades (no causado por ella) | Mockear el reloj del throttler en el test, o aceptar el flake documentado si es infrecuente |
 | `packages/shared` sin `sideEffects: false`; `mqtt` (vía `NodeMqttClient` en el barrel raíz) probablemente ya entra al bundle de `portal`/`parent`/`board` | Detectado durante la refactorización de entidades (preexistente, no causado por ella) | Agregar `sideEffects: false` a `packages/shared/package.json` y verificar el bundle de los 3 frontends — evaluar con calma, no mezclarlo con cambios que ya tocan el mismo `package.json` |
 | `npm run clean` roto (`rimraf` no instalado) — obligó a `rm -rf` manual de `dist/` para descartar artefactos de un build ESM fallido a medio camino | Detectado al extraer el patrón de transición compartido (preexistente, no causado por ese cambio) | Instalar `rimraf` como dev dependency y verificar que el script `clean` funcione en los 6 workspaces |
+| Sin `eslint-plugin-react` en `packages/ui/src` ni en los 3 frontends — solo hay reglas de `eslint-hooks` (ADR-036). Pérdida real de cobertura, no cosmética: sin `react/jsx-key` no se detecta `key` faltante en listas (`SegmentedTabs` ya mapea un array), sin `react/no-unescaped-entities`/`react/jsx-no-duplicate-props`/etc. no se detecta JSX mal formado | ADR-036 — última versión publicada de `eslint-plugin-react` (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 | Revisar en cada fase nueva de frontend (Fase 7 pantallas, Fase 8, Fase 9) si ya hay versión compatible con ESLint 10; si no, evaluar `@eslint-react/eslint-plugin` (peer `eslint: '*'`, ya confirmado disponible en el registro) como alternativa nativa de flat config |

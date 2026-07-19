@@ -31,6 +31,7 @@ function buildPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
     id: 'pr-1',
     enrollment: { id: 'enr-1' },
     institution: { id: 'inst-1' },
+    institutionId: 'inst-1',
     guardian: { id: 'user-1' },
     deliveryPoint: null,
     status: 'en_route',
@@ -110,9 +111,12 @@ function buildOwnedPickupRequest(overrides?: Partial<PickupRequest>): PickupRequ
 }
 
 function buildService(overrides?: {
-  pickupRequests?: Partial<Record<'exists' | 'create' | 'save' | 'findOne', unknown>>;
+  pickupRequests?: Partial<
+    Record<'exists' | 'create' | 'save' | 'findOne' | 'findAndCount', unknown>
+  >;
   enrollments?: Partial<Record<'findOne', unknown>>;
-  studentGuardians?: Partial<Record<'findOne', unknown>>;
+  studentGuardians?: Partial<Record<'findOne' | 'exists', unknown>>;
+  institutionMembers?: Partial<Record<'exists', unknown>>;
   vehicles?: Partial<Record<'findOne', unknown>>;
   auditLog?: Partial<Record<'create' | 'save', unknown>>;
   dataSource?: Partial<Record<'transaction', unknown>>;
@@ -124,6 +128,7 @@ function buildService(overrides?: {
     create: vi.fn((partial: Partial<PickupRequest>) => partial),
     save: vi.fn((entity: Partial<PickupRequest>) => Promise.resolve(buildPickupRequest(entity))),
     findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest()),
+    findAndCount: vi.fn().mockResolvedValue([[], 0]),
     ...overrides?.pickupRequests,
   };
   const enrollmentsRepo = {
@@ -132,7 +137,12 @@ function buildService(overrides?: {
   };
   const studentGuardiansRepo = {
     findOne: vi.fn().mockResolvedValue({ status: 'active' }),
+    exists: vi.fn().mockResolvedValue(true),
     ...overrides?.studentGuardians,
+  };
+  const institutionMembersRepo = {
+    exists: vi.fn().mockResolvedValue(true),
+    ...overrides?.institutionMembers,
   };
   const vehiclesRepo = {
     findOne: vi.fn().mockResolvedValue(null),
@@ -168,6 +178,7 @@ function buildService(overrides?: {
     pickupRequestsRepo as never,
     enrollmentsRepo as never,
     studentGuardiansRepo as never,
+    institutionMembersRepo as never,
     vehiclesRepo as never,
     deliveryPointsRepo as never,
     auditLogRepo as never,
@@ -179,6 +190,7 @@ function buildService(overrides?: {
     pickupRequestsRepo,
     enrollmentsRepo,
     studentGuardiansRepo,
+    institutionMembersRepo,
     vehiclesRepo,
     deliveryPointsRepo,
     auditLogRepo,
@@ -536,6 +548,216 @@ describe('PickupsService', () => {
 
       expect(result.status).toBe('en_route');
       expect(mqttClient.publish).toHaveBeenCalled();
+    });
+  });
+
+  describe('findById', () => {
+    it('returns the full detail when the caller is a guardian of the student', async () => {
+      const { service, institutionMembersRepo } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(true) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(false) },
+      });
+
+      const result = await service.findById('user-1', 'pr-1');
+
+      expect(result.id).toBe('pr-1');
+      expect(institutionMembersRepo.exists).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { institution: { id: 'inst-1' }, user: { id: 'user-1' } },
+        }),
+      );
+    });
+
+    it('returns the full detail when the caller is an institution_member, any role', async () => {
+      const { service } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(false) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(true) },
+      });
+
+      const result = await service.findById('user-1', 'pr-1');
+
+      expect(result.id).toBe('pr-1');
+    });
+
+    it('rejects with 403 NOT_INSTITUTION_MEMBER when the caller is neither', async () => {
+      const { service } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(false) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(false) },
+      });
+
+      await expect(service.findById('user-1', 'pr-1')).rejects.toMatchObject({
+        response: { code: 'NOT_INSTITUTION_MEMBER' },
+      });
+    });
+
+    it('rejects with 404 before evaluating the OR when the pickup_request does not exist', async () => {
+      const { service, studentGuardiansRepo, institutionMembersRepo } = buildService({
+        pickupRequests: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.findById('user-1', 'missing')).rejects.toMatchObject({
+        response: { code: 'RESOURCE_NOT_FOUND' },
+      });
+      expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
+      expect(institutionMembersRepo.exists).not.toHaveBeenCalled();
+    });
+
+    it('returns the exact detail shape, including deliveryCode/estimatedArrivalAt/etaSeconds/completedAt', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(
+            buildOwnedPickupRequest({
+              status: 'arriving',
+              estimatedArrivalAt: new Date('2026-07-16T08:10:00.000Z'),
+              etaSeconds: 300,
+              completedAt: null,
+            }),
+          ),
+        },
+      });
+
+      const result = await service.findById('user-1', 'pr-1');
+
+      expect(result).toEqual({
+        id: 'pr-1',
+        enrollmentId: 'enr-1',
+        institutionId: 'inst-1',
+        guardianUserId: 'user-1',
+        deliveryPointId: null,
+        status: 'arriving',
+        deliveryCode: '1234',
+        arrivalMode: null,
+        vehicleDescription: null,
+        vehiclePlate: null,
+        estimatedArrivalAt: '2026-07-16T08:10:00.000Z',
+        etaSeconds: 300,
+        startedAt: '2026-07-16T08:00:00.000Z',
+        completedAt: null,
+      });
+    });
+  });
+
+  describe('listByEnrollment', () => {
+    it('returns a page of summaries when the caller is a guardian of the student', async () => {
+      const { service } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(true) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(false) },
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByEnrollment('user-1', { enrollmentId: 'enr-1' });
+
+      expect(result).toEqual({
+        pickupRequests: [
+          {
+            id: 'pr-1',
+            status: 'en_route',
+            startedAt: '2026-07-16T08:00:00.000Z',
+            completedAt: null,
+            deliveryPointId: null,
+          },
+        ],
+        limit: 20,
+        offset: 0,
+        total: 1,
+      });
+    });
+
+    it('returns a page of summaries when the caller is an institution_member, any role', async () => {
+      const { service } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(false) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(true) },
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByEnrollment('user-1', { enrollmentId: 'enr-1' });
+
+      expect(result.pickupRequests).toHaveLength(1);
+    });
+
+    it('rejects with 403 NOT_INSTITUTION_MEMBER when the caller is neither', async () => {
+      const { service } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(false) },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(false) },
+      });
+
+      await expect(
+        service.listByEnrollment('user-1', { enrollmentId: 'enr-1' }),
+      ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
+    });
+
+    it('rejects with 404 before evaluating the OR when the enrollment does not exist', async () => {
+      const { service, studentGuardiansRepo, institutionMembersRepo } = buildService({
+        enrollments: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.listByEnrollment('user-1', { enrollmentId: 'missing' }),
+      ).rejects.toMatchObject({ response: { code: 'RESOURCE_NOT_FOUND' } });
+      expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
+      expect(institutionMembersRepo.exists).not.toHaveBeenCalled();
+    });
+
+    it('applies limit/offset paging and filters by status, ordered by created_at DESC', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 45]);
+      const { service } = buildService({
+        pickupRequests: { findAndCount },
+      });
+
+      const result = await service.listByEnrollment('user-1', {
+        enrollmentId: 'enr-1',
+        status: 'delivered',
+        limit: 10,
+        offset: 20,
+      });
+
+      expect(findAndCount).toHaveBeenCalledWith({
+        where: { enrollment: { id: 'enr-1' }, status: 'delivered' },
+        order: { createdAt: 'DESC' },
+        take: 10,
+        skip: 20,
+      });
+      expect(result.limit).toBe(10);
+      expect(result.offset).toBe(20);
+      expect(result.total).toBe(45);
+    });
+
+    it('defaults to limit 20 and offset 0 when not provided', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({
+        pickupRequests: { findAndCount },
+      });
+
+      await service.listByEnrollment('user-1', { enrollmentId: 'enr-1' });
+
+      expect(findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 20, skip: 0 }));
+    });
+
+    it('returns summaries without deliveryCode/guardianUserId/ETA fields', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([
+            [
+              buildOwnedPickupRequest({
+                deliveryCode: '9999',
+                estimatedArrivalAt: new Date('2026-07-16T08:10:00.000Z'),
+                etaSeconds: 300,
+              }),
+            ],
+            1,
+          ]),
+        },
+      });
+
+      const result = await service.listByEnrollment('user-1', { enrollmentId: 'enr-1' });
+
+      expect(Object.keys(result.pickupRequests[0]).sort()).toEqual(
+        ['id', 'status', 'startedAt', 'completedAt', 'deliveryPointId'].sort(),
+      );
     });
   });
 

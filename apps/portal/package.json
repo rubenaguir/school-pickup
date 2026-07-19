@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@casillego/shared": "*",
+    "@casillego/ui": "*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

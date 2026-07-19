@@ -1,10 +1,12 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// 7 indexes deliberately absent from the entity decorators (see the comments in
-// vehicle.entity.ts, student-guardian.entity.ts, enrollment.entity.ts,
-// pickup-request.entity.ts, delivery-point.entity.ts) because TypeORM's @Index
-// decorator cannot express a partial (WHERE) or GIN index. Documented in each
-// spec's "Índices" section; ADR-018, ADR-024 point 2 and ADR-026 point 1.
+// 7 partial/GIN indexes. This raw SQL is the real source of truth in
+// Postgres. They are also mirrored declaratively as @Index decorators on the
+// entities (vehicle.entity.ts, student-guardian.entity.ts, enrollment.entity.ts,
+// pickup-request.entity.ts, delivery-point.entity.ts) so TypeORM is aware of
+// them and `migration:generate` doesn't propose recreating them — see each
+// entity's own comment. Documented in each spec's "Índices" section;
+// ADR-018, ADR-024, ADR-025, ADR-026.
 export class PartialUniqueAndGinIndexes1783697356401 implements MigrationInterface {
   name = 'PartialUniqueAndGinIndexes1783697356401';
 

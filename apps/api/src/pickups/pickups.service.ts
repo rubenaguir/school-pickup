@@ -30,6 +30,7 @@ import {
   DeliveryPoint,
   Enrollment,
   Institution,
+  InstitutionMember,
   PickupRequest,
   PickupRequestStatusHistory,
   StudentGuardian,
@@ -38,11 +39,15 @@ import {
 } from '@casillego/shared/entities';
 import { randomDeliveryCode } from './delivery-code.util';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
+import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type {
+  ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
   PickupRequestCancelResponse,
   PickupRequestDeliverResponse,
+  PickupRequestDetailResponse,
   PickupRequestResponse,
+  PickupRequestSummary,
 } from './dto/responses';
 
 const RESOURCE_NOT_FOUND = {
@@ -53,6 +58,11 @@ const RESOURCE_NOT_FOUND = {
 const NOT_STUDENT_GUARDIAN = {
   code: 'NOT_STUDENT_GUARDIAN',
   message: 'The authenticated user is not a guardian of this student.',
+} as const;
+
+const NOT_INSTITUTION_MEMBER = {
+  code: 'NOT_INSTITUTION_MEMBER',
+  message: 'The authenticated user is not a member of this institution.',
 } as const;
 
 const GUARDIAN_NOT_ACTIVE = {
@@ -111,6 +121,8 @@ export class PickupsService {
     private readonly enrollmentsRepository: Repository<Enrollment>,
     @InjectRepository(StudentGuardian)
     private readonly studentGuardiansRepository: Repository<StudentGuardian>,
+    @InjectRepository(InstitutionMember)
+    private readonly institutionMembersRepository: Repository<InstitutionMember>,
     @InjectRepository(Vehicle)
     private readonly vehiclesRepository: Repository<Vehicle>,
     @InjectRepository(DeliveryPoint)
@@ -153,6 +165,43 @@ export class PickupsService {
     await this.publishRealtimeUpdate(saved, enrollment, deliveryPointId);
 
     return this.toResponse(saved);
+  }
+
+  async findById(userId: string, id: string): Promise<PickupRequestDetailResponse> {
+    const pickupRequest = await this.findPickupRequestOrFail(id);
+    await this.assertReadAccess(
+      pickupRequest.enrollment.student.id,
+      pickupRequest.institutionId,
+      userId,
+    );
+    return this.toDetailResponse(pickupRequest);
+  }
+
+  async listByEnrollment(
+    userId: string,
+    query: ListPickupRequestsQueryDto,
+  ): Promise<ListPickupRequestsResponse> {
+    const enrollment = await this.findEnrollmentOrFail(query.enrollmentId);
+    await this.assertReadAccess(enrollment.student.id, enrollment.institutionId, userId);
+
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const [pickupRequests, total] = await this.pickupRequestsRepository.findAndCount({
+      where: {
+        enrollment: { id: enrollment.id },
+        ...(query.status ? { status: query.status } : {}),
+      },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return {
+      pickupRequests: pickupRequests.map((pickupRequest) => this.toSummary(pickupRequest)),
+      limit,
+      offset,
+      total,
+    };
   }
 
   async arrive(userId: string, id: string): Promise<PickupRequestArrivedResponse> {
@@ -231,6 +280,31 @@ export class PickupsService {
   private assertOwner(pickupRequest: PickupRequest, userId: string): void {
     if (pickupRequest.guardian.id !== userId) {
       throw new ForbiddenException(NOT_STUDENT_GUARDIAN);
+    }
+  }
+
+  // Deliberately looser than assertActiveGuardian: any guardian link
+  // regardless of status, since reading a pickup request's status is not a
+  // sensitive action gated on active status the way creating one is.
+  private async hasGuardianLink(studentId: string, userId: string): Promise<boolean> {
+    return this.studentGuardiansRepository.exists({
+      where: { student: { id: studentId }, guardian: { id: userId } },
+    });
+  }
+
+  private async assertReadAccess(
+    studentId: string,
+    institutionId: string,
+    userId: string,
+  ): Promise<void> {
+    const [isGuardian, isMember] = await Promise.all([
+      this.hasGuardianLink(studentId, userId),
+      this.institutionMembersRepository.exists({
+        where: { institution: { id: institutionId }, user: { id: userId } },
+      }),
+    ]);
+    if (!isGuardian && !isMember) {
+      throw new ForbiddenException(NOT_INSTITUTION_MEMBER);
     }
   }
 
@@ -447,6 +521,37 @@ export class PickupsService {
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
       startedAt: pickupRequest.startedAt.toISOString(),
+    };
+  }
+
+  private toDetailResponse(pickupRequest: PickupRequest): PickupRequestDetailResponse {
+    return {
+      id: pickupRequest.id,
+      enrollmentId: pickupRequest.enrollment.id,
+      institutionId: pickupRequest.institution.id,
+      guardianUserId: pickupRequest.guardian.id,
+      deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
+      status: pickupRequest.status,
+      deliveryCode: pickupRequest.deliveryCode,
+      arrivalMode: pickupRequest.arrivalMode,
+      vehicleDescription: pickupRequest.vehicleDescription,
+      vehiclePlate: pickupRequest.vehiclePlate,
+      estimatedArrivalAt: pickupRequest.estimatedArrivalAt
+        ? pickupRequest.estimatedArrivalAt.toISOString()
+        : null,
+      etaSeconds: pickupRequest.etaSeconds,
+      startedAt: pickupRequest.startedAt.toISOString(),
+      completedAt: pickupRequest.completedAt ? pickupRequest.completedAt.toISOString() : null,
+    };
+  }
+
+  private toSummary(pickupRequest: PickupRequest): PickupRequestSummary {
+    return {
+      id: pickupRequest.id,
+      status: pickupRequest.status,
+      startedAt: pickupRequest.startedAt.toISOString(),
+      completedAt: pickupRequest.completedAt ? pickupRequest.completedAt.toISOString() : null,
+      deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
     };
   }
 }

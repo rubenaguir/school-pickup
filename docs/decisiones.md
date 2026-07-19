@@ -1798,3 +1798,262 @@ board/cola, extraídos en el mismo cambio) sí vive en el barrel raíz: es
   `api`) y `@nestjs/schedule` (feature 023, aún sin consumir). **Sin
   `@nestjs/config`**: el `worker` usará `process.loadEnvFile()`, igual que el `api`
   — que nunca usó `ConfigModule`, pese a que `docs/arquitectura.md` lo afirmaba.
+
+## ADR-034 — Botón "Reportar incidencia" de la Consola de puerta: visible pero deshabilitado, implementación diferida
+
+**Contexto.** El lienzo de Claude Design para la Consola de puerta (Fase 7,
+`apps/portal`) incluye un botón "Reportar incidencia", heredado de
+`docs/design-brief.md`. `specs/features/021-confirmar-llegada-y-entrega.md` ya
+señaló esto como pregunta abierta y lo dejó explícitamente fuera de alcance:
+**no existe entidad ni campo** en el modelo que respalde una incidencia (sin
+tabla, sin endpoint, sin evento de dominio). Al sincronizar el design system
+real vía `/design-sync`, el componente del botón se trae al repo tal cual está
+dibujado en el lienzo — hace falta una decisión explícita sobre su estado en
+esta fase para que Claude Code no le cablee un handler contra un endpoint que
+no existe.
+
+**Decisión.**
+1. **El botón se renderiza, pero deshabilitado**, con una etiqueta o tooltip
+   tipo "Próximamente" — no se omite del layout. Esto preserva la fidelidad
+   visual del diseño ya aprobado en Claude Design (el layout completo de la
+   Consola de puerta se conserva) sin fingir una funcionalidad que no existe.
+2. **Sin wiring a ningún endpoint ni estado.** El botón no dispara ninguna
+   llamada a la API, no abre ningún modal funcional, y no depende de ningún
+   campo de `pickup_requests` ni de ninguna otra entidad. Su único
+   comportamiento en esta fase es visual (estado `disabled`).
+3. **La feature de incidencias queda diferida a un slice futuro**, con su
+   propio ADR de diseño y su propia entidad (posiblemente algo como
+   `pickup_request_incidents` o similar — sin definir aquí; es tarea del slice
+   futuro, no de este ADR). Este ADR no prejuzga esa forma, solo constata que
+   hoy no existe y que su ausencia es deliberada, no un olvido.
+4. **Esta decisión es específica a Fase 7 / Consola de puerta.** Si en el
+   futuro el mismo patrón de "elemento visual sin respaldo de datos" aparece
+   en otra pantalla, se resuelve con su propio ADR — no se generaliza aquí una
+   regla para todo el portal.
+
+## Referencias
+
+- `specs/features/021-confirmar-llegada-y-entrega.md` (Preguntas abiertas:
+  exclusión original de "Reportar incidencia").
+- `docs/design-brief.md` (origen visual del botón, sección Consola de puerta).
+- `docs/plan-implementacion.md` (Fase 7 — Frontend: `apps/portal`).
+
+## ADR-035 — Columna "Último acceso" en Personal: placeholder visual, campo diferido a un slice futuro
+
+**Contexto.** El lienzo de Claude Design para la pantalla de Personal (Fase 7,
+`apps/portal`) incluye, según `docs/design-brief.md`, una columna "Último
+acceso" en la lista de miembros del staff de la institución. Ninguna spec de
+entidad revisada (`specs/entities/user.md`, `specs/entities/institution_member.md`)
+documenta un campo que registre el último inicio de sesión de un `user`. A
+diferencia de "Reportar incidencia" (ADR-034), este no es un botón con acción
+propia sino una columna de datos: su ausencia de campo real es igual de
+real, pero su tratamiento visual es distinto (no hay "estado deshabilitado"
+para un dato que no existe, solo un placeholder).
+
+**Decisión.**
+1. **La columna se muestra**, con un placeholder (ej. `—`) en cada fila, en
+   vez de omitirse del layout — preserva la fidelidad visual del diseño ya
+   aprobado en Claude Design.
+2. **Sin wiring a ningún campo ni endpoint.** El placeholder es estático: no
+   se calcula, no se ordena por él, no depende de ningún campo de `users` ni
+   de `institution_members`. No confundir con un valor `null` traído de la
+   API — no hay llamada de por medio, el frontend no espera ni pide este
+   dato en esta fase.
+3. **El campo real (`users.last_login_at` o similar — sin definir aquí; es
+   tarea del slice futuro) queda diferido.** Este ADR no prejuzga su nombre,
+   tipo, ni el mecanismo para poblarlo (¿se actualiza en cada login? ¿en cada
+   refresh de token?) — todo eso corresponde a su propio ADR y feature cuando
+   se aborde.
+4. **Esta decisión es específica a la columna "Último acceso" de la pantalla
+   de Personal.** Mismo criterio que ADR-034: no se generaliza una regla para
+   todo el portal ante futuros huecos similares.
+
+## Referencias
+
+- `docs/design-brief.md` (origen visual de la columna, sección Personal).
+- `specs/entities/user.md`, `specs/entities/institution_member.md` (ausencia
+  del campo).
+- ADR-034 (mismo patrón de decisión — elemento visual sin respaldo de datos —
+  aplicado al botón "Reportar incidencia" de la Consola de puerta).
+
+## ADR-036 — `@casillego/ui`: nuevo paquete para el design system, sin build propio, barrel único
+
+**Contexto.** El proyecto **"CasiLlego Design System"**
+(`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`) ya existe con 10
+componentes (`Button`, `Badge`, `Card`, `Avatar`, `Toggle`, `SegmentedTabs`,
+`EmptyState`, `ErrorState`, `SkeletonRow`, `NavItem`), tokens de color/
+spacing/tipografía, fuentes y guidelines — construido directamente en Claude
+Design, no sincronizado desde este repo (no tiene `_ds_sync.json`). Es el
+ítem que `docs/plan-implementacion.md` (Fase 7) dejaba abierto como
+*"Resolver tokens del design system antes de esta fase"*. La skill
+`/design-sync` solo empuja repo → claude.ai/design; aquí la dirección es la
+inversa, así que los artefactos se leyeron a mano vía `DesignSync(get_file)`
+y se portaron como código TS/TSX real.
+
+Antes de portar nada hacía falta decidir dónde vive ese código: `apps/portal`
+no tenía ni carpeta `components/`, y los propios tokens de estado traen el
+comentario *"shared by all 3 CasiLlego frontends — DO NOT recolor"* — el
+mismo sistema lo van a consumir `portal` (Fase 7), `parent` (Fase 8) y
+`board` (Fase 9).
+
+**Decisión.**
+
+1. **Paquete nuevo `packages/ui`** (`@casillego/ui`), hermano de
+   `packages/shared`. En este monorepo las apps no se importan entre sí,
+   solo `packages/*` es compartible — mismo criterio que ADR-033 aplicó a
+   las entidades TypeORM compartidas por `api` y `worker`.
+2. **Sin build propio.** `package.json` expone `"exports"` apuntando
+   directo a `src/index.ts` y `src/styles.css` (TS/TSX fuente, sin el
+   `tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json` que sí tiene
+   `packages/shared`). A diferencia de `shared` — que además de los
+   frontends alimenta `api`/`worker` (Node/CJS) y por eso necesita un
+   `dist` real — `@casillego/ui` solo lo consumen apps de navegador vía
+   Vite, que transpila TSX al vuelo desde el symlink de workspace; un
+   segundo pipeline de build sería complejidad sin consumidor que la
+   necesite.
+3. **Un solo barrel raíz** (`@casillego/ui`), sin subpaths por grupo
+   (`/core`, `/feedback`, `/navigation`). ADR-033 usa subpath en `shared`
+   para resolver dos problemas puntuales — colisión de 14 nombres entre
+   `types/*` y `entities/*`, y fuga de `typeorm` (Node-only) al bundle de
+   navegador — que no existen aquí: los 10 nombres de componente no
+   colisionan entre sí ni con nada existente, y todo el paquete es código
+   de navegador.
+4. **`apps/portal` se toca mínimamente**: `"@casillego/ui": "*"` en sus
+   `dependencies` y `import '@casillego/ui/styles.css'` en `main.tsx`.
+   Cero componentes usados todavía, cero pantallas — deja el portal listo
+   para que las pantallas de una fase futura usen los primitivos sin
+   configuración adicional.
+5. **Metadata propia de Claude Design se descarta al portar**: la
+   anotación `@startingPoint section="..." viewport="..."` de cada `.d.ts`
+   y los comentarios `/* @kind other */` de los tokens no significan nada
+   fuera del panel de esa herramienta. Los nombres de componentes y de
+   custom properties CSS (`--brand`, `--status-en-route`, `--radius-lg`,
+   etc.) se mantienen tal cual, sin traducir ni renombrar, para no romper
+   la trazabilidad entre lo que se diseña en claude.ai/design y lo que
+   vive en el repo.
+
+**Consecuencias.**
+- `eslint.config.mjs` gana `eslint-plugin-react-hooks` (nueva devDependency
+  raíz) y un bloque de reglas de hooks aplicado tanto a `packages/ui/src`
+  como a los tres frontends — es el primer código React real del repo,
+  antes solo había globals de navegador sin reglas específicas. **No** se
+  agrega `eslint-plugin-react`: su última versión publicada (7.37.5)
+  declara peer `eslint@^3...^9.7` y no soporta ESLint 10 — mismo tipo de
+  conflicto de versión bleeding-edge que TypeScript 7 en ADR-021. Se
+  retoma cuando publique soporte, o se evalúa una alternativa nativa de
+  flat config (p. ej. `@eslint-react/eslint-plugin`, que si declara
+  `eslint: '*'`, pero no se adoptó en esta pasada por no tener su forma de
+  configuración verificada). Tampoco se agrega `eslint-plugin-jsx-a11y`;
+  ambos quedan para cuando se construyan pantallas reales. **Esta omisión
+  queda registrada explícitamente en la tabla de "Backlog técnico" de
+  `docs/plan-implementacion.md`** — es pérdida real de cobertura (p. ej.
+  `react/jsx-key` no detectaría una `key` faltante en el `.map()` de
+  `SegmentedTabs`), no una diferencia cosmética de versión, así que no debe
+  quedar como omisión indefinida.
+- `tsconfig.base.json` gana dos entradas en `paths`:
+  `@casillego/ui` → `packages/ui/src/index.ts` y
+  `@casillego/ui/styles.css` → `packages/ui/src/styles.css`.
+- No se agregan tests de componentes: son ports de fidelidad visual 1:1 sin
+  lógica de negocio propia. `vitest.config.ts` ya tiene
+  `passWithNoTests: true`, así que el paquete no rompe `npm run test`.
+- El inventario completo de `ui_kits/portal-admin` (pantallas de rol
+  Institución y rol OPS) queda fuera de esta decisión — es trabajo de una
+  fase futura, cuando se construyan las pantallas reales de `apps/portal`.
+
+## Referencias
+
+- `docs/plan-implementacion.md` (Fase 7 — Frontend: `apps/portal`, ítem
+  "Resolver tokens del design system").
+- ADR-033 (mismo criterio de "un solo lugar de verdad para código
+  compartido", y precedente de cuándo sí usar subpaths de exportación).
+- ADR-034, ADR-035 (decisiones previas que ya anticipaban el import del
+  design system real vía `/design-sync`).
+- `docs/plan-implementacion.md` (Fase 7 — Frontend: `apps/portal`).
+
+## ADR-037 — Endpoint de búsqueda de instituciones por nombre: solo JWT, sin `InstitutionMembershipGuard`
+
+**Contexto.** `specs/features/005-asociar-institucion.md` documenta dos caminos
+de éxito para que un tutor solicite asociar un alumno a una institución: por
+`join_code` (ya resuelto server-side dentro de `POST /enrollments`, sin
+endpoint de búsqueda propio) y por **búsqueda de nombre** — que no tenía
+ningún endpoint que lo respaldara. Todos los endpoints existentes de
+`specs/api-contracts/institutions.md` (feature 008) exigen que el usuario ya
+sea `institution_members` de la institución consultada, vía
+`InstitutionMembershipGuard`. Ese guard no aplica aquí: un tutor que busca una
+institución **todavía no tiene ninguna relación con ella** — es precisamente
+el paso previo a crear esa relación (`enrollments`).
+
+**Decisión.**
+1. **El endpoint exige JWT (usuario autenticado) pero ningún guard de
+   membresía.** Es el primer endpoint de `institutions.md` sin
+   `InstitutionMembershipGuard` — no es un descuido, es la única forma
+   correcta de modelar "buscar algo a lo que todavía no perteneces".
+2. **Coincidencia parcial, case-insensitive**, sobre `institutions.name` (`ILIKE '%texto%'`
+   en Postgres).
+3. **Solo instituciones `status = approved`** — mismo criterio que la
+   resolución por `join_code` (ADR-019 punto 4): una institución `pending` o
+   `suspended` no debe aparecer en ningún resultado de búsqueda de un tutor.
+4. **Paginado**, mismo patrón que otros listados del proyecto (`limit`/`offset`,
+   default `20`/`0` — ADR-024 punto 9).
+5. **Campos de respuesta mínimos** para la tarjeta de selección
+   (`docs/design-brief.md`: "las tarjetas muestran el tipo... y, en
+   actividades, la categoría"): `id`, `name`, `type`, `category`. No se
+   exponen campos operativos (geocerca, radios, `joinCode`) — el tutor no
+   tiene membresía todavía, y esos campos no son necesarios para elegir una
+   institución a solicitar.
+
+## Referencias
+
+- `specs/features/005-asociar-institucion.md` (camino de búsqueda por
+  nombre).
+- ADR-019 (punto 4: visibilidad de instituciones no aprobadas).
+- ADR-024 (punto 9: paginación `limit`/`offset`).
+- `specs/api-contracts/institutions.md` (endpoint nuevo agregado).
+
+## `GET /institutions?search=...`
+
+Busca instituciones `approved` por coincidencia parcial de nombre. Ver
+feature 005 (camino de asociación por búsqueda de nombre). A diferencia de
+los demás endpoints de este contrato, **no** exige `InstitutionMembershipGuard`:
+el usuario que busca todavía no tiene ninguna relación con la institución
+que encuentre — es el paso previo a `POST /enrollments`. Solo exige JWT
+válido (ADR-037).
+
+**Query params**
+| Param | Requerido | Notas |
+|---|---|---|
+| `search` | sí | coincidencia parcial, case-insensitive, sobre `name` (`ILIKE '%search%'`) |
+| `limit` | no | tamaño de página; default `20` (ADR-024 punto 9) |
+| `offset` | no | desplazamiento; default `0` (ADR-024 punto 9) |
+
+**Response 200**
+```json
+{
+  "institutions": [
+    {
+      "id": "uuid",
+      "name": "string",
+      "type": "school | extracurricular",
+      "category": "string | null"
+    }
+  ],
+  "limit": "number",
+  "offset": "number",
+  "total": "number"
+}
+```
+
+Solo instituciones con `status = approved` (ADR-019 punto 4) — una `pending` o
+`suspended` no debe aparecer en ningún resultado.
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | `search` faltante o vacío |
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+
+## Referencias (actualizar sección existente del archivo)
+
+Agregar a la lista de referencias de `institutions.md`:
+- ADR-037 (endpoint de búsqueda sin `InstitutionMembershipGuard`; solo JWT).
+- `specs/features/005-asociar-institucion.md` (camino de búsqueda por nombre).
