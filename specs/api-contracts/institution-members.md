@@ -16,7 +16,9 @@ usuario de otra institución recibe 403.
 
 Rol requerido para escritura (`POST .../invite`, `PATCH .../:id`):
 **`role = admin`** (ADR-022, punto 1). La lectura (`GET`) está disponible para
-cualquier `institution_members` de la institución.
+cualquier `institution_members` de la institución **o para cualquier usuario
+con `is_super_admin = true`** (ADR-039) — única excepción de este contrato al
+guard compartido, ver el propio endpoint más abajo.
 
 `POST /invitations/:token/accept` es la excepción: es de **acceso público** (no
 requiere access token existente), porque quien acepta una invitación de correo
@@ -29,6 +31,12 @@ de correo (ver `specs/api-contracts/auth.md`).
 Lista el personal de la institución. Ver feature 012. El estado "Invitado" se
 **deriva de `users.status`** (`institution_members` no tiene columna `status` —
 ver `specs/entities/institution_member.md`).
+
+**Autorización (ADR-039):** verificación manual en el `service`, no
+`InstitutionMembershipGuard` puro — el usuario debe ser `institution_members`
+de esa `:id` (cualquier `role`) **O** tener `is_super_admin = true`. Es la
+única excepción de este contrato al guard compartido; el resto de endpoints
+(`invite`, `PATCH`, `DELETE`) no cambian.
 
 **Request:** sin body.
 
@@ -60,12 +68,17 @@ acepta — su nombre real recién se conoce al aceptar
 **Errores**
 | Código | Caso |
 |---|---|
-| 403 | el usuario autenticado no es `institution_members` de esa `:id` |
+| 403 | el usuario autenticado no es `institution_members` de esa `:id` **ni** `is_super_admin` (falla el OR, ADR-039) |
+| 404 | la `:id` no corresponde a ninguna institución — **solo alcanzable por el lado de super-admin** (ADR-039 punto 2); para el lado de membresía normal, institución inexistente y sin membresía son indistinguibles (403, ver abajo) |
 
-No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
-`InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
-inexistente de institución existente sin membresía — ambos casos devuelven
-`403 NOT_INSTITUTION_MEMBER`. Ver `docs/arquitectura.md`.
+**Manejo de existencia asimétrico según el lado del OR (ADR-039, punto 2):**
+si la autorización se resuelve por el lado de membresía normal, se conserva
+el comportamiento ambiguo ya documentado en `docs/arquitectura.md` —
+institución inexistente y existente-sin-membresía devuelven el mismo
+`403 NOT_INSTITUTION_MEMBER`, sin revelar existencia a quien no tiene acceso.
+Si se resuelve por el lado de super-admin, sí se verifica existencia
+explícitamente: no hay razón de privacidad para ocultarle existencia a un
+super-admin, que ya puede ver todo el sistema.
 
 ## `POST /institutions/:id/members/invite`
 
@@ -267,6 +280,9 @@ recurso (ADR-022 punto 4), igual que el `PATCH`.
   `DELETE /institution-members/:id` con protección del último admin).
 - ADR-030 (`users.full_name` nullable — mismo patrón que `password_hash`,
   ADR-022 punto 2 — mientras un `users` invitado no acepta).
+- ADR-038 (`is_super_admin`, visibilidad cross-institución de plataforma).
+- ADR-039 (`GET /institutions/:id/members`: OR entre membresía y
+  `is_super_admin`, con manejo de existencia asimétrico).
 - `specs/entities/audit_log.md`.
 
 ## Preguntas abiertas
@@ -274,4 +290,5 @@ recurso (ADR-022 punto 4), igual que el `PATCH`.
 Ninguna: el rol requerido (`role = admin`), la nulabilidad de `password_hash`,
 la protección del último admin, el reenvío de invitación y el mecanismo de
 aislamiento multi-tenant (`InstitutionMembershipGuard`) se resolvieron en
-ADR-022 (puntos 1–5).
+ADR-022 (puntos 1–5). La autorización de lectura del listado de personal
+(institution_member o super-admin) se resolvió en ADR-039.

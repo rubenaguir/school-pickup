@@ -2110,3 +2110,43 @@ exactas de cada métrica.
 - `docs/plan-implementacion.md` (slice diferido de Fase 1, ahora resuelto).
 - ADR-022 (punto 4: `InstitutionMembershipGuard`, contraste con el guard
   nuevo).
+
+## ADR-039 — `GET /institutions/:id/members`: OR entre membresía y `is_super_admin`
+
+**Contexto.** `specs/api-contracts/institution-members.md` gatea
+`GET /institutions/:id/members` con `InstitutionMembershipGuard` puro,
+exigiendo que el usuario sea `institution_members` de esa `:id`. Esto
+rechaza a un super-admin (`users.is_super_admin = true`) que consulte el
+personal de una institución a la que no pertenece — un caso legítimo de
+soporte/operación de plataforma, coherente con que el super-admin ya tiene
+visibilidad cross-institución en `GET /admin/metrics` (ADR-038).
+
+**Decisión.**
+1. **Este endpoint pasa a verificación manual en el `service`**, no
+   `InstitutionMembershipGuard` puro: el usuario debe ser `institution_members`
+   de esa `:id` (cualquier `role`) **O** tener `is_super_admin = true`.
+2. **Manejo de existencia asimétrico según el lado del OR:**
+   - Si pasa por el lado de membresía (institution_member normal): se
+     conserva el comportamiento ambiguo ya documentado en
+     `docs/arquitectura.md` — `403 NOT_INSTITUTION_MEMBER` tanto si la
+     institución no existe como si existe sin membresía (no se revela
+     existencia a quien no tiene acceso).
+   - Si pasa por el lado de super-admin: **sí se resuelve existencia
+     explícitamente** — `404 RESOURCE_NOT_FOUND` si la `:id` no corresponde a
+     ninguna institución. No hay razón de privacidad para ocultarle
+     existencia a un super-admin, que ya puede ver todo el sistema.
+3. **Alcance limitado a este único endpoint.** Los demás endpoints de
+   `institution-members.md` (`POST .../invite`, `PATCH`, `DELETE`) conservan
+   `InstitutionMembershipGuard` + `role = admin` sin cambios — el super-admin
+   no gestiona personal de instituciones ajenas, solo lo consulta. No se
+   generaliza este patrón a otros endpoints del sistema en este ADR.
+
+## Referencias
+
+- `specs/api-contracts/institution-members.md` (endpoint actualizado).
+- ADR-038 (`is_super_admin`, visibilidad cross-institución de plataforma).
+- ADR-022 (punto 4: `InstitutionMembershipGuard`, contraste con la
+  verificación manual de este endpoint).
+- `docs/arquitectura.md` (patrón de verificación manual OR, ya usado para
+  `pickup-requests`; ADR-039 introduce la variante con flag global en vez de
+  relación con el recurso).
