@@ -2057,3 +2057,56 @@ Solo instituciones con `status = approved` (ADR-019 punto 4) — una `pending` o
 Agregar a la lista de referencias de `institutions.md`:
 - ADR-037 (endpoint de búsqueda sin `InstitutionMembershipGuard`; solo JWT).
 - `specs/features/005-asociar-institucion.md` (camino de búsqueda por nombre).
+
+## ADR-038 — Endpoint de métricas globales: `SuperAdminGuard` nuevo, ventanas de agregación
+
+**Contexto.** `docs/design-brief.md` describe la pantalla "Métricas globales"
+del super-admin (instituciones por status, solicitudes pendientes, tutores
+registrados, recogidas totales con comparativo, top instituciones, tiempo
+medio de recogida), pero no existía ninguna spec de feature ni contrato de
+API que la respaldara — `docs/plan-implementacion.md` ya la marcaba como
+"slice diferido en Fase 1 pendiente de especificar". El mecanismo de
+autorización (`users.is_super_admin`, boolean global) ya existe en
+`specs/entities/user.md`; lo que faltaba era el endpoint y las definiciones
+exactas de cada métrica.
+
+**Decisión.**
+1. **Guard nuevo, `SuperAdminGuard`**, distinto de `InstitutionMembershipGuard`:
+   verifica `request.user` → `users.is_super_admin === true`. No resuelve
+   ningún recurso ni institución — es una verificación de flag global, más
+   simple que el guard existente. Vive junto a él en
+   `apps/api/src/auth/guards/`.
+2. **Ventana de comparación: mes calendario actual vs. mes calendario
+   anterior** (no "últimos 30 días rodantes"). Ej. si hoy es 19 de julio,
+   compara 1–19 de julio contra 1–19 de junio (mismo corte de día, no el mes
+   completo anterior) — comparación de periodo parcial vs. periodo parcial
+   equivalente, no mes completo vs. mes parcial (que sesgaría el comparativo
+   a la baja artificialmente).
+3. **"Solicitudes pendientes" son dos métricas separadas**, no una sola:
+   `enrollmentsPending` (conteo de `enrollments.status = pending`, a nivel de
+   toda la plataforma) e `institutionsPendingApproval` (conteo de
+   `institutions.status = pending` — el mismo dato que ya aparece dentro del
+   desglose de instituciones por status, expuesto también aquí porque el
+   super-admin actúa sobre estas dos colas de aprobación de forma
+   independiente, con acciones y urgencias distintas).
+4. **"Tutores registrados"**: conteo de `users` distintos con al menos una
+   fila en `student_guardians` como `guardian_user_id`, sin filtrar por
+   `status` del vínculo — "registrado" es más amplio que "activo".
+5. **"Top instituciones por uso"**: top 5, ordenado por conteo de
+   `pickup_requests` creados en la misma ventana del punto 2 (mes actual).
+6. **"Tiempo medio de recogida"**: promedio de `completed_at - started_at`
+   sobre `pickup_requests` con `status = delivered` en la ventana del punto
+   2. Excluye `cancelled` (sin trayecto real completo) y estados no
+   terminales.
+7. **Sin caché ni pre-agregación en esta fase**: las consultas se calculan
+   al vuelo con `COUNT`/`AVG` sobre las tablas existentes. Si el volumen de
+   datos lo justifica más adelante, la optimización (vista materializada, job
+   agendado) es una decisión de rendimiento separada, no de este ADR.
+
+## Referencias
+
+- `specs/entities/user.md` (`is_super_admin`, ya existente).
+- `docs/design-brief.md` (sección "Rol: super-admin (operador)").
+- `docs/plan-implementacion.md` (slice diferido de Fase 1, ahora resuelto).
+- ADR-022 (punto 4: `InstitutionMembershipGuard`, contraste con el guard
+  nuevo).
