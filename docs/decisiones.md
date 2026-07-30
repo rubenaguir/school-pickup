@@ -2213,3 +2213,111 @@ validar") sin contrato que la respalde.
 - `docs/design-brief.md` (pantalla "Aprobación de instituciones").
 - `specs/api-contracts/institutions.md`, `specs/api-contracts/admin-institutions.md`
   (nuevo).
+
+## ADR-041 — `GET /institution-members/mine`: resolución de institución tras login
+
+**Contexto.** Al preparar la Capa 3 de Fase 7 (primera pantalla real de
+`apps/portal`) se detectó un hueco de plomería, no de una pantalla
+específica: el access token (`POST /auth/login`) no incluye `institutionId`
+ni `role` — deliberadamente, se resuelven por request contra
+`institution_members` (`specs/api-contracts/auth.md`). Pero todos los
+endpoints institution-scoped ya exigen `institutionId` como parámetro de
+entrada, y ninguna spec definía cómo el frontend lo averigua la primera vez.
+Sin esto, ninguna pantalla de "Rol: administrador de institución" puede
+cargar.
+
+**Decisión.**
+1. **Endpoint nuevo: `GET /institution-members/mine`**, en
+   `specs/api-contracts/institution-members.md`. Mismo patrón ya usado por
+   `GET /enrollments/mine` — perspectiva propia del usuario autenticado, sin
+   `InstitutionMembershipGuard` (sería circular: el guard necesita saber la
+   institución que este mismo endpoint resuelve).
+2. **Devuelve todas las membresías del usuario**, no una sola — un `users`
+   puede pertenecer a más de una institución (ej. cubre personal en dos
+   planteles). El frontend decide cómo presentar la selección (si hay una
+   sola, se auto-selecciona; si hay más de una, corresponde a la Capa 3a de
+   `apps/portal` decidir el selector — fuera de alcance de este ADR).
+3. **Sin restricción de `role`** — cualquier miembro necesita resolver su
+   propia institución, no solo los `admin`.
+
+## Referencias
+
+- `specs/api-contracts/auth.md` (claims del access token, `POST
+  /auth/login`).
+- `specs/api-contracts/enrollments.md` (`GET /enrollments/mine`, patrón ya
+  establecido que se replica aquí).
+- `specs/api-contracts/institution-members.md` (endpoint nuevo).
+- ADR-022 (punto 4: `InstitutionMembershipGuard`, contraste con este
+  endpoint que no lo usa).
+
+## ADR-042 — Plomería frontend de `apps/portal`: router, cliente de API, sesión, contexto de institución
+
+**Contexto.** `apps/portal/src` es un esqueleto (`App.tsx`/`main.tsx`, sin
+router, sin cliente de API, sin manejo de JWT, sin pantalla de login). Antes
+de construir la primera pantalla real (bandeja de aprobación, feature 006)
+hace falta esta capa base — de lo contrario cada pantalla nueva reinventaría
+su propio fetch, su propio manejo de sesión, y no habría forma de saber a
+qué institución pertenece el usuario (ver ADR-041).
+
+**Decisión.**
+1. **Router: `react-router` (v7).** Estándar de facto para SPA de React,
+   sin razón para desviarse. Rutas protegidas (`/login` pública; el resto
+   exige sesión) mediante un wrapper `<ProtectedRoute>` que redirige a
+   `/login` si no hay `accessToken` válido.
+2. **Cliente de API en `packages/shared`**, no en `packages/ui` ni
+   duplicado por app. Razón: es lógica de datos (fetch, manejo de error,
+   inyección de JWT, refresh), no de presentación — no pertenece a `ui`
+   (ADR-036, reservado a primitivos visuales). Y los tres frontends
+   (`portal`/`parent`/`board`) lo van a necesitar igual, no solo `portal` —
+   ponerlo en `shared` evita triplicarlo. Vive en un módulo nuevo
+   (`packages/shared/src/api-client/`), sin dependencia de TypeORM, así que
+   no hay riesgo de arrastrar el subpath de entidades (ADR-033) al bundle
+   de navegador — se exporta desde el barrel raíz igual que el resto de
+   `shared` consumido por frontends.
+3. **Tokens en `localStorage`** (confirmado con el humano): sobrevive a
+   cerrar el navegador, evita que un tutor/staff tenga que volver a
+   iniciar sesión en cada visita. Trade-off aceptado: expuesto a XSS si
+   algún día se introduce contenido no confiable en el DOM del portal — sin
+   mitigación adicional en esta fase (ninguna pantalla actual inyecta HTML
+   de terceros).
+4. **Flujo de refresh: automático y transparente.** El cliente de API
+   intercepta un `401` de cualquier llamada, intenta
+   `POST /auth/refresh` una vez con el `refreshToken` guardado, reintenta la
+   llamada original si el refresh tuvo éxito. Si el refresh también falla
+   (401/403), limpia `localStorage` y redirige a `/login`.
+5. **Contexto de institución (`InstitutionContext`):** al autenticarse,
+   llama `GET /institution-members/mine` (ADR-041) una vez. Si devuelve
+   exactamente una membresía (el caso esperado — confirmado con el humano
+   que hoy no hay restricción de base de datos que impida a un usuario de
+   personal pertenecer a más de una institución simultáneamente, aunque no
+   sea el caso común), se auto-selecciona sin intervención del usuario.
+   **Si devuelve más de una, esta capa solo guarda la lista completa y
+   selecciona la primera por defecto — un selector real para cambiar entre
+   instituciones queda fuera de alcance de esta capa**, no porque sea
+   imposible que ocurra, sino porque hoy no hay ninguna pantalla que lo
+   necesite con urgencia. Se construye cuando el caso real aparezca, con su
+   propio ADR si hace falta más que un selector simple. Si devuelve un
+   array vacío (usuario sin ninguna membresía, ej. un tutor puro accediendo
+   al portal de institución por error), se muestra un estado vacío
+   explicativo, no un error genérico.
+6. **Sin gestión de estado global adicional** (Redux/Zustand/etc.) en esta
+   capa — `AuthContext` + `InstitutionContext` (React Context nativo) son
+   suficientes para lo que existe hoy. Si la complejidad crece en fases
+   futuras, se reevalúa con su propio ADR, no se anticipa aquí.
+
+**Consecuencias.** Toda pantalla nueva de `apps/portal` a partir de aquí
+asume: sesión ya resuelta (`useAuth()`), institución ya resuelta
+(`useInstitution()`), y llamadas a la API vía el cliente compartido — nunca
+`fetch` crudo dentro de un componente de pantalla.
+
+## Referencias
+
+- ADR-036 (`packages/ui`, alcance reservado a primitivos visuales —
+  contraste con dónde vive el cliente de API).
+- ADR-033 (subpath de entidades TypeORM en `packages/shared`, aislado del
+  bundle de navegador — el cliente de API nuevo no lo toca).
+- ADR-041 (`GET /institution-members/mine`, consumido por
+  `InstitutionContext`).
+- `specs/api-contracts/auth.md` (`POST /auth/login`, `POST /auth/refresh`).
+- `specs/features/006-aprobacion-enrollment.md` (primera pantalla que
+  consume esta capa).

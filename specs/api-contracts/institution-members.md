@@ -26,6 +26,47 @@ nuevo todavía no tiene sesión. Se autentica con el token de invitación (JWT d
 corta duración) como credencial de un solo propósito, igual que la verificación
 de correo (ver `specs/api-contracts/auth.md`).
 
+## `GET /institution-members/mine`
+
+Lista las membresías del usuario autenticado — a qué institución(es)
+pertenece y con qué `role` en cada una. Es el paso previo obligatorio para
+cualquier pantalla de administrador de institución en `apps/portal`: el
+access token no incluye `institutionId` ni `role` (ADR-041; ver
+`specs/api-contracts/auth.md`, claims de `POST /auth/login`), así que el
+frontend no tiene forma de saber a qué institución consultar hasta llamar
+este endpoint. Mismo patrón que `GET /enrollments/mine`
+(`specs/api-contracts/enrollments.md`) — perspectiva propia, sin
+`InstitutionMembershipGuard`, solo JWT.
+
+**Autorización:** solo `JwtAuthGuard`. Sin restricción de `role` — cualquier
+`institution_members`, sin importar su rol, necesita saber a qué institución
+pertenece.
+
+**Request:** sin body.
+
+**Response 200**
+```json
+{
+  "memberships": [
+    {
+      "institutionId": "uuid",
+      "institutionName": "string",
+      "role": "admin | gate_operator | coordinator | teacher",
+      "institutionStatus": "pending | approved | suspended"
+    }
+  ]
+}
+```
+
+Array vacío si el usuario no es `institution_members` de ninguna institución
+(ej. un tutor puro). Sin paginación: el número de membresías de una persona
+es acotado por naturaleza, a diferencia de listados de recursos del sistema.
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 401 | no autenticado (respuesta del `JwtAuthGuard`) |
+
 ## `GET /institutions/:id/members`
 
 Lista el personal de la institución. Ver feature 012. El estado "Invitado" se
@@ -283,6 +324,8 @@ recurso (ADR-022 punto 4), igual que el `PATCH`.
 - ADR-038 (`is_super_admin`, visibilidad cross-institución de plataforma).
 - ADR-039 (`GET /institutions/:id/members`: OR entre membresía y
   `is_super_admin`, con manejo de existencia asimétrico).
+- ADR-041 (`GET /institution-members/mine`: resolución de institución tras
+  login, mismo patrón que `GET /enrollments/mine`).
 - `specs/entities/audit_log.md`.
 
 ## Preguntas abiertas
