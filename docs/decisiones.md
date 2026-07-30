@@ -2150,3 +2150,66 @@ visibilidad cross-institución en `GET /admin/metrics` (ADR-038).
 - `docs/arquitectura.md` (patrón de verificación manual OR, ya usado para
   `pickup-requests`; ADR-039 introduce la variante con flag global en vez de
   relación con el recurso).
+
+## ADR-040 — Aprobación/suspensión/reactivación de instituciones: endpoints por verbo, `SuperAdminGuard`, notificación por correo
+
+**Contexto.** ADR-018 (punto 1) ya fija las transiciones válidas de
+`institutions.status` (`pending → approved`; `approved ⇄ suspended`; sin
+camino de vuelta a `pending`; sin estado de rechazo explícito) como acción
+exclusiva del super-admin, y `specs/api-contracts/institutions.md` ya lo
+menciona ("transiciones de `status` son de super-admin, no editables aquí").
+Pero ningún contrato de API implementaba el endpoint real — hueco detectado
+en la revisión previa de Fase 7, distinto del de métricas globales (ADR-038)
+y del de búsqueda por nombre (ADR-037). El `design-brief.md` describe la
+pantalla ("Aprobación de instituciones: cola de altas de escuelas por
+validar") sin contrato que la respalde.
+
+**Decisión.**
+1. **Tres endpoints por verbo**, mismo patrón ya usado en el proyecto para
+   transiciones de estado explícitas (`PATCH /enrollments/:id/approve`,
+   `PATCH /pickup-requests/:id/cancel`), no un `PATCH` genérico de `status`:
+   - `PATCH /institutions/:id/approve` (`pending → approved`)
+   - `PATCH /institutions/:id/suspend` (`approved → suspended`)
+   - `PATCH /institutions/:id/reactivate` (`suspended → approved`)
+2. **Autorización: `SuperAdminGuard`** (el mismo guard creado en ADR-038),
+   no `InstitutionMembershipGuard` — el super-admin no es miembro de la
+   institución que aprueba.
+3. **Listado/cola para el super-admin: `GET /admin/institutions`**, bajo el
+   mismo namespace `/admin/` ya establecido por `GET /admin/metrics`
+   (ADR-038) — no reutiliza `GET /institutions?search=...` (ADR-037), que es
+   un endpoint de propósito y autorización distintos (tutor buscando
+   instituciones ya `approved`, sin acceso a `pending`/`suspended`). Filtro
+   opcional por `status`; sin filtro, devuelve todas.
+4. **Notificación por correo en las tres transiciones** (vía `EmailProvider`,
+   ADR-017), consistente con ADR-009 (eventos de cuenta van por correo, no
+   MQTT). Se notifica a **todos** los `institution_members` con `role =
+   admin` de esa institución (puede haber más de uno, a diferencia del
+   `users` único creado en el registro inicial — feature 001). Un fallo de
+   envío no revierte la transición ya persistida (misma política que
+   `enrollments.approve`/`reject` en `EnrollmentsService`: el email es
+   best-effort, no transaccional con el cambio de estado).
+5. **Auditoría**: cada transición registra una fila en `audit_log` con
+   `action` = `institution.approved` / `institution.suspended` /
+   `institution.reactivated` (convención `entity.verb`, ADR-018 punto 9 —
+   que ya cita `institution.suspended` como ejemplo de esa convención),
+   `entity_type = 'institution'`, `entity_id` = el id de la institución,
+   `actor_user_id` = el super-admin, `metadata = null`.
+6. **Reactivar es una transición propia, no reusar `approve`.** Aunque
+   ambas terminan en `status = approved`, `reactivate` parte de `suspended`
+   y `approve` parte de `pending` — endpoints y `code` de auditoría
+   distintos, para que el historial diferencie "primera aprobación" de
+   "se levantó una suspensión".
+
+## Referencias
+
+- ADR-018 (punto 1: transiciones válidas de `institutions.status`; punto 9:
+  convención `entity.verb` de `audit_log`, ya con `institution.suspended`
+  como ejemplo).
+- ADR-009 (correo transaccional para eventos de cuenta).
+- ADR-017 (`EmailProvider` como port).
+- ADR-037 (endpoint de búsqueda por nombre — propósito y autorización
+  distintos, no se reutiliza aquí).
+- ADR-038 (`SuperAdminGuard`, namespace `/admin/`).
+- `docs/design-brief.md` (pantalla "Aprobación de instituciones").
+- `specs/api-contracts/institutions.md`, `specs/api-contracts/admin-institutions.md`
+  (nuevo).

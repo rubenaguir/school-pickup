@@ -176,16 +176,100 @@ Solo instituciones con `status = approved` (ADR-019 punto 4) — una `pending` o
 | 400 | `INVALID_PAYLOAD` | `search` faltante o vacío |
 | 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
 
+## `PATCH /institutions/:id/approve`
+
+Aprueba una institución en `status = pending`. Ver ADR-040. La cola de
+instituciones pendientes se consulta en
+`specs/api-contracts/admin-institutions.md` — `GET /admin/institutions`.
+
+**Autorización:** `SuperAdminGuard` (ADR-038), no
+`InstitutionMembershipGuard` — el super-admin no pertenece a la institución
+que aprueba.
+
+**Request:** sin body.
+
+**Response 200**
+```json
+{ "id": "uuid", "status": "approved" }
+```
+
+Se envía correo (`EmailProvider`, ADR-017) a todos los `institution_members`
+con `role = admin` de esa institución, `kind: institution_approved`
+(ADR-040 punto 4). Se registra `audit_log` con `action =
+institution.approved` (ADR-040 punto 5).
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 403 | `SUPER_ADMIN_REQUIRED` | el usuario autenticado no tiene `is_super_admin = true` |
+| 404 | `RESOURCE_NOT_FOUND` | la institución no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | `institutions.status != pending` (ya `approved` o `suspended`) |
+
+## `PATCH /institutions/:id/suspend`
+
+Suspende una institución en `status = approved`. Ver ADR-040.
+
+**Autorización:** `SuperAdminGuard` (ADR-038).
+
+**Request:** sin body.
+
+**Response 200**
+```json
+{ "id": "uuid", "status": "suspended" }
+```
+
+Se envía correo a todos los `institution_members` con `role = admin`,
+`kind: institution_suspended`. Se registra `audit_log` con `action =
+institution.suspended`.
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 403 | `SUPER_ADMIN_REQUIRED` | el usuario autenticado no tiene `is_super_admin = true` |
+| 404 | `RESOURCE_NOT_FOUND` | la institución no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | `institutions.status != approved` (está `pending` o ya `suspended`) |
+
+## `PATCH /institutions/:id/reactivate`
+
+Reactiva una institución en `status = suspended`, devolviéndola a
+`approved`. Ver ADR-040 (punto 6): es una transición propia, no reusa
+`/approve` — parte de `suspended`, no de `pending`, y su `audit_log` es
+distinguible del de la primera aprobación.
+
+**Autorización:** `SuperAdminGuard` (ADR-038).
+
+**Request:** sin body.
+
+**Response 200**
+```json
+{ "id": "uuid", "status": "approved" }
+```
+
+Se envía correo a todos los `institution_members` con `role = admin`,
+`kind: institution_reactivated`. Se registra `audit_log` con `action =
+institution.reactivated`.
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 403 | `SUPER_ADMIN_REQUIRED` | el usuario autenticado no tiene `is_super_admin = true` |
+| 404 | `RESOURCE_NOT_FOUND` | la institución no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | `institutions.status != suspended` (no hay nada que reactivar) |
+
 ## Referencias
 
 - `specs/features/008-editar-perfil-institucion.md`.
 - `specs/features/005-asociar-institucion.md` (camino de búsqueda por
   nombre).
+- `specs/features/025-aprobacion-suspension-institucion.md` (nuevo).
 - `specs/entities/institution.md`, `specs/entities/institution_member.md`.
 - `docs/arquitectura.md` (aislamiento multi-tenant).
+- ADR-009 (correo transaccional para eventos de cuenta).
 - ADR-013 (dos radios independientes).
 - ADR-015 (campos operativos de `institutions`).
-- ADR-018 (transiciones de `status` son de super-admin, no editables aquí).
+- ADR-017 (`EmailProvider` como port).
+- ADR-018 (punto 1: transiciones válidas de `status`; punto 9: convención
+  `entity.verb` de `audit_log`).
 - ADR-019 (punto 1: regeneración de `join_code` por el admin; punto 4:
   visibilidad de instituciones no aprobadas; punto 5: restricción a
   `role = admin`).
@@ -197,9 +281,12 @@ Solo instituciones con `status = approved` (ADR-019 punto 4) — una `pending` o
   recurso con su propio estado, como `status != approved` o `category`/`type`,
   usa 409, no 422; ambos casos de este endpoint quedan correctamente en 409).
 - ADR-037 (endpoint de búsqueda sin `InstitutionMembershipGuard`; solo JWT).
+- ADR-038 (`SuperAdminGuard`, namespace `/admin/`).
+- ADR-040 (endpoints de aprobación/suspensión/reactivación; notificación por
+  correo; auditoría).
 
 ## Preguntas abiertas
 
 Ninguna: el rol requerido (`role = admin`) y el mecanismo de aislamiento
 multi-tenant (`InstitutionMembershipGuard`) se resolvieron en ADR-022 (puntos 1
-y 4).
+y 4). Las transiciones de super-admin se resolvieron en ADR-040.

@@ -334,8 +334,8 @@ obsoleto en migración 401) corregido.
 | Pendiente | Bloquea | Estado |
 |---|---|---|
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
-| Features de aprobación/suspensión de institución (super-admin) | Fase 7 (vistas de super-admin) | Abierto — slice sin especificar |
-| Endpoint de búsqueda de instituciones por nombre (`institutions`) — solo existe alta por `joinCode`/`institutionId` ya conocido; falta para la pantalla "Asociar a institución" | Fase 7 (necesita spec antes) | Abierto — detectado al implementar `enrollments` |
+| ~~Features de aprobación/suspensión de institución (super-admin)~~ | Fase 7 (vistas de super-admin) | ✅ Resuelto — ADR-040, `specs/features/025-aprobacion-suspension-institucion.md` |
+| ~~Endpoint de búsqueda de instituciones por nombre~~ | Fase 7 | ✅ Resuelto — ADR-037, `GET /institutions?search=...` |
 
 ## Backlog técnico (no bloquea, pero no debe olvidarse)
 
