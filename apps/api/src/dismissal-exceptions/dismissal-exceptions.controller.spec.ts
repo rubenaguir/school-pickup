@@ -403,7 +403,7 @@ describe('DismissalExceptionsController / DismissalExceptionsDetailController (H
   });
 
   describe('PATCH /dismissal-exceptions/:id', () => {
-    it('resolves institutionId via the ADR-029 companion column with no @InstitutionResource overrides (normal case)', async () => {
+    it('resolves institutionId via the @RelationId scalar with no @InstitutionResource overrides (normal case, ADR-029 need / ADR-044 mechanism)', async () => {
       const created = await request(server)
         .post('/institutions/inst-a/dismissal-exceptions')
         .set('x-test-user-id', 'user-admin-a')

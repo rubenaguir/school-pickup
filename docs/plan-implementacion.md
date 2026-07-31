@@ -132,10 +132,15 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
       todavía (los módulos de Fase 5 lo cablean); `@InstitutionResource`
       decorator para rutas por recurso, comportamiento por defecto para
       rutas anidadas
-- [x] Columna compañera `institutionId` (solo lectura) agregada a
+- [x] Escalar `institutionId` (solo lectura) agregado a
       `institution_member`, `delivery_point`, `dismissal_window`,
-      `dismissal_exception`, `enrollment` (ADR-029) — necesaria para que
-      `@InstitutionResource` no requiera cargar la relación completa
+      `dismissal_exception`, `enrollment` (ADR-029) — necesario para que
+      `@InstitutionResource` no requiera cargar la relación completa.
+      **El mecanismo cambió después**: se implementó como columna compañera
+      `@Column({ insert: false, update: false })`, que resultó dejar
+      `institution_id` en `NULL` en toda fila nueva; hoy es `@RelationId()`
+      y alcanza también a `pickup_request` (6 entidades en total). Ver
+      ADR-044.
 - [x] Los 7 índices únicos parciales + GIN (ADR-018, ADR-024, ADR-026)
       declarados también como `@Index()` en las entidades, espejo exacto
       del SQL crudo ya aplicado — elimina el diff fantasma que
@@ -154,8 +159,9 @@ aislamiento multi-tenant.
 - [x] `institutions` (perfil/geocerca, regeneración de `join_code`; caso
       degenerado de `@InstitutionResource` para el id de la propia
       institución)
-- [x] `delivery-points` (caso normal de `@InstitutionResource` vía la
-      columna compañera de ADR-029; validación cruzada de
+- [x] `delivery-points` (caso normal de `@InstitutionResource` vía el
+      escalar `institutionId` de ADR-029, hoy `@RelationId()` por ADR-044;
+      validación cruzada de
       `operatorUserId` → 422 `OPERATOR_NOT_INSTITUTION_MEMBER`)
 - [x] `dismissal-windows` + `dismissal-exceptions` (borrado físico solo en
       exceptions; validación de conflicto `level = null` vs. específico en

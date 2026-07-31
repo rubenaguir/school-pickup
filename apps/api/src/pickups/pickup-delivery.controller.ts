@@ -11,10 +11,12 @@ interface AuthenticatedRequest {
   user: { sub: string };
 }
 
-// @InstitutionResource case: PickupRequest has the read-only companion
-// institutionId column (extended from ADR-029, see pickup-request.entity.ts),
-// so the guard's defaults (idParam: 'id', institutionColumn: 'institutionId')
-// resolve it without any overrides — same pattern as dismissal-windows.
+// Normal @InstitutionResource case: the entity exposes `institutionId` as a
+// read-only @RelationId over its `institution` relation, so the guard's
+// defaults (idParam: 'id', institutionColumn: 'institutionId') resolve it
+// without any overrides and without loading the relation. Same pattern in the
+// other five institution-scoped entities. See ADR-029 (why the scalar exists)
+// and ADR-044 (why it is @RelationId and no longer a companion @Column).
 const PICKUP_REQUEST_RESOURCE = { entity: PickupRequest };
 
 @Controller('pickup-requests')

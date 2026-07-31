@@ -29,17 +29,13 @@ export class InstitutionMember {
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
 
-  // Scalar view of the institution_id FK, so InstitutionMembershipGuard can read
-  // it without loading the Institution relation.
-  //
-  // PILOTO (ADR-029 pendiente de corregir): esto era un `@Column({ name:
-  // 'institution_id', insert: false, update: false })`. TypeORM 1.0.0 fusiona esa
-  // columna companion con el @JoinColumn de arriba en un unico ColumnMetadata, y
-  // el `insert: false` gana: `InsertQueryBuilder.getInsertedColumns()` descartaba
-  // institution_id de todo INSERT y el FK quedaba NULL en la base, aunque el
-  // objeto en memoria devuelto por .save() si mostrara el valor. @RelationId es
-  // virtual — no es una columna, asi que no puede suprimir nada del INSERT — y se
-  // puebla en un `findOne` sin `relations`, que es justo lo que el guard hace.
+  // Scalar view of the institution_id FK, so InstitutionMembershipGuard can
+  // read it without loading the Institution relation (the need established by
+  // ADR-029). @RelationId is virtual — not a column — so unlike the previous
+  // companion @Column({ insert: false, update: false }) it cannot suppress
+  // institution_id from the INSERT. That companion merged with the @JoinColumn
+  // above into a single ColumnMetadata whose isInsert=false won, so the FK was
+  // silently never written and every new row got NULL. See ADR-044.
   @RelationId((member: InstitutionMember) => member.institution)
   institutionId!: string;
 

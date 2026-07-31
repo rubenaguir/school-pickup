@@ -6,6 +6,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  RelationId,
 } from 'typeorm';
 import type { EnrollmentStatus } from '../types/enrollment';
 import { Student } from './student.entity';
@@ -33,19 +34,21 @@ export class Enrollment {
   @JoinColumn({ name: 'student_id' })
   student!: Student;
 
-  // Read-only mirror of the institution_id column already owned by the
-  // `institution` relation below — lets InstitutionMembershipGuard read the
-  // FK without eager-loading Institution. nullable:true matches the JoinColumn's
-  // actual (default) nullability; do not tighten it here, it would produce a
-  // schema diff. See ADR-029.
-  @Column({ name: 'institution_id', type: 'uuid', nullable: true, insert: false, update: false })
-  institutionId!: string;
-
   @ManyToOne(() => Institution, (institution) => institution.enrollments, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
+
+  // Scalar view of the institution_id FK, so InstitutionMembershipGuard can
+  // read it without loading the Institution relation (the need established by
+  // ADR-029). @RelationId is virtual — not a column — so unlike the previous
+  // companion @Column({ insert: false, update: false }) it cannot suppress
+  // institution_id from the INSERT. That companion merged with the @JoinColumn
+  // above into a single ColumnMetadata whose isInsert=false won, so the FK was
+  // silently never written and every new row got NULL. See ADR-044.
+  @RelationId((enrollment: Enrollment) => enrollment.institution)
+  institutionId!: string;
 
   @Column({ name: 'status', type: 'enum', enum: ENROLLMENT_STATUS_VALUES, default: 'pending' })
   status!: EnrollmentStatus;

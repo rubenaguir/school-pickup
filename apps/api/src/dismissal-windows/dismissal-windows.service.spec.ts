@@ -24,7 +24,12 @@ function buildService(overrides?: {
     find: vi.fn().mockResolvedValue([]),
     findOne: vi.fn().mockResolvedValue(buildDismissalWindow()),
     create: vi.fn((partial: Partial<DismissalWindow>) => partial),
-    save: vi.fn((entity: DismissalWindow) => Promise.resolve(entity)),
+    // Mirrors real TypeORM: @RelationId populates institutionId on the object
+    // save() returns, derived from the assigned relation (ADR-044, verified
+    // against Postgres in foreign-key-persistence.integration.spec.ts).
+    save: vi.fn((entity: DismissalWindow) =>
+      Promise.resolve({ ...entity, institutionId: entity.institution?.id }),
+    ),
     ...overrides?.dismissalWindowsRepo,
   };
   const service = new DismissalWindowsService(dismissalWindowsRepo as never);

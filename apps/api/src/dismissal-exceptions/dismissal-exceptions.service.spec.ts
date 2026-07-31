@@ -23,7 +23,12 @@ function buildService(overrides?: {
     find: vi.fn().mockResolvedValue([]),
     findOne: vi.fn().mockResolvedValue(buildDismissalException()),
     create: vi.fn((partial: Partial<DismissalException>) => partial),
-    save: vi.fn((entity: DismissalException) => Promise.resolve(entity)),
+    // Mirrors real TypeORM: @RelationId populates institutionId on the object
+    // save() returns, derived from the assigned relation (ADR-044, verified
+    // against Postgres in foreign-key-persistence.integration.spec.ts).
+    save: vi.fn((entity: DismissalException) =>
+      Promise.resolve({ ...entity, institutionId: entity.institution?.id }),
+    ),
     remove: vi.fn((entity: DismissalException) => Promise.resolve(entity)),
     exists: vi.fn().mockResolvedValue(false),
     ...overrides?.repo,

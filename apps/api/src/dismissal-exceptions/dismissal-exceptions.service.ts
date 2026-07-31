@@ -71,10 +71,11 @@ export class DismissalExceptionsService {
     });
     const saved = await this.save(entity);
 
-    // institutionId is an insert:false companion column (ADR-029): it isn't
-    // populated on the object returned by save() for a fresh insert. Patch it
-    // in from the already-known route param instead of trusting saved.institutionId.
-    return { ...this.toResponse(saved), institutionId };
+    // institutionId now comes straight off the saved entity: @RelationId
+    // populates it on the object save() returns (ADR-044). It is deliberately
+    // NOT patched in from the route param any more — doing so would mask a
+    // future regression of the FK write instead of surfacing it.
+    return this.toResponse(saved);
   }
 
   async update(id: string, dto: UpdateDismissalExceptionDto): Promise<DismissalExceptionResponse> {

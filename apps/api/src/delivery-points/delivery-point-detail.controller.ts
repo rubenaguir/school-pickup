@@ -12,9 +12,12 @@ interface InstitutionScopedRequest {
   institutionMembership?: InstitutionMember;
 }
 
-// Normal @InstitutionResource case (ADR-029): DeliveryPoint has the read-only
-// companion `institutionId` column, so the guard's defaults (idParam: 'id',
-// institutionColumn: 'institutionId') resolve it without any overrides.
+// Normal @InstitutionResource case: the entity exposes `institutionId` as a
+// read-only @RelationId over its `institution` relation, so the guard's
+// defaults (idParam: 'id', institutionColumn: 'institutionId') resolve it
+// without any overrides and without loading the relation. Same pattern in the
+// other five institution-scoped entities. See ADR-029 (why the scalar exists)
+// and ADR-044 (why it is @RelationId and no longer a companion @Column).
 const DELIVERY_POINT_RESOURCE = { entity: DeliveryPoint };
 
 @Controller('delivery-points')

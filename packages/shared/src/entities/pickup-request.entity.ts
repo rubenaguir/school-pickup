@@ -7,6 +7,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 import type { ArrivalMode, PickupRequestStatus } from '../types/pickup-request';
@@ -56,12 +57,15 @@ export class PickupRequest {
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
 
-  // Read-only companion of the `institution` relation above, same physical
-  // column (ADR-029, extended here): lets InstitutionMembershipGuard's
-  // @InstitutionResource read the FK as a scalar without eager-loading
-  // Institution. Not nullable, unlike the other 5 ADR-029 entities — this
-  // column is already NOT NULL in the schema.
-  @Column({ name: 'institution_id', type: 'uuid', insert: false, update: false })
+  // Scalar view of the institution_id FK, so InstitutionMembershipGuard's
+  // @InstitutionResource can read it without loading the Institution relation
+  // (the need established by ADR-029, which this entity ended up sharing even
+  // though ADR-018 point 4 scoped it out). @RelationId is virtual — not a
+  // column — so unlike the previous companion @Column({ insert: false,
+  // update: false }) it cannot suppress institution_id from the INSERT. That
+  // companion merged with the @JoinColumn above into a single ColumnMetadata
+  // whose isInsert=false won, so the FK was silently never written. See ADR-044.
+  @RelationId((pickupRequest: PickupRequest) => pickupRequest.institution)
   institutionId!: string;
 
   @ManyToOne(() => User, (user) => user.pickupRequests, { onDelete: 'RESTRICT' })

@@ -1,4 +1,12 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  RelationId,
+} from 'typeorm';
 import type { DismissalWindowStatus } from '../types/dismissal-window';
 import { Institution } from './institution.entity';
 
@@ -10,19 +18,21 @@ export class DismissalWindow {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  // Read-only mirror of the institution_id column already owned by the
-  // `institution` relation below — lets InstitutionMembershipGuard read the
-  // FK without eager-loading Institution. nullable:true matches the JoinColumn's
-  // actual (default) nullability; do not tighten it here, it would produce a
-  // schema diff. See ADR-029.
-  @Column({ name: 'institution_id', type: 'uuid', nullable: true, insert: false, update: false })
-  institutionId!: string;
-
   @ManyToOne(() => Institution, (institution) => institution.dismissalWindows, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
+
+  // Scalar view of the institution_id FK, so InstitutionMembershipGuard can
+  // read it without loading the Institution relation (the need established by
+  // ADR-029). @RelationId is virtual — not a column — so unlike the previous
+  // companion @Column({ insert: false, update: false }) it cannot suppress
+  // institution_id from the INSERT. That companion merged with the @JoinColumn
+  // above into a single ColumnMetadata whose isInsert=false won, so the FK was
+  // silently never written and every new row got NULL. See ADR-044.
+  @RelationId((dismissalWindow: DismissalWindow) => dismissalWindow.institution)
+  institutionId!: string;
 
   @Column({ name: 'weekday', type: 'smallint' })
   weekday!: number;
