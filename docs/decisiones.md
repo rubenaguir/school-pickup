@@ -2447,3 +2447,97 @@ la spec ya existente, sin cambiarla.
 - `ui_kits/acceso` en el proyecto "CasiLlego Design System"
   (`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`), origen del
   diseño del login.
+
+## ADR-044 — `institution_id` en `NULL` al crear filas: la columna compañera de ADR-029 nunca se escribe; reemplazo por `@RelationId()`
+
+**Contexto.** Al preparar la Capa 3a de Fase 7 se detectó que
+`POST /auth/register/institution` dejaba `institution_members.institution_id`
+en `NULL`. La investigación (ver diagnóstico completo en el historial de
+esta sesión) encontró la causa raíz y confirmó que **no es un bug aislado de
+una entidad**: es un defecto sistémico del patrón de "columna compañera de
+solo lectura" introducido por ADR-029.
+
+**Diagnóstico confirmado.**
+1. **Son 6 entidades afectadas, no 5.** ADR-029 documentó el patrón para
+   `enrollments`, `institution_members`, `delivery_points`,
+   `dismissal_windows` y `dismissal_exceptions`. `pickup_requests` quedó
+   fuera de ese ADR (ADR-018 punto 4 lo trató como "un problema distinto"),
+   pero terminó implementado con el mismo patrón de columna compañera sin
+   pasar por esa revisión — deriva silenciosa de un patrón copiado por
+   similitud, no una decisión documentada. Hereda el mismo defecto.
+2. **La premisa central de ADR-029 es incorrecta en TypeORM 1.0.0**: dice
+   que `insert: false, update: false` en la columna compañera "asegura que
+   solo la relación controla escrituras". En realidad, TypeORM fusiona la
+   columna compañera y el `@JoinColumn` de la relación en un único
+   `ColumnMetadata` para la misma columna física, y `insert: false` gana —
+   `InsertQueryBuilder.getInsertedColumns()` descarta la columna por
+   completo (`if (!column.isInsert) return false`). **No escribe la
+   relación, no escribe nadie.** El orden de declaración de los
+   decoradores no es la causa (se descartó empíricamente, con
+   `pickup_request` como control: relación declarada primero, falla
+   igual).
+3. **No es un bug conocido/documentado de TypeORM** para este caso — se
+   revisó el issue upstream #12234 (PR #12354, milestone 1.0), que corrige
+   un problema relacionado pero solo en la ruta de `UPDATE`
+   (`SubjectChangedColumnsComputer.computeDiffColumns`), no en `INSERT`. El
+   caso de este proyecto es una variante distinta, no cubierta por ese fix.
+4. **Nunca funcionó en este proyecto** — no es una regresión de una
+   actualización de TypeORM; el proyecto nació con `typeorm ^1.0.0` (versión
+   real y legítima, primer major en ocho años, publicada 2026-05-19), así
+   que el patrón estuvo roto desde la primera entidad que lo usó.
+5. **Ningún test lo atrapó** porque los 512+ tests existentes usan
+   repositorios falsos en memoria — ninguno ejercita SQL real contra
+   Postgres. El objeto que devuelve `.save()` trae `institutionId` poblado
+   en memoria incluso cuando la fila en base de datos tiene `NULL`.
+
+**Decisión.**
+1. **Reemplazar la columna compañera (`@Column({insert:false,
+   update:false})`) por `@RelationId()`** en las 6 entidades afectadas:
+   `institution_members`, `enrollments`, `delivery_points`,
+   `dismissal_windows`, `dismissal_exceptions`, `pickup_requests`.
+   `@RelationId()` es el mecanismo de TypeORM diseñado específicamente para
+   este caso — exponer el escalar de una FK de columna única sin cargar la
+   relación completa — verificado con el mismo costo de una sola query que
+   el patrón original pretendía lograr (sin `JOIN`, se resuelve leyendo el
+   propio FK local).
+2. **Piloto verificado end-to-end en `institution_members`** antes de
+   aplicarlo al resto: persistencia real vía el service (`POST
+   /institutions/:id/members/invite`), `InstitutionMembershipGuard` real
+   sin `relations` cargadas, caso negativo (403 intacto), `UPDATE`
+   verificado sin cambios, sin diff de esquema, 532 tests en verde.
+3. **Rollout a las 5 entidades restantes exige la misma verificación
+   end-to-end por entidad**, no solo el experimento aislado — en
+   particular, `delivery_points` y `dismissal_*` construyen su respuesta
+   HTTP desde el parámetro local justo después de `create()+save()`, sin
+   releer la entidad; ese camino no quedó probado en el piloto (que sí lo
+   probó en el experimento aislado, no en el service real) y debe
+   confirmarse al migrar cada una.
+4. **ADR-029 no se reescribe** — sigue vigente como el porqué de tener un
+   escalar de FK sin cargar la relación completa (la necesidad del guard
+   sigue siendo real). Lo que corrige este ADR es el *mecanismo*: dónde
+   dice `insert: false, update: false` como columna explícita, ahora dice
+   `@RelationId()`. Las specs de entidad de las 6 entidades afectadas
+   (`specs/entities/*.md`) deben actualizar su texto de invariante para
+   reflejar esto, citando ADR-044 en vez de (o junto con) ADR-029 para el
+   mecanismo concreto.
+5. **Categoría nueva de test: integración real contra Postgres**
+   (`*.integration.spec.ts`, config y script propios —
+   `npm run test:integration`), primera de su tipo en el proyecto.
+   **Deliberadamente fuera de `npm run check`** — el gate principal no debe
+   exigir una base de datos disponible. Se salta automáticamente si
+   Postgres no responde; una transacción con rollback por archivo, sin
+   dejar datos. **Riesgo aceptado y anotado en backlog** (no en este ADR):
+   al quedar fuera del gate estándar, nada obliga a correrlos antes de
+   cerrar una fase — depende de disciplina de proceso, no de tooling.
+
+## Referencias
+
+- ADR-029 (patrón original de columna compañera; premisa de mecanismo
+  corregida aquí, razón de fondo sin cambios).
+- ADR-018 (punto 4: exclusión original de `pickup_requests` del alcance de
+  ADR-029 — resultó no evitar el defecto compartido).
+- `specs/entities/institution_member.md`, `enrollment.md`,
+  `delivery_point.md`, `dismissal_window.md`, `dismissal_exception.md`,
+  `pickup_request.md` (texto de invariante a actualizar en las 6).
+- Issue upstream `typeorm/typeorm#12234`, PR `#12354` (corrige un caso
+  relacionado en `UPDATE`, no cubre el caso de `INSERT` de este proyecto).

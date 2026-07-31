@@ -6,6 +6,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  RelationId,
 } from 'typeorm';
 import type { InstitutionMemberRole } from '../types/institution-member';
 import { Institution } from './institution.entity';
@@ -24,17 +25,23 @@ export class InstitutionMember {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  // Read-only mirror of the institution_id column already owned by the
-  // `institution` relation below — lets InstitutionMembershipGuard read the
-  // FK without eager-loading Institution. nullable:true matches the JoinColumn's
-  // actual (default) nullability; do not tighten it here, it would produce a
-  // schema diff. See ADR-029.
-  @Column({ name: 'institution_id', type: 'uuid', nullable: true, insert: false, update: false })
-  institutionId!: string;
-
   @ManyToOne(() => Institution, (institution) => institution.members, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
+
+  // Scalar view of the institution_id FK, so InstitutionMembershipGuard can read
+  // it without loading the Institution relation.
+  //
+  // PILOTO (ADR-029 pendiente de corregir): esto era un `@Column({ name:
+  // 'institution_id', insert: false, update: false })`. TypeORM 1.0.0 fusiona esa
+  // columna companion con el @JoinColumn de arriba en un unico ColumnMetadata, y
+  // el `insert: false` gana: `InsertQueryBuilder.getInsertedColumns()` descartaba
+  // institution_id de todo INSERT y el FK quedaba NULL en la base, aunque el
+  // objeto en memoria devuelto por .save() si mostrara el valor. @RelationId es
+  // virtual — no es una columna, asi que no puede suprimir nada del INSERT — y se
+  // puebla en un `findOne` sin `relations`, que es justo lo que el guard hace.
+  @RelationId((member: InstitutionMember) => member.institution)
+  institutionId!: string;
 
   @Index()
   @ManyToOne(() => User, (user) => user.institutionMembers, { onDelete: 'RESTRICT' })

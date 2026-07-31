@@ -7,7 +7,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['apps/**/*.{test,spec}.ts', 'packages/**/*.{test,spec}.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+    // Los *.integration.spec.ts exigen un Postgres real; viven en su propia
+    // config (vitest.integration.config.ts, `npm run test:integration`) para que
+    // la compuerta `npm run check` no dependa de una base de datos.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.integration.spec.ts'],
     passWithNoTests: true,
   },
 });
