@@ -2541,3 +2541,55 @@ solo lectura" introducido por ADR-029.
   `pickup_request.md` (texto de invariante a actualizar en las 6).
 - Issue upstream `typeorm/typeorm#12234`, PR `#12354` (corrige un caso
   relacionado en `UPDATE`, no cubre el caso de `INSERT` de este proyecto).
+
+## ADR-045 — `pickup_requests.institution_id`: migración `SET NOT NULL`, alineando esquema con `specs/entities/pickup_request.md` y ADR-018
+
+**Contexto.** Al cerrar el rollout de ADR-044 se detectó que
+`pickup_requests.institution_id` es `nullable` en la base de datos real,
+pese a que `specs/entities/pickup_request.md` y ADR-018 lo tratan como
+`NOT NULL` (columna denormalizada obligatoria, fijada al crear el registro,
+inmutable después — ver ADR-018 y ADR-026). La divergencia existía desde
+antes de ADR-044: la entidad declaraba el campo no-nullable en TypeScript,
+pero la columna real de Postgres admitía `NULL`, y `migration:generate`
+proponía un `SET NOT NULL` en cada corrida que, aparentemente, nunca se
+aplicó. Con el reemplazo de la columna compañera por `@RelationId()`
+(ADR-044), esa señal de drift desapareció — la divergencia queda ahora
+silenciosa en vez de visible.
+
+**Por qué esto importa más que un ajuste cosmético de esquema.**
+`pickup_requests.institution_id` no es un campo cualquiera: es el que usa
+`InstitutionMembershipGuard` para autorizar `PATCH
+/pickup-requests/:id/deliver`, y el que resuelve a qué topic de MQTT se
+publica cada actualización de estado (segmentación por institución,
+aislamiento multi-tenant de fondo — ver `docs/arquitectura.md`). Sin un
+`NOT NULL` real en base de datos, un futuro defecto similar al de ADR-044
+podría dejar una recogida sin institución asignada, sin que ningún test ni
+corrida de `migration:generate` lo vuelva a señalar como antes.
+
+**Decisión.**
+1. **Migración nueva: `ALTER TABLE pickup_requests ALTER COLUMN
+   institution_id SET NOT NULL`**, siguiendo la convención de nombres y
+   estructura ya usada por las migraciones existentes del proyecto.
+2. **Antes de aplicarla**, verificar que no existan filas actuales con
+   `institution_id IS NULL` en ningún entorno donde se vaya a correr la
+   migración — si las hay, la migración falla en seco (comportamiento
+   correcto: mejor que falle explícitamente a que se aplique sobre datos
+   inconsistentes sin que nadie lo note).
+3. **El tipo TypeScript de `institutionId` en la entidad** (poblado por
+   `@RelationId()`, ADR-044) debe ser `string`, no `string | null` —
+   consistente con el `NOT NULL` real de la columna tras esta migración.
+4. **Esto es un cambio de esquema real**, a diferencia de ADR-044 (que no
+   requirió migración) — se documenta aparte para que quede claro que esta
+   sí toca la base de datos de cualquier entorno donde se aplique, no solo
+   el código.
+
+## Referencias
+
+- ADR-044 (contexto: el rollout que expuso esta divergencia al eliminar la
+  señal de drift que la delataba).
+- ADR-018, ADR-026 (`institution_id` denormalizado, obligatorio, inmutable
+  tras la creación).
+- `specs/entities/pickup_request.md` (invariante ya documentada, ahora
+  reflejada también en el esquema real).
+- `docs/arquitectura.md` (segmentación de topics MQTT por institución,
+  aislamiento multi-tenant).
