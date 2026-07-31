@@ -1,4 +1,4 @@
-import type { InstitutionMemberRole, UserStatus } from '@casillego/shared';
+import type { InstitutionMemberRole, InstitutionStatus, UserStatus } from '@casillego/shared';
 
 export interface InstitutionMemberListItem {
   id: string;
@@ -31,4 +31,21 @@ export interface InstitutionMemberResponse {
   institutionId: string;
   userId: string;
   role: InstitutionMemberRole;
+}
+
+/**
+ * One membership from the authenticated user's own perspective (ADR-041).
+ * Deliberately narrower than InstitutionMemberListItem: the caller already
+ * knows who they are, so neither the membership id nor the user fields are
+ * part of the contract. See specs/api-contracts/institution-members.md.
+ */
+export interface MyInstitutionMembership {
+  institutionId: string;
+  institutionName: string;
+  role: InstitutionMemberRole;
+  institutionStatus: InstitutionStatus;
+}
+
+export interface ListMyMembershipsResponse {
+  memberships: MyInstitutionMembership[];
 }

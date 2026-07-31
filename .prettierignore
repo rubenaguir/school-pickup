@@ -4,6 +4,10 @@ build/
 *.tsbuildinfo
 package-lock.json
 
+# Ajustes locales de Claude Code: los escribe la herramienta, no son codigo del
+# repo y ya estan en el gitignore global. No deben romper la compuerta.
+**/.claude/settings.local.json
+
 # La documentacion (docs/, specs/, *.md) es prosa hecha a mano y fuente de
 # verdad del proyecto: Prettier gobierna codigo, no documentos. Ver ADR-021.
 **/*.md

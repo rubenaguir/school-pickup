@@ -6,6 +6,12 @@ export interface ButtonProps {
   icon?: ReactNode;
   full?: boolean;
   disabled?: boolean;
+  /**
+   * Defaults to 'button' so no existing usage starts submitting a form by
+   * accident. Use 'submit' for the primary action of a real <form>. See
+   * ADR-043 point 2.
+   */
+  type?: 'button' | 'submit';
   children: ReactNode;
   onClick?: () => void;
 }
@@ -41,7 +47,14 @@ const VARIANTS: Record<NonNullable<ButtonProps['variant']>, CSSProperties> = {
   },
 };
 
-/** Primary/outline/ghost button in the CasiLlego coral system. */
+/**
+ * Primary/outline/ghost button in the CasiLlego coral system.
+ *
+ * Renders a real <button>: a <span> cannot submit a form, is not reachable by
+ * keyboard, and does not expose `disabled` to assistive technology. The
+ * matching prototype in the Claude Design project is still a <span> on
+ * purpose — it is a static canvas with no real forms. See ADR-043 point 2.
+ */
 export function Button({
   variant = 'primary',
   size = 'md',
@@ -50,12 +63,15 @@ export function Button({
   children,
   onClick,
   disabled,
+  type = 'button',
 }: ButtonProps) {
   const v = VARIANTS[variant] ?? VARIANTS.primary;
   const s = SIZES[size] ?? SIZES.md;
   return (
-    <span
-      onClick={disabled ? undefined : onClick}
+    <button
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -68,12 +84,13 @@ export function Button({
         opacity: disabled ? 0.5 : 1,
         width: full ? '100%' : undefined,
         whiteSpace: 'nowrap',
+        appearance: 'none',
         ...s,
         ...v,
       }}
     >
       {icon}
       {children}
-    </span>
+    </button>
   );
 }

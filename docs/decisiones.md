@@ -2321,3 +2321,129 @@ asume: sesión ya resuelta (`useAuth()`), institución ya resuelta
 - `specs/api-contracts/auth.md` (`POST /auth/login`, `POST /auth/refresh`).
 - `specs/features/006-aprobacion-enrollment.md` (primera pantalla que
   consume esta capa).
+## ADR-043 — Detalles de implementación de la Capa 3a del portal: CORS, `Button` semántico, inyección de dependencias del cliente de API y elementos inertes del login
+
+**Contexto.** Al implementar la plomería decidida en ADR-042 (router, cliente
+de API, sesión, contexto de institución) aparecieron cuatro decisiones que
+ADR-042 no cubría y que no son "sobre la marcha": tres bloqueaban la
+verificación de punta a punta y una es un caso nuevo del patrón que ADR-034
+punto 4 obliga a documentar cada vez que reaparece.
+
+Como hallazgo previo, no como decisión: el commit `5ac3bae`
+("feat: add endpoint `GET /institution-members/mine`…") tocó únicamente
+`docs/decisiones.md` y `specs/api-contracts/institution-members.md` — el
+endpoint quedó especificado (ADR-041) pero **sin una sola línea de código**.
+`InstitutionContext` no tenía a qué llamar. Se implementa en esta capa contra
+la spec ya existente, sin cambiarla.
+
+**Decisión.**
+
+1. **CORS explícito en `apps/api`, por allowlist.** `apps/api/src/main.ts`
+   nunca llamó `enableCors()`, y ningún `vite.config.ts` tiene proxy: el
+   navegador en `:5173` no podía llamar a la API en `:3000`, así que ninguna
+   pantalla del portal era verificable. Se habilita con una lista explícita
+   leída de `CORS_ORIGINS` (separada por comas), **nunca `origin: true`** —
+   un comodín en una API multi-tenant con JWT en el header es un riesgo
+   gratuito. `credentials: false`: los tokens viajan en `Authorization`, no
+   en cookies (ADR-042 punto 3), así que no hace falta.
+
+   Se descartó el proxy de Vite (`server.proxy`), que habría evitado CORS por
+   completo en desarrollo: esconde el problema en vez de resolverlo, y en
+   producción los tres frontends son orígenes propios servidos por nginx —
+   tarde o temprano la API necesita la allowlist de todos modos. Con
+   `CORS_ORIGINS` vacío el middleware no se registra, así que un despliegue de
+   mismo origen no paga nada.
+
+2. **`Button` de `packages/ui` pasa de `<span>` a `<button>`, con `type`.**
+   Un `<span>` no envía formularios, no se activa con Enter ni con espacio, no
+   entra al orden de tabulación y no expone `disabled` a las tecnologías de
+   asistencia. Con un formulario de login de dos campos y ningún botón submit
+   nativo, la especificación de HTML **no** dispara el envío implícito: el
+   usuario que escribe su contraseña y presiona Enter no puede entrar. Se
+   agrega `type?: 'button' | 'submit'` con default `'button'` — así ningún uso
+   existente o futuro cambia de comportamiento por accidente — y `disabled`
+   pasa al elemento nativo.
+
+   **No es una variante nueva** (`.claude/rules/design-system.md` las
+   prohíbe): los tokens, tamaños y variantes de color quedan idénticos. Es una
+   corrección de semántica, invisible en pixeles.
+
+   **Enmienda a ADR-036 punto 5.** El `components/core/Button.jsx` del
+   proyecto de Claude Design también es un `<span>`, así que `packages/ui` era
+   un port fiel: el `<span>` es una limitación del prototipo, no una decisión
+   de diseño. El proyecto de diseño **se deja como está** — es un lienzo
+   estático sin formularios reales, donde la distinción no significa nada.
+   Queda anotado aquí para que la divergencia no se lea como un error de port
+   la próxima vez que alguien compare ambos archivos.
+
+3. **El cliente de API no toca APIs del navegador; las recibe inyectadas.**
+   `packages/shared` compila con `lib: ["ES2022"]` (`tsconfig.base.json`), sin
+   `DOM`, y lo consumen también `api` y `worker` en Node. Un `localStorage` o
+   un `window.location` directos ahí dentro no compilarían y, peor, atarían un
+   paquete compartido al navegador. Por eso `createApiClient` recibe
+   `storage` (`TokenStorage`), `fetch` (`FetchLike`) y `onSessionExpired` como
+   parámetros: es el mismo criterio de *ports* que ya usan `MapsProvider`,
+   `EmailProvider` y `MqttClient` (ADR-017). El portal es quien pasa
+   `window.localStorage` y el redirect a `/login`.
+
+   `FetchLike` es un tipo estructural mínimo definido en el propio módulo, no
+   el `fetch` global: mantiene a `packages/shared` libre de las tipificaciones
+   de DOM y de undici, y hace que los tests del interceptor de refresh no
+   necesiten jsdom ni ninguna dependencia nueva.
+
+4. **Dos elementos del diseño de login se renderizan visibles pero inertes.**
+   `ui_kits/acceso` del proyecto de diseño incluye dos afordancias sin
+   respaldo en el modelo actual. Mismo patrón que ADR-034 (botón "Reportar
+   incidencia") y ADR-035 (columna "Último acceso"), y misma resolución —
+   ADR-034 punto 4 pide explícitamente un ADR propio cada vez que reaparece,
+   en vez de generalizar una regla:
+   - **"¿Olvidaste tu contraseña?"** — `specs/api-contracts/auth.md` no define
+     ningún endpoint de recuperación de contraseña, y no se inventa uno para
+     llenar un hueco visual. Se renderiza deshabilitado, sin wiring. La
+     feature queda diferida a un slice futuro con su propia spec.
+   - **"¿Primera vez en CasiLlego? Crear cuenta"** — aquí los endpoints sí
+     existen (`POST /auth/register/institution`, `POST /auth/register/guardian`),
+     pero las pantallas de alta (`choose`/`escuela`/`tutor` del kit) están
+     fuera del alcance de esta capa, que es plomería. Se renderiza
+     deshabilitado hasta que se construyan.
+
+   En ambos casos se conserva el elemento en el layout, como en ADR-034/035:
+   quitarlo obligaría a rediseñar la composición y a volver a agregarlo
+   después.
+
+5. **La ruta de la bandeja de aprobación es `/enrollments/pending`.** Dato de
+   coordinación, no de arquitectura: esta capa deja ahí un placeholder
+   protegido para que la primera pantalla real (feature 006) se monte sobre
+   una ruta que ya existe, y `/` redirige a ella.
+
+**Consecuencias.**
+
+- `.env.example` gana `CORS_ORIGINS`, con los tres puertos de Vite
+  (5173/5174/5175) como valor de desarrollo. Un `.env` existente sin la
+  variable deja CORS apagado: el síntoma es un error de CORS en el navegador,
+  no un fallo al arrancar la API.
+- Cualquier pantalla futura con formulario ya puede usar
+  `<Button type="submit">` sin envolturas ni botones nativos ocultos.
+- `packages/shared/src/api-client/` es el primer módulo de `shared` pensado
+  para los tres frontends que no es ni un tipo ni un port: vive en el barrel
+  raíz (no necesita subpath, no importa `typeorm` — ADR-033).
+- El login queda con dos afordancias muertas a la vista. Es deuda visible y
+  deliberada, con la misma justificación que ADR-034/035.
+
+## Referencias
+
+- ADR-042 (la capa que este ADR completa: router, cliente de API, sesión,
+  contexto de institución).
+- ADR-041 (`GET /institution-members/mine`, especificado ahí, implementado
+  aquí).
+- ADR-036 (`packages/ui` — punto 5 enmendado por el punto 2 de este ADR).
+- ADR-034 y ADR-035 (precedente del patrón "visible pero inerte"; ADR-034
+  punto 4 exige este ADR).
+- ADR-033 (`lib: ["ES2022"]` sin DOM en `packages/shared`, razón del punto 3).
+- ADR-017 (ports solo para integraciones volátiles — criterio aplicado a
+  `TokenStorage`/`FetchLike`).
+- `specs/api-contracts/auth.md` y `specs/api-contracts/README.md` (forma de
+  los errores, traducción por `code` en el frontend).
+- `ui_kits/acceso` en el proyecto "CasiLlego Design System"
+  (`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`), origen del
+  diseño del login.

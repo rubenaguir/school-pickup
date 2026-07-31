@@ -36,6 +36,7 @@ interface UserRecord {
 interface InstitutionRecord {
   id: string;
   name: string;
+  status: 'pending' | 'approved' | 'suspended';
 }
 
 interface FakeHttpRequest {
@@ -69,9 +70,10 @@ describe('InstitutionMembersController / InstitutionMemberDetailController (HTTP
 
   function attachRelations(record: MemberRecord) {
     const user = users.get(record.userId);
+    const institution = institutions.get(record.institutionId);
     return {
       ...record,
-      institution: { id: record.institutionId },
+      institution: institution ? { ...institution } : { id: record.institutionId },
       user: user ? { ...user } : { id: record.userId },
     };
   }
@@ -293,9 +295,82 @@ describe('InstitutionMembersController / InstitutionMemberDetailController (HTTP
       ],
     ]);
     institutions = new Map([
-      ['inst-a', { id: 'inst-a', name: 'Escuela A' }],
-      ['inst-b', { id: 'inst-b', name: 'Escuela B' }],
+      ['inst-a', { id: 'inst-a', name: 'Escuela A', status: 'approved' }],
+      ['inst-b', { id: 'inst-b', name: 'Escuela B', status: 'pending' }],
     ]);
+  });
+
+  describe('GET /institution-members/mine', () => {
+    it('returns the memberships of the authenticated user, oldest first', async () => {
+      // Second membership for the same person, in another institution: ADR-041
+      // point 2 — a user can belong to more than one institution.
+      members.set('member-admin-a-in-b', {
+        id: 'member-admin-a-in-b',
+        institutionId: 'inst-b',
+        userId: 'user-admin-a',
+        role: 'teacher',
+        createdAt: new Date('2026-02-01'),
+      });
+
+      const res = await request(server)
+        .get('/institution-members/mine')
+        .set('x-test-user-id', 'user-admin-a');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        memberships: [
+          {
+            institutionId: 'inst-a',
+            institutionName: 'Escuela A',
+            role: 'admin',
+            institutionStatus: 'approved',
+          },
+          {
+            institutionId: 'inst-b',
+            institutionName: 'Escuela B',
+            role: 'teacher',
+            institutionStatus: 'pending',
+          },
+        ],
+      });
+    });
+
+    it('returns an empty array — not a 404 — for a user with no memberships', async () => {
+      const res = await request(server)
+        .get('/institution-members/mine')
+        .set('x-test-user-id', 'user-pure-guardian');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ memberships: [] });
+    });
+
+    it('does not require InstitutionMembershipGuard: a non-member gets 200, not 403', async () => {
+      // The route that resolves the institution cannot itself be guarded by
+      // membership in that institution (ADR-041 point 1). Every other route in
+      // this controller answers 403 NOT_INSTITUTION_MEMBER for this same user.
+      const res = await request(server)
+        .get('/institution-members/mine')
+        .set('x-test-user-id', 'user-outsider');
+
+      expect(res.status).toBe(200);
+    });
+
+    it('is not shadowed by PATCH/DELETE /:id — "mine" is not read as an id', async () => {
+      const res = await request(server)
+        .get('/institution-members/mine')
+        .set('x-test-user-id', 'user-coord-a');
+
+      expect(res.status).toBe(200);
+      const body = res.body as { memberships: { institutionId: string }[] };
+      expect(body.memberships).toEqual([
+        {
+          institutionId: 'inst-a',
+          institutionName: 'Escuela A',
+          role: 'coordinator',
+          institutionStatus: 'approved',
+        },
+      ]);
+    });
   });
 
   describe('GET /institutions/:institutionId/members', () => {

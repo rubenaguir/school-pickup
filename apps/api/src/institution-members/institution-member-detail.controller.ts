@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -16,7 +17,7 @@ import { InstitutionMember } from '@casillego/shared/entities';
 import { InstitutionMembersService } from './institution-members.service';
 import { assertAdmin } from './assert-admin.util';
 import { UpdateInstitutionMemberDto } from './dto/update-institution-member.dto';
-import type { InstitutionMemberResponse } from './dto/responses';
+import type { InstitutionMemberResponse, ListMyMembershipsResponse } from './dto/responses';
 
 interface AuthenticatedRequest {
   user: { sub: string };
@@ -36,6 +37,15 @@ const INSTITUTION_MEMBER_RESOURCE = { entity: InstitutionMember };
 @UseGuards(JwtAuthGuard)
 export class InstitutionMemberDetailController {
   constructor(private readonly institutionMembersService: InstitutionMembersService) {}
+
+  // Deliberately JwtAuthGuard only (class level), with no InstitutionMembershipGuard:
+  // this is the endpoint the frontend calls to find out which institution it
+  // belongs to, so guarding it by membership would be circular. Same shape as
+  // GET /enrollments/mine. See ADR-041.
+  @Get('mine')
+  listMine(@Req() request: AuthenticatedRequest): Promise<ListMyMembershipsResponse> {
+    return this.institutionMembersService.listMine(request.user.sub);
+  }
 
   @UseGuards(InstitutionMembershipGuard)
   @InstitutionResource(INSTITUTION_MEMBER_RESOURCE)

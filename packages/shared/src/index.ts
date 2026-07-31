@@ -36,6 +36,7 @@ export * from './pickup-request-status-machine';
 export * from './pickup-request-payloads';
 export * from './ports';
 export * from './adapters/node-mqtt-client';
+export * from './api-client';
 
 /**
  * `applyPickupRequestTransition` (status update + history row) is NOT

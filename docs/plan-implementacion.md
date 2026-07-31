@@ -290,9 +290,19 @@ obsoleto en migración 401) corregido.
       `packages/ui` (`@casillego/ui`, ver ADR-036). Pendiente aún: construir
       las pantallas reales de `ui_kits/portal-admin` (ver ítem de abajo).
 - [x] `.claude/rules/design-system.md` con los tokens reales
+- [x] Plomería base de `apps/portal` (ADR-042 y ADR-043): `react-router` v7 con
+      `<ProtectedRoute>`, cliente de API compartido en
+      `packages/shared/src/api-client/` (JWT en `localStorage`, refresh
+      transparente ante 401), `AuthContext`, `InstitutionContext` sobre
+      `GET /institution-members/mine`, y la pantalla de login siguiendo
+      `ui_kits/acceso`. Incluye el endpoint `/mine` del lado del `api` —
+      ADR-041 lo había especificado sin implementarlo — y CORS por allowlist.
+      La ruta de la bandeja de aprobación ya existe como placeholder:
+      `/enrollments/pending`.
 - [ ] Pantallas en orden de prioridad del `design-brief.md`: bandeja de
-      aprobación de alumnos (★) → perfil de institución/geocerca → puntos de
-      entrega → consola de puerta → horarios → personal → reportes
+      aprobación de alumnos (★, se monta en `/enrollments/pending`) → perfil de
+      institución/geocerca → puntos de entrega → consola de puerta → horarios →
+      personal → reportes
 - [ ] Vistas de tutor: mis hijos, alta de alumno, asociar institución,
       tutores autorizados, perfil (vehículos, notificaciones)
 - [ ] Vistas de super-admin: aprobación de instituciones, métricas globales

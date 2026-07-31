@@ -22,6 +22,7 @@ import type {
   InstitutionMemberResponse,
   InviteInstitutionMemberResponse,
   ListInstitutionMembersResponse,
+  ListMyMembershipsResponse,
 } from './dto/responses';
 
 const RESOURCE_NOT_FOUND = {
@@ -68,6 +69,30 @@ export class InstitutionMembersService {
         email: member.user.email,
         userStatus: member.user.status,
         createdAt: member.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * The authenticated user's own memberships (ADR-041). No InstitutionMembershipGuard
+   * on this route — it is the endpoint that resolves which institution the guard
+   * would check, so requiring it would be circular. An empty array is a valid
+   * answer (e.g. a pure guardian who opened the institution portal by mistake),
+   * never a 404.
+   */
+  async listMine(userId: string): Promise<ListMyMembershipsResponse> {
+    const memberships = await this.institutionMembersRepository.find({
+      where: { user: { id: userId } },
+      relations: { institution: true },
+      order: { createdAt: 'ASC' },
+    });
+
+    return {
+      memberships: memberships.map((membership) => ({
+        institutionId: membership.institution.id,
+        institutionName: membership.institution.name,
+        role: membership.role,
+        institutionStatus: membership.institution.status,
       })),
     };
   }

@@ -17,6 +17,19 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api');
   app.useGlobalPipes(createValidationPipe());
 
+  // Explicit allowlist, never `origin: true` — the frontends are separate
+  // origins in development (Vite) and behind nginx in production, where an
+  // empty CORS_ORIGINS leaves this off entirely because everything is
+  // same-origin. `credentials: false`: tokens travel in the Authorization
+  // header, not in cookies. See ADR-043 point 1.
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (corsOrigins.length > 0) {
+    app.enableCors({ origin: corsOrigins, credentials: false });
+  }
+
   const port = Number(process.env.API_PORT ?? 3000);
   await app.listen(port);
 
