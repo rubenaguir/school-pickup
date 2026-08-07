@@ -53,7 +53,14 @@ export class PickupRequest {
 
   // Denormalized from enrollment.institution_id at creation, immutable thereafter.
   // No inverse relation on Institution — institution.md's own relations list omits it.
-  @ManyToOne(() => Institution, { onDelete: 'RESTRICT' })
+  //
+  // nullable: false is what makes TypeORM model the column as NOT NULL. It used
+  // to be inferred from the companion @Column, which declared no `nullable` and
+  // therefore defaulted to NOT NULL; once @RelationId replaced it (ADR-044) the
+  // only remaining source of truth is this relation, whose @ManyToOne default is
+  // nullable. Without it, migration:generate proposes DROP NOT NULL and undoes
+  // the migration of ADR-045.
+  @ManyToOne(() => Institution, { onDelete: 'RESTRICT', nullable: false })
   @JoinColumn({ name: 'institution_id' })
   institution!: Institution;
 
