@@ -2582,6 +2582,17 @@ corrida de `migration:generate` lo vuelva a señalar como antes.
    requirió migración) — se documenta aparte para que quede claro que esta
    sí toca la base de datos de cualquier entorno donde se aplique, no solo
    el código.
+5. **Consecuencia no anticipada de ADR-044, resuelta aquí:**
+   `@RelationId()` es virtual y no aporta metadata de columna — a
+   diferencia de la columna compañera que reemplazó (que al no declarar
+   `nullable` producía `NOT NULL` por default), la única fuente de verdad
+   de nulabilidad que queda es el `@ManyToOne`, cuyo default es `nullable:
+   true`. Sin corregirlo, `migration:generate` proponía deshacer esta
+   misma migración (`DROP NOT NULL`) en la siguiente corrida. Se declara
+   explícitamente `nullable: false` en el `@ManyToOne` de `institution` en
+   `pickup-request.entity.ts` — es donde vive ahora esa verdad, y es
+   necesario para que el punto 1 de esta decisión se sostenga en el
+   tiempo, no una decisión independiente.
 
 ## Referencias
 
