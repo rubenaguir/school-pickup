@@ -2604,3 +2604,101 @@ corrida de `migration:generate` lo vuelva a señalar como antes.
   reflejada también en el esquema real).
 - `docs/arquitectura.md` (segmentación de topics MQTT por institución,
   aislamiento multi-tenant).
+
+## ADR-046 — `incremental` fuera de `apps/api` y `apps/worker`: la caché `.tsbuildinfo` vive fuera de `dist/` y sobrevive a `deleteOutDir`
+
+**Contexto.** `npm run dev:api` fallaba de forma recurrente con `Cannot find
+module '.../dist/main'`. El síntoma se "resolvió" antes borrando a mano el
+archivo `.tsbuildinfo`, sin registrar la causa ni el arreglo; el fallo volvió,
+como era de esperarse. Este ADR documenta la causa real y el arreglo
+definitivo.
+
+**Causa raíz.** Es la interacción de dos ajustes que por separado son
+razonables:
+
+1. `apps/{api,worker}/nest-cli.json` define `"deleteOutDir": true`, así que
+   `nest build` borra `dist/` completo antes de cada compilación.
+2. `apps/{api,worker}/tsconfig.json` definía `"incremental": true`, sin fijar
+   `tsBuildInfoFile`.
+
+El punto no evidente es **dónde** aterriza la caché. Con `outDir` y `rootDir`
+ambos definidos, TypeScript resuelve la ruta por defecto del `.tsbuildinfo`
+como `outDir` + la ruta relativa de `rootDir` al archivo de configuración.
+Como `rootDir` es `./src` y el `tsconfig.build.json` está un nivel **arriba**
+de `src/`, esa ruta relativa empieza con `..` y colapsa fuera de `dist/`:
+
+```
+resolvePath("apps/api/dist", "../tsconfig.build") -> apps/api/tsconfig.build.tsbuildinfo
+```
+
+Verificado consultando al propio compilador (`ts.getTsBuildInfoEmitOutputFilePath`,
+TypeScript 5.9.3), no por inspección visual.
+
+El resultado es que **la caché y los artefactos que describe tienen ciclos de
+vida independientes**: `deleteOutDir` borra `dist/`, el `.tsbuildinfo`
+sobrevive un nivel más arriba, y en la siguiente corrida `tsc` lee esa caché,
+concluye que todo está al día y **no emite nada, saliendo con código 0**.
+
+**Por qué esto es peor que un fallo de arranque.** El modo de falla no es solo
+`dist/` vacío. Medido sobre `apps/api` (compilación completa = 363 archivos):
+
+| Escenario | Archivos emitidos | Código de salida |
+|---|---|---|
+| Sin `.tsbuildinfo` (build en frío) | 363 | 0 |
+| `dist/` borrado + `.tsbuildinfo` obsoleto, sin cambios en fuentes | **0** | 0 |
+| `dist/` borrado + `.tsbuildinfo` obsoleto, **un** archivo modificado | **3** | 0 |
+
+El tercer caso es el peligroso: `tsc` re-emite únicamente los archivos que
+cambiaron, produciendo un `dist/` **silenciosamente incompleto** —
+`dist/main.js` existe, pero casi todo lo que importa falta— y la compilación
+reporta éxito. Un artefacto así puede llegar a un despliegue sin que nada lo
+señale. `Cannot find module .../dist/main` era la variante ruidosa y afortunada
+del mismo defecto.
+
+**Decisión.** Quitar `"incremental": true` de `apps/api/tsconfig.json` y
+`apps/worker/tsconfig.json`, con un comentario en cada archivo explicando por
+qué no debe volver a activarse.
+
+**Por qué esta opción y no las otras.** El criterio fue atacar la causa con el
+mínimo de maquinaria:
+
+- **Mover la caché dentro de `dist/`** (`tsBuildInfoFile: "./dist/..."`)
+  también elimina la desincronización, porque `deleteOutDir` borraría caché y
+  salidas juntas. Pero entonces la caché se destruye en cada build y toda
+  compilación vuelve a ser completa: el mismo rendimiento que quitar
+  `incremental`, con un ajuste extra de configuración que hay que mantener.
+- **Un script `prebuild` que borre el `.tsbuildinfo`** es equivalente en efecto,
+  pero traslada la garantía a un paso procedural que hay que replicar en cada
+  punto de entrada (`build`, `start:dev`, y cualquier script futuro) y que
+  requiere un borrado multiplataforma. Es fácil olvidarlo; el defecto vuelve.
+- **Quitar `deleteOutDir`** haría funcionar la compilación incremental de
+  verdad, pero cambia un problema de obsolescencia por otro: archivos de
+  fuentes borradas o renombradas quedarían acumulados en `dist/`.
+
+El argumento decisivo: **con `deleteOutDir: true`, la compilación incremental
+nunca puede acelerar correctamente un build.** Si la caché sobrevive, la salida
+es incorrecta; si no sobrevive, el build es completo de todos modos. La única
+razón por la que alguna vez funcionó es que el `.tsbuildinfo` estaba ausente
+(clon nuevo, o borrado a mano). La opción era pura exposición sin beneficio.
+
+**Impacto en tiempos de build (medido, `apps/api`).** Ninguno en la práctica:
+una compilación completa tarda ~4.5 s, y ese ya era el costo de todo build
+correcto. La caché ahorraba ~1.1 s únicamente con `dist/` intacto, escenario
+que `deleteOutDir` garantiza que `nest build` nunca alcanza. El modo `--watch`
+no se ve afectado: `tsc` mantiene su estado incremental en memoria,
+independientemente de la bandera `incremental`.
+
+**Alcance.** `apps/worker` tenía exactamente la misma configuración y estaba en
+el mismo estado roto al momento del diagnóstico (`dist/` vacío con
+`.tsbuildinfo` presente); se corrige junto con `api`. `packages/shared` y los
+frontends no usaban `incremental` y no están afectados. `.gitignore` ya cubría
+`*.tsbuildinfo` y `dist/`, así que ninguna caché obsoleta llegó a versionarse.
+
+## Referencias
+
+- `apps/api/tsconfig.json`, `apps/worker/tsconfig.json` (comentario de
+  advertencia en el sitio del cambio).
+- `apps/api/nest-cli.json`, `apps/worker/nest-cli.json` (`deleteOutDir: true`,
+  la otra mitad de la interacción).
+- `docs/plan-implementacion.md`, tabla de backlog técnico (registro del defecto
+  reincidente y de su prevención).

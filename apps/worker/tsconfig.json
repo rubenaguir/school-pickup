@@ -9,8 +9,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./",
-    "paths": {},
-    "incremental": true
+    "paths": {}
+    // Do NOT enable "incremental" here: nest-cli.json sets "deleteOutDir": true,
+    // which wipes dist/ on every build, while the .tsbuildinfo cache resolves
+    // OUTSIDE dist/ (rootDir ./src is one level below this config, so the
+    // default path collapses to ../tsconfig.build.tsbuildinfo). The surviving
+    // cache then tells tsc the outputs are up to date and it emits nothing —
+    // leaving dist/ empty or partial while exiting 0. See ADR-046.
   },
   "include": ["src/**/*"]
 }
