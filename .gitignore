@@ -24,3 +24,7 @@ npm-debug.log*
 # Vite
 apps/*/dist/
 .mcp.json
+
+# Artefactos de la herramienta MCP de Playwright (snapshots/logs de
+# verificaciones puntuales, nunca deben commitearse)
+.playwright-mcp/
