@@ -157,8 +157,13 @@ function EnrollmentRow({
             >
               Rechazar
             </Button>
+            {/* `subtle`, not `primary`: this is a list, so a coral CTA per row
+                would put N dominant elements on screen at once — the design
+                system allows one (.claude/rules/design-system.md). `subtle`
+                keeps the brand tint that separates it from the outlined
+                Rechazar without competing for the whole page. */}
             <Button
-              variant="primary"
+              variant="subtle"
               size="sm"
               disabled={!canReview || busy}
               onClick={() => onReview('approve')}
