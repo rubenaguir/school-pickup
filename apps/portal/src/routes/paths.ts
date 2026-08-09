@@ -8,5 +8,12 @@ export const LOGIN_PATH = '/login';
  */
 export const PENDING_ENROLLMENTS_PATH = '/enrollments/pending';
 
+/**
+ * Institution profile and geofence
+ * (specs/features/008-editar-perfil-institucion.md). Protected like the
+ * approval inbox: any member may read it, only `admin` may save.
+ */
+export const INSTITUTION_PROFILE_PATH = '/institution';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;

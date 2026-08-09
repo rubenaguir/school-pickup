@@ -2755,3 +2755,55 @@ línea que ADR-034/035/043.
 - ADR-034, ADR-035 y ADR-043 punto 4 (precedente del patrón "elemento visual
   sin respaldo de datos"; ADR-034 punto 4 exige este ADR).
 - `.claude/rules/design-system.md` ("Qué NO hacer" — no inventar el campo).
+
+## ADR-048 — Mapbox GL JS para el widget de mapa interactivo del frontend
+
+**Contexto.** La pantalla "Perfil de institución / geocerca" (feature 008,
+`docs/design-brief.md`) necesita un mapa interactivo donde el admin arrastra
+un pin y ajusta dos radios independientes (`geofenceRadiusMeters` de arribo,
+`activationRadiusMeters` de activación — ADR-013). Esto es una decisión
+distinta del `MapsProvider` que sigue abierto en la tabla de pendientes
+(`docs/plan-implementacion.md`): ese es el port de cálculo de ETA con
+tráfico en vivo, usado por el `worker` (`StubMapsProvider` hoy). Ninguna
+spec ni ADR había decidido qué librería renderiza un mapa en el navegador.
+
+**Decisión.**
+1. **Mapbox GL JS** (`mapbox-gl`, sin el wrapper `react-map-gl` — un
+   componente propio delgado sobre la librería base, consistente con el
+   criterio ya usado en ADR-036: no sumar una dependencia de envoltura
+   cuando la superficie de uso es acotada).
+2. **Vive en `packages/ui`**, no solo en `apps/portal` — el
+   `design-brief.md` también pide mapa en la pantalla de seguimiento de la
+   app del padre ("mapa con la ruta hacia la institución"), así que el
+   widget se construye pensando en ese segundo consumidor desde ahora,
+   aunque `apps/parent` no lo use todavía. Mismo criterio de reutilización
+   multi-frontend que ya justificó poner el cliente de API en
+   `packages/shared` (ADR-042 punto 2).
+3. **Token de acceso vía variable de entorno** (`VITE_MAPBOX_TOKEN` o
+   equivalente ya usado en el monorepo), nunca hardcodeado. Nota: un token
+   público de Mapbox no es un secreto en el sentido clásico (está pensado
+   para exponerse en cliente), pero **debe restringirse por dominio/URL
+   permitida desde el dashboard de Mapbox** — sin esa restricción,
+   cualquiera podría usarlo desde otro sitio y consumir la cuota.
+4. **Alcance de esta primera implementación**: pin arrastrable + dos
+   círculos de radio ajustables sobre el mapa, con los valores numéricos
+   también editables en un input de respaldo (para el caso de radios muy
+   pequeños o precisión difícil de lograr solo arrastrando). **Sin
+   autocompletado de direcciones** en esta fase — el admin ubica
+   manualmente el pin; buscar por dirección queda diferido a un slice
+   futuro si se necesita.
+
+## Referencias
+
+- `specs/features/008-editar-perfil-institucion.md`.
+- `specs/api-contracts/institutions.md` (`PATCH /institutions/:id`, campos
+  `location`, `geofenceRadiusMeters`, `activationRadiusMeters`).
+- ADR-013 (dos radios independientes, no colapsables).
+- ADR-036 (criterio de no sumar dependencias de envoltura sin necesidad
+  clara).
+- ADR-042 (punto 2: precedente de ubicar código reutilizable
+  multi-frontend en un paquete compartido, no duplicado por app).
+- `docs/design-brief.md` (mapa en la pantalla de seguimiento de
+  `apps/parent`, segundo consumidor futuro de este mismo widget).
+- `docs/plan-implementacion.md` (tabla de pendientes: `MapsProvider` del
+  backend sigue abierto, decisión distinta a esta).

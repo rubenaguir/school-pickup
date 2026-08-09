@@ -1,4 +1,7 @@
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { useNavigate } from 'react-router';
+import { Alert } from '../components/Alert';
+import { INSTITUTION_PROFILE_PATH } from '../routes/paths';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -58,12 +61,6 @@ const META_VALUE_STYLE = {
   color: 'var(--ink-600)',
 } as const;
 
-const CODE_STYLE = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 'var(--text-2xs)',
-  color: 'var(--ink-300)',
-} as const;
-
 function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
@@ -72,27 +69,6 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
         {value}
       </span>
     </span>
-  );
-}
-
-/** Inline alert used both for the screen-wide notice and for a row failure. */
-function Alert({ message, code }: { message: string; code: string }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        background: 'var(--danger-bg)',
-        border: '1px solid var(--danger-border)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '11px 13px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
-    >
-      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger)' }}>{message}</span>
-      <span style={CODE_STYLE}>{code}</span>
-    </div>
   );
 }
 
@@ -198,6 +174,7 @@ function EnrollmentRow({
 
 export function PendingEnrollments() {
   const { session, logout } = useAuth();
+  const navigate = useNavigate();
   const { current, memberships } = useInstitution();
   const { status, enrollments, error, banner, rowError, busyId, reload, review } =
     usePendingEnrollments(current?.institutionId ?? null);
@@ -250,9 +227,18 @@ export function PendingEnrollments() {
                 Sesión de {session?.email}
               </span>
             </div>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
+              >
+                Perfil de la institución
+              </Button>
+              <Button variant="outline" size="sm" onClick={logout}>
+                Cerrar sesión
+              </Button>
+            </div>
           </div>
 
           <div

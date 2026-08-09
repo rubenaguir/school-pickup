@@ -1,63 +1,13 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Button } from '@casillego/ui';
 import { ApiError } from '@casillego/shared';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage } from '../auth/auth-error-messages';
+import { Alert } from '../components/Alert';
+import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
 import { HOME_PATH } from '../routes/paths';
-
-/**
- * Label + framed input, matching the `Field` of `ui_kits/acceso`. Kept local to
- * the portal: promoting it to @casillego/ui needs a second consumer first
- * (ADR-036 point 1).
- */
-function Field({
-  label,
-  action,
-  children,
-  htmlFor,
-}: {
-  label: string;
-  action?: ReactNode;
-  children: ReactNode;
-  htmlFor: string;
-}) {
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <label htmlFor={htmlFor} style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}>
-          {label}
-        </label>
-        {action}
-      </span>
-      <span
-        style={{
-          height: 46,
-          border: '1px solid var(--border-strong)',
-          borderRadius: 10,
-          padding: '0 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-        }}
-      >
-        {children}
-      </span>
-    </span>
-  );
-}
-
-const INPUT_STYLE = {
-  flex: 1,
-  minWidth: 0,
-  border: 'none',
-  outline: 'none',
-  background: 'transparent',
-  fontFamily: 'var(--font-sans)',
-  fontSize: 15,
-  color: 'var(--ink-900)',
-} as const;
 
 /** Affordance with no endpoint behind it yet — visible but inert (ADR-043 point 4). */
 const INERT_LINK_STYLE = {
@@ -224,33 +174,7 @@ export function Login() {
                 </button>
               </Field>
 
-              {error && (
-                <div
-                  role="alert"
-                  style={{
-                    background: 'var(--danger-bg)',
-                    border: '1px solid var(--danger-border)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '11px 13px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger)' }}>
-                    {loginErrorMessage(error.code)}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-2xs)',
-                      color: 'var(--ink-300)',
-                    }}
-                  >
-                    {error.code}
-                  </span>
-                </div>
-              )}
+              {error && <Alert message={loginErrorMessage(error.code)} code={error.code} />}
 
               <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
                 {submitting ? 'Entrando…' : 'Entrar'}

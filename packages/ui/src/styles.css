@@ -1,3 +1,9 @@
 @import './tokens/colors.css';
 @import './tokens/typography.css';
 @import './tokens/spacing.css';
+
+/* Hoja propia de mapbox-gl: sin ella el canvas y los marcadores del
+   `GeofenceMap` no se posicionan (ADR-048). Se importa aqui, junto a los
+   tokens, para que una app solo tenga que importar `@casillego/ui/styles.css`
+   una vez, igual que hoy. */
+@import 'mapbox-gl/dist/mapbox-gl.css';
