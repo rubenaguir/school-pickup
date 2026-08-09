@@ -1,7 +1,7 @@
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useNavigate } from 'react-router';
 import { Alert } from '../components/Alert';
-import { INSTITUTION_PROFILE_PATH } from '../routes/paths';
+import { DELIVERY_POINTS_PATH, INSTITUTION_PROFILE_PATH } from '../routes/paths';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -234,6 +234,13 @@ export function PendingEnrollments() {
                 onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
               >
                 Perfil de la institución
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
+              >
+                Puntos de entrega
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

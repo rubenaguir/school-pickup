@@ -17,7 +17,7 @@ import {
 } from '../institution/useInstitutionProfile';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { PENDING_ENROLLMENTS_PATH } from '../routes/paths';
+import { DELIVERY_POINTS_PATH, PENDING_ENROLLMENTS_PATH } from '../routes/paths';
 
 /**
  * Every editable field as text: an `<input type="number">` cannot hold a
@@ -550,6 +550,13 @@ export function InstitutionProfile() {
                 onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
               >
                 Aprobaciones
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
+              >
+                Puntos de entrega
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

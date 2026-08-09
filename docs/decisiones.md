@@ -2846,3 +2846,82 @@ spec ni ADR había decidido qué librería renderiza un mapa en el navegador.
   `apps/parent`, segundo consumidor futuro de este mismo widget).
 - `docs/plan-implementacion.md` (tabla de pendientes: `MapsProvider` del
   backend sigue abierto, decisión distinta a esta).
+
+## ADR-049 — Pantalla de puntos de entrega: filtrado en cliente, entrada de etiquetas local y confirmación antes de desactivar
+
+**Contexto.** La pantalla de puntos de entrega (feature 009,
+`specs/api-contracts/delivery-points.md`) necesita tres cosas que las dos
+pantallas anteriores del portal no habían enfrentado: un filtro por estado
+que el contrato ofrece como query param (`GET
+/institutions/:id/delivery-points?status=`), un campo `assignedGroups` que
+es un `varchar[]` de texto libre (ADR-012) sin componente que lo represente
+entre los diez portados en la Capa 0 (ADR-036), y una acción —desactivar—
+que no borra nada pero sí saca al punto del flujo de recogidas en curso.
+
+**Decisión.**
+1. **El listado trae todos los puntos y el filtro activo/inactivo se resuelve
+   en cliente**, sin usar el query param `status`. Dos razones: al desactivar
+   un punto la fila tiene que seguir a la vista cambiando de estado (feature
+   009: no hay borrado físico, la entidad se conserva siempre), y usar el
+   filtro del servidor obligaría a re-consultar después de cada `PATCH` solo
+   para que la fila reapareciera en la otra pestaña. El conjunto es de unas
+   pocas puertas por institución, así que no hay argumento de volumen del
+   otro lado. El query param sigue existiendo en el contrato para otros
+   consumidores (la consola de puerta querrá solo los activos); esta pantalla
+   simplemente no lo usa.
+2. **La entrada de `assignedGroups` es un campo de etiquetas construido dentro
+   de la pantalla**, no un `<input>` de texto separado por comas ni un
+   componente nuevo de `@casillego/ui`. Un `<input>` obligaría al usuario a
+   puntuar correctamente un array; el paquete de UI sigue teniendo los diez
+   componentes de ADR-036 y sumar el undécimo es una decisión de design
+   system, no de una pantalla. Mismo criterio que `Field` y `Alert`, que
+   viven en `apps/portal/src/components/` por lo mismo. Si una segunda
+   pantalla lo necesita, ahí se decide promoverlo.
+3. **Desactivar pide confirmación en la propia fila; reactivar no.**
+   Desactivar deja de asignar recogidas a ese punto mientras la institución
+   opera, así que no puede ser un clic suelto. Reactivar no destruye nada y
+   va directo. La confirmación es un bloque en línea dentro de la tarjeta, no
+   un modal: el design system no tiene modal y no se inventa uno aquí.
+4. **`active`/`inactive` no reutiliza la paleta de los 5 estados de recogida.**
+   No es un estado de recogida, y `.claude/rules/design-system.md` reserva
+   esos cinco colores para eso. La fila usa `Badge tone="neutral"` con el
+   texto del estado y atenúa la tarjeta cuando está inactiva, en vez de
+   agregarle una variante nueva a `Badge` (que sería, otra vez, tocar el
+   design system desde una pantalla).
+5. **El selector de operador se alimenta de `GET /institutions/:id/members`**
+   (ADR-039), nunca de un uuid escrito a mano: `operator_user_id` debe ser
+   miembro de la misma institución (ADR-018 punto 11), así que un campo libre
+   solo serviría para provocar `422 OPERATOR_NOT_INSTITUTION_MEMBER`. El
+   hook vive en `delivery-points/` porque el selector es su único consumidor
+   hoy; cuando llegue la pantalla de Personal (feature 012) se mueve a su
+   propio módulo. Un `operatorUserId` guardado que ya no aparece en el
+   personal se conserva como opción marcada "Operador fuera de la
+   institución" en vez de borrarse en silencio al guardar otro campo — y si
+   se guarda así, el 422 se traduce y se muestra en el formulario.
+
+**Consecuencias.** La pantalla mantiene una sola forma abierta a la vez
+(alta o edición, nunca las dos), lo que deja exactamente un botón coral por
+vista sin reglas extra: el submit del formulario cuando está abierto, el
+"Nuevo punto de entrega" cuando no. El filtrado en cliente implica que la
+pantalla siempre tiene la lista completa en memoria; si alguna institución
+llegara a tener decenas de puntos, esta decisión es lo primero que hay que
+revisar.
+
+## Referencias
+
+- `specs/features/009-gestionar-puntos-entrega.md`.
+- `specs/api-contracts/delivery-points.md` (`GET`/`POST`
+  `/institutions/:id/delivery-points`, `PATCH /delivery-points/:id`).
+- `specs/api-contracts/institution-members.md` (`GET /institutions/:id/members`,
+  fuente del selector de operador).
+- ADR-012 (`assigned_groups` texto libre; asignación automática por grupo;
+  cero puntos es un estado válido).
+- ADR-018 (punto 11: `operator_user_id` debe ser miembro de la misma
+  institución).
+- ADR-022 (punto 1: escritura exige `role = admin`; punto 5: 422 para la
+  validación cruzada).
+- ADR-036 (los diez componentes de `@casillego/ui`; no se suma un undécimo
+  sin decisión explícita).
+- ADR-039 (`GET /institutions/:id/members`).
+- `.claude/rules/design-system.md` (paleta de 5 estados, un solo coral por
+  pantalla).

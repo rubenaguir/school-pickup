@@ -15,5 +15,13 @@ export const PENDING_ENROLLMENTS_PATH = '/enrollments/pending';
  */
 export const INSTITUTION_PROFILE_PATH = '/institution';
 
+/**
+ * Delivery points of the institution
+ * (specs/features/009-gestionar-puntos-entrega.md). Protected like the other
+ * two: any member may read the list, only `admin` may create, edit or
+ * deactivate.
+ */
+export const DELIVERY_POINTS_PATH = '/delivery-points';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;
