@@ -2792,6 +2792,19 @@ spec ni ADR había decidido qué librería renderiza un mapa en el navegador.
    autocompletado de direcciones** en esta fase — el admin ubica
    manualmente el pin; buscar por dirección queda diferido a un slice
    futuro si se necesita.
+5. **Tres decisiones de implementación, cierre de esta misma decisión:**
+   - El CSS de `mapbox-gl` se importa una sola vez desde
+     `packages/ui/src/styles.css`, heredado por los tres frontends — mismo
+     patrón que las fuentes y tokens ya centralizados ahí (ADR-036).
+   - **El token de acceso se pasa como prop** al componente, en vez de que
+     `packages/ui` lea `import.meta.env` directamente. `packages/ui` no
+     debe asumir cómo cada app resuelve sus variables de entorno — cada
+     frontend (`portal`, y a futuro `parent`) es responsable de leer su
+     propia `VITE_MAPBOX_TOKEN` y pasarla.
+   - **Los inputs numéricos de respaldo de los radios viven en la
+     pantalla, no en el widget** — evita dos controles distintos
+     gobernando el mismo valor dentro de la misma vista; el widget expone
+     el valor y un callback, la pantalla decide cómo más exponerlo.
 
 ## Referencias
 
@@ -2800,7 +2813,7 @@ spec ni ADR había decidido qué librería renderiza un mapa en el navegador.
   `location`, `geofenceRadiusMeters`, `activationRadiusMeters`).
 - ADR-013 (dos radios independientes, no colapsables).
 - ADR-036 (criterio de no sumar dependencias de envoltura sin necesidad
-  clara).
+  clara; centralización de assets estáticos en `packages/ui/src/styles.css`).
 - ADR-042 (punto 2: precedente de ubicar código reutilizable
   multi-frontend en un paquete compartido, no duplicado por app).
 - `docs/design-brief.md` (mapa en la pantalla de seguimiento de
