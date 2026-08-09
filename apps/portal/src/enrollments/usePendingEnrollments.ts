@@ -74,6 +74,14 @@ function asApiError(caught: unknown): ApiError {
  * A resolved-elsewhere row (409) or a vanished one (404) is not this screen's
  * error: somebody else already decided. Both are answered by refreshing the
  * list instead of by an error state.
+ *
+ * Silent coupling to the API status codes — see ADR-022 point 5 ("Nota de
+ * acoplamiento frontend") for the full reasoning. `approve` answers 422 when
+ * the institution is not approved (a cross-entity rule), so that case falls
+ * through to `setRowError` and the row stays visible with its inline error.
+ * Renumbering `approve` to 409 to match `institutions.md` would silently turn
+ * it into a refresh-and-vanish, and no API-layer test would catch it. Revisit
+ * this file before changing the HTTP status of either endpoint.
  */
 function isStaleRow(error: ApiError): boolean {
   return error.status === 409 || error.status === 404;
