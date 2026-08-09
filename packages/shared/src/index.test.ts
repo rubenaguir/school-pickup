@@ -3,6 +3,7 @@ import {
   MQTT_TOPIC_ROOT,
   boardTopic,
   deliveryPointQueueTopic,
+  parseDeliveryPointQueueTopic,
   parseLocationTopic,
   pickupLocationTopic,
 } from './index';
@@ -72,5 +73,44 @@ describe('parseLocationTopic', () => {
 
   it('returns null for an empty string', () => {
     expect(parseLocationTopic('')).toBeNull();
+  });
+});
+
+describe('parseDeliveryPointQueueTopic', () => {
+  it('extracts institutionId and deliveryPointId from a matching topic', () => {
+    expect(
+      parseDeliveryPointQueueTopic('school-pickup/institution/inst-1/delivery-point/dp-1/queue'),
+    ).toEqual({ institutionId: 'inst-1', deliveryPointId: 'dp-1' });
+  });
+
+  it('is the exact inverse of deliveryPointQueueTopic', () => {
+    const topic = deliveryPointQueueTopic('inst-42', 'dp-99');
+    expect(parseDeliveryPointQueueTopic(topic)).toEqual({
+      institutionId: 'inst-42',
+      deliveryPointId: 'dp-99',
+    });
+  });
+
+  // The api's WebSocket bridge subscribes to a shared broker: a message on any
+  // other CasiLlego topic must be discarded, not mistaken for a queue update.
+  it('returns null for a topic of a different type', () => {
+    expect(parseDeliveryPointQueueTopic(boardTopic('inst-1'))).toBeNull();
+    expect(parseDeliveryPointQueueTopic(pickupLocationTopic('inst-1', 'pickup-1'))).toBeNull();
+  });
+
+  it('returns null for a malformed topic', () => {
+    expect(
+      parseDeliveryPointQueueTopic('school-pickup/institution/inst-1/delivery-point/queue'),
+    ).toBeNull();
+    expect(
+      parseDeliveryPointQueueTopic(
+        'school-pickup/institution/inst-1/delivery-point/dp-1/queue/extra',
+      ),
+    ).toBeNull();
+    expect(parseDeliveryPointQueueTopic('not-even-close')).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(parseDeliveryPointQueueTopic('')).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from './guards/institution-membership.guard';
 import { SuperAdminGuard } from './guards/super-admin.guard';
 import { ResendVerificationThrottlerGuard } from './guards/resend-verification-throttler.guard';
+import { AccessTokenVerifier } from './access-token.verifier';
 import { ActivationTokenService } from './activation-token.service';
 import { ACCESS_JWT_SERVICE, ACTIVATION_JWT_SERVICE, REFRESH_JWT_SERVICE } from './jwt.tokens';
 
@@ -37,6 +38,7 @@ const ONE_MINUTE_MS = 60 * 1000;
     SuperAdminGuard,
     ResendVerificationThrottlerGuard,
     ActivationTokenService,
+    AccessTokenVerifier,
     {
       provide: ACCESS_JWT_SERVICE,
       useFactory: () =>
@@ -62,6 +64,12 @@ const ONE_MINUTE_MS = 60 * 1000;
         }),
     },
   ],
-  exports: [JwtAuthGuard, InstitutionMembershipGuard, SuperAdminGuard, ActivationTokenService],
+  exports: [
+    JwtAuthGuard,
+    InstitutionMembershipGuard,
+    SuperAdminGuard,
+    ActivationTokenService,
+    AccessTokenVerifier,
+  ],
 })
 export class AuthModule {}

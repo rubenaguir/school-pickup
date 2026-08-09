@@ -13,13 +13,14 @@ import { InstitutionMembersModule } from './institution-members/institution-memb
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { PickupsModule } from './pickups/pickups.module';
+import { DeliveryPointQueueModule } from './delivery-point-queue/delivery-point-queue.module';
 import { AdminModule } from './admin/admin.module';
 
 /**
  * Root module. Domain modules beyond auth/institutions/delivery-points/
  * dismissal-windows/dismissal-exceptions/students/student-guardians/
- * invitations/institution-members/vehicles/enrollments/pickups/admin are added
- * in later phases.
+ * invitations/institution-members/vehicles/enrollments/pickups/
+ * delivery-point-queue/admin are added in later phases.
  */
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AdminModule } from './admin/admin.module';
     VehiclesModule,
     EnrollmentsModule,
     PickupsModule,
+    DeliveryPointQueueModule,
     AdminModule,
   ],
   controllers: [HealthController],

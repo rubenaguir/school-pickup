@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { DeliveryPointsModule } from '../delivery-points/delivery-points.module';
 import { MqttModule } from '../mqtt/mqtt.module';
 import {
   AuditLog,
@@ -30,6 +31,7 @@ import { PickupsService } from './pickups.service';
     ]),
     AuthModule,
     MqttModule,
+    DeliveryPointsModule,
   ],
   controllers: [PickupsController, PickupDeliveryController],
   providers: [PickupsService],

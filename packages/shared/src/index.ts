@@ -100,3 +100,21 @@ export function parseLocationTopic(
   if (!match) return null;
   return { institutionId: match[1], pickupRequestId: match[2] };
 }
+
+/**
+ * Inverse of `deliveryPointQueueTopic`, symmetric to `parseLocationTopic`:
+ * recovers `institutionId` and `deliveryPointId` from a topic matched by the
+ * `api`'s wildcard subscription
+ * (`school-pickup/institution/+/delivery-point/+/queue`), since the queue
+ * payload carries neither id. Needed because the WebSocket bridge added by
+ * ADR-050 consumes this topic for every institution at once, not one concrete
+ * topic per console. Same contract as its sibling: returns `null`, never
+ * throws, for anything that isn't that exact shape.
+ */
+export function parseDeliveryPointQueueTopic(
+  topic: string,
+): { institutionId: string; deliveryPointId: string } | null {
+  const match = /^school-pickup\/institution\/([^/]+)\/delivery-point\/([^/]+)\/queue$/.exec(topic);
+  if (!match) return null;
+  return { institutionId: match[1], deliveryPointId: match[2] };
+}

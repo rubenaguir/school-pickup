@@ -25,6 +25,7 @@ import {
   InvalidStatusTransitionError,
 } from '@casillego/shared/pickup-request-transition';
 import { isUniqueViolation } from '../common/db-errors.util';
+import { DeliveryPointAccessService } from '../delivery-points/delivery-point-access.service';
 import {
   AuditLog,
   DeliveryPoint,
@@ -131,6 +132,7 @@ export class PickupsService {
     private readonly auditLogRepository: Repository<AuditLog>,
     private readonly dataSource: DataSource,
     @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
+    private readonly deliveryPointAccess: DeliveryPointAccessService,
   ) {}
 
   async create(userId: string, dto: CreatePickupRequestDto): Promise<PickupRequestResponse> {
@@ -179,7 +181,7 @@ export class PickupsService {
 
   async listByEnrollment(
     userId: string,
-    query: ListPickupRequestsQueryDto,
+    query: ListPickupRequestsQueryDto & { enrollmentId: string },
   ): Promise<ListPickupRequestsResponse> {
     const enrollment = await this.findEnrollmentOrFail(query.enrollmentId);
     await this.assertReadAccess(enrollment.student.id, enrollment.institutionId, userId);
@@ -191,6 +193,55 @@ export class PickupsService {
         enrollment: { id: enrollment.id },
         ...(query.status ? { status: query.status } : {}),
       },
+      // Without this the deliveryPoint relation stays unloaded and every
+      // summary reports deliveryPointId: null, contradicting the contract.
+      relations: { deliveryPoint: true },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return {
+      pickupRequests: pickupRequests.map((pickupRequest) => this.toSummary(pickupRequest)),
+      limit,
+      offset,
+      total,
+    };
+  }
+
+  /**
+   * Operational queue of a delivery point: the REST snapshot the gate console
+   * starts from, before the WebSocket bridge takes over with deltas (ADR-050
+   * pt.6). Deliberately NOT a variant of listByEnrollment: it authorizes only
+   * through the institution_member side of that method's OR (a delivery point
+   * has no individual-guardian perspective) and it returns active statuses
+   * only, never history.
+   */
+  async listByDeliveryPoint(
+    userId: string,
+    query: ListPickupRequestsQueryDto & { deliveryPointId: string },
+  ): Promise<ListPickupRequestsResponse> {
+    const access = await this.deliveryPointAccess.checkMemberAccess(query.deliveryPointId, userId);
+    if (access.outcome === 'not_found') {
+      throw new NotFoundException(RESOURCE_NOT_FOUND);
+    }
+    if (access.outcome === 'not_member') {
+      throw new ForbiddenException(NOT_INSTITUTION_MEMBER);
+    }
+
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const [pickupRequests, total] = await this.pickupRequestsRepository.findAndCount({
+      where: {
+        deliveryPoint: { id: query.deliveryPointId },
+        // `status`, when present, narrows within the active set rather than
+        // widening past it: asking for `delivered` here intersects to nothing
+        // and yields an empty page, never a historical row.
+        status: In(
+          query.status ? ACTIVE_STATUSES.filter((s) => s === query.status) : ACTIVE_STATUSES,
+        ),
+      },
+      relations: { deliveryPoint: true },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,

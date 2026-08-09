@@ -1,5 +1,16 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  isUUID,
+  Min,
+  Validate,
+  type ValidationArguments,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+} from 'class-validator';
 import type { PickupRequestStatus } from '@casillego/shared';
 
 const PICKUP_REQUEST_STATUS_VALUES: readonly PickupRequestStatus[] = [
@@ -20,9 +31,44 @@ function toOptionalNumber({ value }: { value: unknown }): number | undefined {
   return value === undefined ? undefined : Number(value);
 }
 
+// "Exactly one of enrollmentId or deliveryPointId" (ADR-050 pt.6) has no
+// built-in equivalent in class-validator, and unlike create-enrollment.dto.ts
+// there is no always-required field to anchor the check on: both filters are
+// optional in isolation. @IsOptional()/@ValidateIf() skip *every* decorator on
+// their property, including a @Validate, which would silently let the "neither
+// provided" case through — so enrollmentId carries no @IsOptional at all, and
+// its optionality is expressed by the constraint below instead.
+@ValidatorConstraint({ name: 'exactlyOneOfEnrollmentIdOrDeliveryPointId', async: false })
+class ExactlyOneOfEnrollmentIdOrDeliveryPointIdConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments): boolean {
+    const dto = args.object as ListPickupRequestsQueryDto;
+    return (dto.enrollmentId !== undefined) !== (dto.deliveryPointId !== undefined);
+  }
+
+  defaultMessage(): string {
+    return 'Exactly one of enrollmentId or deliveryPointId must be provided.';
+  }
+}
+
+@ValidatorConstraint({ name: 'optionalUuid', async: false })
+class OptionalUuidConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return value === undefined || (typeof value === 'string' && isUUID(value));
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return `${args.property} must be a UUID.`;
+  }
+}
+
 export class ListPickupRequestsQueryDto {
+  @Validate(ExactlyOneOfEnrollmentIdOrDeliveryPointIdConstraint)
+  @Validate(OptionalUuidConstraint)
+  enrollmentId?: string;
+
+  @IsOptional()
   @IsUUID()
-  enrollmentId!: string;
+  deliveryPointId?: string;
 
   @IsOptional()
   @IsIn(PICKUP_REQUEST_STATUS_VALUES)

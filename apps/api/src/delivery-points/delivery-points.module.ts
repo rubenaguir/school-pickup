@@ -5,10 +5,12 @@ import { AuthModule } from '../auth/auth.module';
 import { DeliveryPointsController } from './delivery-points.controller';
 import { DeliveryPointsDetailController } from './delivery-point-detail.controller';
 import { DeliveryPointsService } from './delivery-points.service';
+import { DeliveryPointAccessService } from './delivery-point-access.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DeliveryPoint, InstitutionMember]), AuthModule],
   controllers: [DeliveryPointsController, DeliveryPointsDetailController],
-  providers: [DeliveryPointsService],
+  providers: [DeliveryPointsService, DeliveryPointAccessService],
+  exports: [DeliveryPointAccessService],
 })
 export class DeliveryPointsModule {}

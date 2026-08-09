@@ -68,7 +68,7 @@ real, dado que el ACL del broker ya acota qué puede publicar cada cliente. Este
 patrón es de **suscripción del servidor**, no un topic de publicación: ningún
 cliente publica nunca a un topic con `+`.
 
-### Parser inverso en `packages/shared` (a implementar en Fase 6)
+### Parsers inversos en `packages/shared`
 
 Consecuencia directa del comodín: el payload de ubicación **no lleva**
 `institutionId` ni `pickupRequestId` (ambos viven solo en el string del topic),
@@ -82,10 +82,22 @@ parseLocationTopic(topic: string): { institutionId: string; pickupRequestId: str
 
 Devuelve `null` —no lanza— si el topic no matchea la forma esperada: el `worker`
 descarta el mensaje y lo registra, en vez de caerse por un topic inesperado en un
-broker compartido con otras aplicaciones. Es la única función de este tipo
-prevista: los topics de tablero y de cola solo se publican desde el backend, y
-sus consumidores (`board`, consola de puerta) ya conocen su propio
-`institutionId` y `deliveryPointId` sin necesidad de parsearlos.
+broker compartido con otras aplicaciones.
+
+Con ADR-050 hay un **segundo** consumidor por comodín, y por tanto un segundo
+parser de la misma forma:
+
+```ts
+parseDeliveryPointQueueTopic(topic: string): { institutionId: string; deliveryPointId: string } | null
+```
+
+Lo usa el puente WebSocket del `api` (ver abajo), que se suscribe al comodín de
+cola. Esto **corrige** lo que este documento afirmaba antes de ADR-050 ("es la
+única función de este tipo prevista… la consola de puerta ya conoce su propio
+`institutionId` y `deliveryPointId`"): ese razonamiento asumía que el navegador
+se suscribía directo al broker a un topic concreto, escenario descartado por
+ADR-050. Quien consume el topic de cola es el `api`, por comodín y para todas las
+instituciones a la vez, así que sí necesita parsearlo.
 
 ## Topic — feed agregado del tablero
 
@@ -151,6 +163,27 @@ reconocer al vehículo en la puerta. El `deliveryCode` no viaja por MQTT: se
 verifica vía `PATCH /pickup-requests/:id/deliver` (el tutor lo muestra en su app,
 el staff lo teclea).
 
+### El navegador no consume este topic directamente (ADR-050)
+
+La consola de puerta **no** se conecta al broker. El `api` se suscribe una sola
+vez, al arrancar, al comodín de cola —
+
+```
+school-pickup/institution/+/delivery-point/+/queue
+```
+
+— mismo patrón de "suscripción del servidor" que el `worker` usa para ubicación,
+y reenvía cada mensaje, **sin envoltura ni transformación**, por su propio
+WebSocket a los clientes autorizados para ese `deliveryPointId`. El contrato de
+ese WebSocket (handshake, autorización, códigos de cierre) vive en
+`specs/api-contracts/delivery-point-queue-ws.md`. Desde la perspectiva del broker
+no cambia nada: es la conexión que el `api` ya mantenía.
+
+Esto acota también el modelo de seguridad descrito arriba: el ACL por tenant del
+broker sigue siendo la intención de largo plazo, pero hoy la barrera real de
+aislamiento multi-tenant para este topic es el puente del `api`, no el broker
+(ADR-050, contexto).
+
 ## Cuándo se publica (por transición)
 
 | Momento | Feature | Topics |
@@ -176,6 +209,9 @@ el staff lo teclea).
   umbral `arriving_lead_minutes`).
 - ADR-031 (punto 4: suscripción del `worker` por comodín y parser inverso
   `parseLocationTopic` en `packages/shared`).
+- ADR-050 (el navegador nunca se conecta al broker; puente WebSocket en el `api`,
+  suscripción por comodín al topic de cola y `parseDeliveryPointQueueTopic`).
+- `specs/api-contracts/delivery-point-queue-ws.md` (contrato del puente).
 - `docs/arquitectura.md` (nombres de topic, ACL por tenant, flujo de tiempo
   real, estructura y ciclo de vida MQTT del `worker`).
 

@@ -2925,3 +2925,112 @@ revisar.
 - ADR-039 (`GET /institutions/:id/members`).
 - `.claude/rules/design-system.md` (paleta de 5 estados, un solo coral por
   pantalla).
+
+## ADR-050 — Puente WebSocket en `apps/api`: navegadores nunca se conectan directo al broker MQTT
+
+**Contexto.** La Consola de puerta (feature 021, `docs/design-brief.md`)
+necesita tiempo real: la cola de un punto de entrega se actualiza en vivo
+según los `pickup_requests` cambian de estado. `docs/arquitectura.md` ya
+documenta la intención de seguridad ("Autenticación por usuario/token en el
+broker, nunca anónimo. Tokens emitidos por el `api` tras el login"), pero
+nada de eso está construido — no existe endpoint que emita credenciales
+MQTT, ni configuración de plugin de autenticación en el broker.
+
+El broker Mosquitto (`wss://mqtt-jmra.com.mx:9001/mqtt`) es **infraestructura
+compartida en producción**, dando soporte a otros sistemas además de
+CasiLlego — el humano explícitamente no quiere arriesgar su funcionalidad
+actual tocando su configuración. Conectar el navegador directo al broker,
+aunque sea con topics "segmentados" por `institutionId`, **no es
+aislamiento real**: el nombre de un topic no es un secreto (cualquier
+`institution_member` de una institución conoce su propio `institutionId`,
+y ese dato puede filtrarse por otros canales), así que sin autenticación ni
+ACL reales en el broker, cualquiera con la URL del broker podría
+suscribirse a topics de cualquier institución — rompiendo el aislamiento
+multi-tenant que gobierna el resto del sistema (`docs/arquitectura.md`,
+`InstitutionMembershipGuard`).
+
+**Decisión.**
+1. **El navegador nunca se conecta directamente al broker MQTT.** En su
+   lugar, `apps/api` expone su propio servidor WebSocket nativo (NestJS,
+   adaptador `ws` — no `socket.io`: no hace falta su protocolo propio ni
+   sus transportes de respaldo, el navegador ya soporta WebSocket nativo, y
+   evita una dependencia adicional sin necesidad clara, mismo criterio que
+   ADR-036).
+2. **Cero cambios al broker Mosquitto de producción.** `apps/api` se
+   conecta al broker exactamente como ya lo hace hoy — no se agrega ninguna
+   conexión nueva, ningún usuario nuevo, ningún plugin. Desde la
+   perspectiva de Mosquitto, nada cambia.
+3. **Autenticación y autorización del WebSocket: mismo JWT, misma regla que
+   REST.** El cliente pasa el `accessToken` (query param en el handshake de
+   conexión, ya que los headers `Authorization` no son controlables desde
+   la API nativa `WebSocket` del navegador). El gateway valida el JWT y
+   aplica la misma regla que `InstitutionMembershipGuard` ya aplica para
+   `PATCH /pickup-requests/:id/deliver` — el usuario debe ser
+   `institution_members` de la institución dueña del `delivery_point`
+   solicitado, **sin restricción de `role`** (ADR-011: la consola de puerta
+   no restringe por rol dentro del mismo tenant). No es una reimplementación
+   paralela del guard — es la misma regla, adaptada al contexto de
+   conexión WS en vez de request HTTP.
+4. **Un canal por punto de entrega, no una conexión abierta a "todo".** El
+   cliente se conecta indicando el `deliveryPointId` que quiere observar
+   (consistente con el diseño: la consola opera un punto de entrega
+   concreto a la vez, `docs/design-brief.md`). El servidor solo reenvía
+   mensajes de ese punto de entrega a ese cliente.
+5. **Suscripción del servidor al broker: wildcard, reutilizando los
+   builders existentes.** `apps/api` se suscribe una sola vez (no por
+   conexión de navegador) al wildcard ya usado por el patrón de
+   "suscripción del servidor" que el `worker` ya implementa (ADR-031 punto
+   4) para el topic de cola —
+   `school-pickup/institution/+/delivery-point/+/queue` — y reutiliza
+   `parseLocationTopic`-equivalente (o su análogo para este topic, si no
+   existe todavía, créalo con la misma forma) de `packages/shared` para
+   extraer `institutionId`/`deliveryPointId` del topic entrante. Al llegar
+   un mensaje, el gateway lo reenvía solo a los WebSockets de navegador
+   suscritos a ese `deliveryPointId` específico. El payload que viaja al
+   navegador es el mismo que ya construye `buildQueuePayload()` — sin
+   envoltura nueva.
+6. **Snapshot inicial: REST, no dentro del WebSocket.** Mismo patrón ya
+   establecido para `pickup-requests` al principio de esta fase (snapshot
+   REST + deltas por tiempo real, dos mecanismos separados, no uno híbrido).
+   Se agrega `deliveryPointId` como filtro nuevo de
+   `GET /pickup-requests?deliveryPointId=...` (junto al `enrollmentId` ya
+   existente) — **autorización distinta a la del filtro por
+   `enrollmentId`**: aquí no aplica el lado "guardián" del OR (un punto de
+   entrega no tiene una perspectiva de tutor individual), solo el lado
+   `institution_member` de la institución dueña del punto. Devuelve solo
+   `pickup_requests` en estados activos (`en_route`, `arriving`,
+   `arrived`) — no historial completo, consistente con el propósito
+   operativo de la cola.
+7. **Reconexión y errores de red son responsabilidad del frontend**, no de
+   este ADR — se resuelven al construir la pantalla (Capa 3e), con el mismo
+   criterio de `ErrorState`/reintento ya usado en el resto del portal.
+
+**Consecuencias.** Este mismo puente sirve, sin cambios de arquitectura,
+para el feed agregado del tablero (`apps/board`, topic distinto,
+`boardTopic`) y para el tracking del padre (`apps/parent`, topic de
+ubicación) cuando se aborden esas fases — el patrón (WS en `apps/api`,
+nunca conexión directa de navegador al broker) se reutiliza, cada consumidor
+solo cambia a qué topic(s) se suscribe el gateway y qué regla de
+autorización aplica.
+
+## Referencias
+
+- `docs/arquitectura.md` (intención original de tokens emitidos por el
+  `api`, nunca implementada; ACL por tenant; TLS obligatorio).
+- ADR-011 (consola de puerta sin restricción de `role` dentro del tenant).
+- ADR-017 (`MqttClient` como port; mismo principio de abstracción aplicado
+  aquí al lado del `api`).
+- ADR-022 (punto 4: `InstitutionMembershipGuard`, regla que este ADR
+  replica para WS).
+- ADR-024, ADR-037 (patrón ya establecido de snapshot REST + tiempo real
+  separado, aplicado antes a `pickup-requests`).
+- ADR-031 (punto 4: patrón de suscripción del servidor por wildcard, ya
+  usado por el `worker`, reutilizado aquí).
+- `specs/api-contracts/pickup-realtime-mqtt.md` (topics existentes,
+  `deliveryPointQueueTopic`, `buildQueuePayload`).
+- `specs/api-contracts/pickup-requests.md` (endpoint `GET /pickup-requests`
+  extendido con el filtro `deliveryPointId`).
+- `specs/api-contracts/delivery-point-queue-ws.md` (contrato del puente:
+  handshake, autorización y códigos de cierre 4400/4401/4403/4404).
+- `specs/features/021-confirmar-llegada-y-entrega.md` (contexto operativo
+  de la consola de puerta).

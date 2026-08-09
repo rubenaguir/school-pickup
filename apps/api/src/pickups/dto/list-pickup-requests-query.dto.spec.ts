@@ -15,8 +15,25 @@ describe('ListPickupRequestsQueryDto', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it('rejects a missing enrollmentId', async () => {
+  it('accepts a valid deliveryPointId with no other fields', async () => {
+    const errors = await validateDto({ deliveryPointId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects neither enrollmentId nor deliveryPointId', async () => {
     const errors = await validateDto({});
+
+    expect(errors).not.toHaveLength(0);
+  });
+
+  // Both filters present is not "the first one wins": the two modes have
+  // different authorization rules, so an ambiguous request must be rejected.
+  it('rejects enrollmentId and deliveryPointId together', async () => {
+    const errors = await validateDto({
+      enrollmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      deliveryPointId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
 
     expect(errors).not.toHaveLength(0);
   });
@@ -25,6 +42,23 @@ describe('ListPickupRequestsQueryDto', () => {
     const errors = await validateDto({ enrollmentId: 'not-a-uuid' });
 
     expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects a deliveryPointId that is not a UUID', async () => {
+    const errors = await validateDto({ deliveryPointId: 'not-a-uuid' });
+
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts status/limit/offset alongside deliveryPointId', async () => {
+    const errors = await validateDto({
+      deliveryPointId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      status: 'arrived',
+      limit: '10',
+      offset: '0',
+    });
+
+    expect(errors).toHaveLength(0);
   });
 
   it('accepts a status within the enum', async () => {

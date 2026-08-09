@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
 import { createValidationPipe } from './common/create-validation-pipe';
 
@@ -16,6 +17,12 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
   app.useGlobalPipes(createValidationPipe());
+
+  // Native `ws`, not socket.io: the browser already speaks WebSocket and the
+  // bridge needs no fallback transports or custom protocol (ADR-050 pt.1).
+  // The gateway mounts on this same HTTP server under its own `path`, which
+  // setGlobalPrefix does not touch.
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   // Explicit allowlist, never `origin: true` — the frontends are separate
   // origins in development (Vite) and behind nginx in production, where an

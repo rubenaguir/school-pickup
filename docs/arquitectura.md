@@ -348,8 +348,9 @@ que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
      específico de esa puerta:
      `school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue`.
 5. El `board`, suscrito al agregado, refresca el listado en vivo. Cada consola
-   de puerta, suscrita a su cola específica, ve solo los alumnos asignados a
-   ese punto de entrega.
+   de puerta ve solo los alumnos asignados a su punto de entrega — pero **no se
+   suscribe al broker**: recibe esos mismos mensajes por el puente WebSocket del
+   `api` (ADR-050, ver abajo).
 6. Cuando el alumno está en el área de entrega, el staff lo marca en la consola
    de puerta y verifica el `delivery_code` que el tutor muestra en su app;
    esa transición viaja por los mismos canales y la app del padre la recibe al
@@ -382,6 +383,24 @@ que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
   `worker` los recupera con un parser inverso en `packages/shared`, compañero de
   los builders de topics. Ver ADR-031 punto 4 y
   `specs/api-contracts/pickup-realtime-mqtt.md`.
+- **Puente WebSocket en el `api`: el navegador no se conecta al broker
+  (ADR-050).** La consola de puerta no habla MQTT. El `api` se suscribe, también
+  por comodín y una sola vez al arrancar, a la cola de todos los puntos de
+  entrega —
+  ```
+  school-pickup/institution/+/delivery-point/+/queue
+  ```
+  — y reenvía cada mensaje, sin transformarlo, por su propio servidor WebSocket
+  (adaptador `ws`, path `/ws/delivery-point-queue`) al cliente autorizado para
+  ese `deliveryPointId`. La autorización de la conexión aplica la misma regla que
+  `InstitutionMembershipGuard` en REST, y el snapshot inicial llega por
+  `GET /pickup-requests?deliveryPointId=`. Consecuencia práctica: **hoy la
+  barrera real de aislamiento multi-tenant de ese topic es el `api`, no el ACL
+  del broker** (que sigue siendo la intención de largo plazo, ver siguiente
+  punto). Contrato completo en
+  `specs/api-contracts/delivery-point-queue-ws.md`. `board` y `parent` siguen
+  hablando MQTT directo por ahora; migrarlos a este mismo puente no requiere
+  cambios de arquitectura.
 - **ACL por tenant** en el broker: cada cliente solo puede publicar/suscribirse
   a los topics de la institución a la que pertenece. Un tutor de una institución
   NO debe poder suscribirse a los topics de otra. Cualquier `institution_member`

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { In } from 'typeorm';
 import { PickupsService } from './pickups.service';
 import {
   PickupRequest,
   PickupRequestStatusHistory,
+  type DeliveryPoint,
   type Enrollment,
   type Institution,
   type Student,
@@ -122,6 +124,7 @@ function buildService(overrides?: {
   dataSource?: Partial<Record<'transaction', unknown>>;
   mqttClient?: Partial<Record<'publish', unknown>>;
   deliveryPoints?: FakeDeliveryPoint[];
+  deliveryPointAccess?: Partial<Record<'checkMemberAccess', unknown>>;
 }) {
   const pickupRequestsRepo = {
     exists: vi.fn().mockResolvedValue(false),
@@ -174,6 +177,10 @@ function buildService(overrides?: {
     publish: vi.fn().mockResolvedValue(undefined),
     ...overrides?.mqttClient,
   };
+  const deliveryPointAccess = {
+    checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'granted', institutionId: 'inst-1' }),
+    ...overrides?.deliveryPointAccess,
+  };
   const service = new PickupsService(
     pickupRequestsRepo as never,
     enrollmentsRepo as never,
@@ -184,6 +191,7 @@ function buildService(overrides?: {
     auditLogRepo as never,
     dataSource as never,
     mqttClient as never,
+    deliveryPointAccess as never,
   );
   return {
     service,
@@ -197,6 +205,7 @@ function buildService(overrides?: {
     statusHistoryRepo,
     dataSource,
     mqttClient,
+    deliveryPointAccess,
   };
 }
 
@@ -717,6 +726,7 @@ describe('PickupsService', () => {
 
       expect(findAndCount).toHaveBeenCalledWith({
         where: { enrollment: { id: 'enr-1' }, status: 'delivered' },
+        relations: { deliveryPoint: true },
         order: { createdAt: 'DESC' },
         take: 10,
         skip: 20,
@@ -758,6 +768,130 @@ describe('PickupsService', () => {
       expect(Object.keys(result.pickupRequests[0]).sort()).toEqual(
         ['id', 'status', 'startedAt', 'completedAt', 'deliveryPointId'].sort(),
       );
+    });
+  });
+
+  describe('listByDeliveryPoint', () => {
+    const DP_ID = 'dp-1';
+
+    it('returns the active queue of the delivery point for an institution_member', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([
+            [
+              buildOwnedPickupRequest({
+                status: 'arrived',
+                deliveryPoint: { id: DP_ID } as DeliveryPoint,
+              }),
+            ],
+            1,
+          ]),
+        },
+      });
+
+      const result = await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID });
+
+      // deliveryPointId surfaces only because the relation is loaded; without
+      // it every summary of a queue would report null for its own gate.
+      expect(result.pickupRequests).toEqual([
+        {
+          id: 'pr-1',
+          status: 'arrived',
+          startedAt: '2026-07-16T08:00:00.000Z',
+          completedAt: null,
+          deliveryPointId: DP_ID,
+        },
+      ]);
+      expect(result).toMatchObject({ limit: 20, offset: 0, total: 1 });
+    });
+
+    it('filters to active statuses only, never history', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID });
+
+      expect(findAndCount).toHaveBeenCalledWith({
+        where: {
+          deliveryPoint: { id: DP_ID },
+          status: In(['en_route', 'arriving', 'arrived']),
+        },
+        relations: { deliveryPoint: true },
+        order: { createdAt: 'DESC' },
+        take: 20,
+        skip: 0,
+      });
+    });
+
+    it('narrows within the active set when status is given', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID, status: 'arrived' });
+
+      expect(findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deliveryPoint: { id: DP_ID }, status: In(['arrived']) },
+        }),
+      );
+    });
+
+    // A terminal status cannot widen the queue back into history: it
+    // intersects to nothing, which is an empty page, not an error.
+    it('intersects to nothing when status is terminal', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID, status: 'delivered' });
+
+      expect(findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deliveryPoint: { id: DP_ID }, status: In([]) },
+        }),
+      );
+    });
+
+    it('applies limit/offset paging', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 12]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      const result = await service.listByDeliveryPoint('user-1', {
+        deliveryPointId: DP_ID,
+        limit: 5,
+        offset: 10,
+      });
+
+      expect(findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 5, skip: 10 }));
+      expect(result).toMatchObject({ limit: 5, offset: 10, total: 12 });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND when the delivery point does not exist', async () => {
+      const { service, pickupRequestsRepo } = buildService({
+        deliveryPointAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_found' }),
+        },
+      });
+
+      await expect(
+        service.listByDeliveryPoint('user-1', { deliveryPointId: 'missing' }),
+      ).rejects.toMatchObject({ response: { code: 'RESOURCE_NOT_FOUND' } });
+      expect(pickupRequestsRepo.findAndCount).not.toHaveBeenCalled();
+    });
+
+    // No guardian side of the OR here (ADR-050 pt.6): a guardian of a student
+    // in this queue still has no business reading the gate's whole queue.
+    it('rejects with 403 NOT_INSTITUTION_MEMBER for a non-member, guardian or not', async () => {
+      const { service, studentGuardiansRepo } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(true) },
+        deliveryPointAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_member' }),
+        },
+      });
+
+      await expect(
+        service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID }),
+      ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
+      expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
     });
   });
 
