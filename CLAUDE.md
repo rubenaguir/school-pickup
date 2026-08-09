@@ -125,6 +125,12 @@ Guardrails para que el código no se desvíe de las specs. Ver ADR-021.
   `npm run check` debe pasar (lint type-aware + formato + build + tests).
   TypeScript en 5.9.x (no 7 todavía; rompe el lint type-aware). Prettier
   formatea código, no la documentación en markdown.
+- **Artefactos de verificación puntual (capturas, snapshots, logs de
+  herramientas MCP como Playwright) van dentro de `.playwright-mcp/`**
+  (ignorado por git), nunca sueltos en la raíz del repo ni en ninguna otra
+  carpeta del proyecto. Si una verificación termina y deja algo fuera de
+  ese directorio, bórralo antes de dar el cambio por terminado — no
+  confíes en que el patrón de `.gitignore` lo vaya a atrapar por nombre.
 
 ## Documentos de referencia
 
