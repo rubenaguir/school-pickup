@@ -2702,3 +2702,56 @@ frontends no usaban `incremental` y no están afectados. `.gitignore` ya cubría
   la otra mitad de la interacción).
 - `docs/plan-implementacion.md`, tabla de backlog técnico (registro del defecto
   reincidente y de su prevención).
+
+## ADR-047 — "Tutor solicitante" en la bandeja de aprobación: placeholder estático, sin ampliar el contrato de `GET /enrollments`
+
+**Contexto.** `docs/design-brief.md` describe la bandeja de aprobación de
+alumnos (★, feature 006) como una lista donde por cada solicitud se muestran
+"datos del alumno **y del tutor solicitante**". El contrato real
+(`specs/api-contracts/enrollments.md`, `GET /enrollments?status=pending&institutionId=...`)
+no expone nada del tutor más allá de `requestedByUserId`: ni nombre, ni
+correo, ni teléfono. No hay hueco que llenar con un campo existente — hay que
+decidir explícitamente qué hace la pantalla, porque las dos salidas fáciles
+están prohibidas por `CLAUDE.md` ("Reglas de implementación"): inventar el
+campo en el frontend, o ampliar el endpoint sobre la marcha sin pasar por la
+spec.
+
+Mostrar el `requestedByUserId` crudo tampoco es una opción: es un UUID, no un
+dato legible para un administrador escolar.
+
+**Decisión.**
+1. **La fila muestra la etiqueta "Tutor solicitante" con un placeholder
+   estático (`—`)**, en vez de omitirla del layout. Mismo tratamiento que la
+   columna "Último acceso" de ADR-035: es un dato ausente, no una acción
+   deshabilitada, así que el placeholder es visual y no hay estado `disabled`
+   que aplicar.
+2. **Sin wiring a ningún campo ni endpoint.** El placeholder no se calcula ni
+   se deriva de `requestedByUserId`; el frontend no pide ese dato ni lo espera.
+   No confundir con un `null` traído de la API.
+3. **Ampliar el contrato queda diferido a su propio slice.** Si la institución
+   necesita ver quién solicitó (probable: es información útil para decidir),
+   la ruta correcta es modificar primero
+   `specs/api-contracts/enrollments.md` — decidir qué campos del tutor se
+   exponen y con qué justificación de privacidad, dado que el tutor todavía no
+   tiene relación aprobada con la institución en el momento de la revisión —
+   y solo entonces implementarlo. Este ADR no prejuzga esos campos.
+4. **Decisión específica a esta pantalla.** Igual que ADR-034 punto 4 y
+   ADR-043 punto 4: no se generaliza una regla para el resto del portal; el
+   próximo hueco visual se resuelve con su propio ADR.
+
+**Consecuencias.** La bandeja identifica cada solicitud por alumno
+(`studentFullName`, `gradeOrGroup`), código de enrollment y fecha de
+solicitud — suficiente para decidir en el caso normal, donde el administrador
+reconoce al alumno. Queda deuda visible y deliberada en la fila, en la misma
+línea que ADR-034/035/043.
+
+## Referencias
+
+- `docs/design-brief.md` (origen visual del dato, sección "Bandeja de
+  aprobación de alumnos").
+- `specs/api-contracts/enrollments.md` (`GET /enrollments`, ausencia del dato).
+- `specs/features/006-aprobacion-enrollment.md` (feature implementada por la
+  pantalla).
+- ADR-034, ADR-035 y ADR-043 punto 4 (precedente del patrón "elemento visual
+  sin respaldo de datos"; ADR-034 punto 4 exige este ADR).
+- `.claude/rules/design-system.md` ("Qué NO hacer" — no inventar el campo).
