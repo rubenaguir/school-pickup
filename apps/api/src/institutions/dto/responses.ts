@@ -31,3 +31,9 @@ export interface RegenerateJoinCodeResponse {
   id: string;
   joinCode: string;
 }
+
+/** Answer of approve/suspend/reactivate (feature 025). */
+export interface InstitutionStatusResponse {
+  id: string;
+  status: InstitutionStatus;
+}

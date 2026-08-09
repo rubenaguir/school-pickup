@@ -67,6 +67,29 @@ npm run dev:portal         # portal en el puerto de Vite
 Cada app expone sus propios scripts; ver `package.json` raíz para los atajos
 (`dev:api`, `dev:worker`, `dev:portal`, `dev:parent`, `dev:board`).
 
+### Usuario super-admin (solo desarrollo)
+
+El super-admin (`users.is_super_admin`, ADR-038) no tiene flujo de alta en la
+aplicación: aprueba instituciones y ve las métricas globales, pero nadie lo
+registra desde la UI. Para desarrollo se siembra con un script:
+
+```bash
+SUPER_ADMIN_EMAIL=superadmin@example.com \
+SUPER_ADMIN_PASSWORD='una-contrasena-larga' \
+SUPER_ADMIN_FULL_NAME='Super Admin' \
+npm run seed:super-admin -w @casillego/api
+```
+
+- Las credenciales se leen del entorno, nunca del código — también funcionan
+  puestas en el `.env` de la raíz (ver `.env.example`).
+- Es idempotente: reejecutarlo sobre el mismo correo actualiza la contraseña y
+  reafirma el flag, no falla por correo duplicado.
+- Hashea con la misma función que el registro real
+  (`apps/api/src/auth/password.util.ts`, Argon2).
+- **No es una migración a propósito**: una migración correría en todos los
+  entornos, y una cuenta con contraseña conocida solo tiene sentido en
+  desarrollo. En producción el flag se activa a mano sobre una cuenta real.
+
 ## Base de datos
 
 El esquema completo (14 tablas, índices —incluidos 7 únicos parciales que

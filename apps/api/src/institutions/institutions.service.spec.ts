@@ -31,8 +31,15 @@ function buildInstitution(overrides?: Partial<Institution>): Institution {
   };
 }
 
+interface MemberRecord {
+  role: 'admin' | 'coordinator' | 'teacher' | 'gate_operator';
+  user: { email: string };
+}
+
 function buildService(overrides?: {
   institutionsRepo?: Partial<Record<'findOne' | 'save' | 'exists', unknown>>;
+  members?: MemberRecord[];
+  send?: ReturnType<typeof vi.fn>;
 }) {
   const institutionsRepo = {
     findOne: vi.fn().mockResolvedValue(buildInstitution()),
@@ -40,8 +47,35 @@ function buildService(overrides?: {
     exists: vi.fn().mockResolvedValue(false),
     ...overrides?.institutionsRepo,
   };
-  const service = new InstitutionsService(institutionsRepo as never);
-  return { service, institutionsRepo };
+
+  const auditRepo = {
+    create: vi.fn((entity: unknown) => entity),
+    save: vi.fn((entity: unknown) => Promise.resolve(entity)),
+  };
+
+  // The transition runs inside dataSource.transaction; the fake hands back
+  // repositories per entity so the audit row can be asserted.
+  const dataSource = {
+    transaction: (run: (manager: unknown) => Promise<unknown>) =>
+      run({
+        getRepository: (entity: { name: string }) =>
+          entity.name === 'AuditLog' ? auditRepo : institutionsRepo,
+      }),
+  };
+
+  const membersRepo = {
+    find: vi.fn().mockResolvedValue(overrides?.members ?? []),
+  };
+
+  const emailProvider = { send: overrides?.send ?? vi.fn().mockResolvedValue(undefined) };
+
+  const service = new InstitutionsService(
+    institutionsRepo as never,
+    membersRepo as never,
+    dataSource as never,
+    emailProvider as never,
+  );
+  return { service, institutionsRepo, membersRepo, auditRepo, emailProvider };
 }
 
 describe('InstitutionsService', () => {
@@ -161,6 +195,125 @@ describe('InstitutionsService', () => {
         status: 404,
         response: { code: 'RESOURCE_NOT_FOUND' },
       });
+    });
+  });
+
+  // Feature 025 / ADR-040. The three transitions of institutions.status.
+  describe('status transitions', () => {
+    const ADMINS: MemberRecord[] = [
+      { role: 'admin', user: { email: 'admin1@example.com' } },
+      { role: 'admin', user: { email: 'admin2@example.com' } },
+    ];
+
+    it('approves a pending institution and audits it as institution.approved', async () => {
+      const { service, auditRepo } = buildService({
+        institutionsRepo: {
+          findOne: vi.fn().mockResolvedValue(buildInstitution({ status: 'pending' })),
+        },
+      });
+
+      const result = await service.approve('inst-1', 'super-1');
+
+      expect(result).toEqual({ id: 'inst-1', status: 'approved' });
+      expect(auditRepo.save).toHaveBeenCalledOnce();
+      expect(auditRepo.create).toHaveBeenCalledWith({
+        actor: { id: 'super-1' },
+        action: 'institution.approved',
+        entityType: 'institution',
+        entityId: 'inst-1',
+        metadata: null,
+      });
+    });
+
+    it('suspends an approved institution and audits it as institution.suspended', async () => {
+      const { service, auditRepo } = buildService();
+
+      const result = await service.suspend('inst-1', 'super-1');
+
+      expect(result).toEqual({ id: 'inst-1', status: 'suspended' });
+      expect(auditRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'institution.suspended' }),
+      );
+    });
+
+    it('reactivates a suspended institution under its own audit action, not institution.approved', async () => {
+      const { service, auditRepo } = buildService({
+        institutionsRepo: {
+          findOne: vi.fn().mockResolvedValue(buildInstitution({ status: 'suspended' })),
+        },
+      });
+
+      const result = await service.reactivate('inst-1', 'super-1');
+
+      // Same destination as approve, deliberately distinguishable in the log
+      // (ADR-040 point 6).
+      expect(result).toEqual({ id: 'inst-1', status: 'approved' });
+      expect(auditRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'institution.reactivated' }),
+      );
+    });
+
+    it.each([
+      ['approve', 'approved'],
+      ['suspend', 'pending'],
+      ['reactivate', 'approved'],
+    ] as const)(
+      'rejects %s with 409 INVALID_STATUS_TRANSITION from status %s',
+      async (verb, status) => {
+        const { service, auditRepo, emailProvider } = buildService({
+          institutionsRepo: { findOne: vi.fn().mockResolvedValue(buildInstitution({ status })) },
+        });
+
+        await expect(service[verb]('inst-1', 'super-1')).rejects.toMatchObject({
+          status: 409,
+          response: { code: 'INVALID_STATUS_TRANSITION' },
+        });
+        // Nothing happened: no audit row, no email (feature 025).
+        expect(auditRepo.save).not.toHaveBeenCalled();
+        expect(emailProvider.send).not.toHaveBeenCalled();
+      },
+    );
+
+    it('throws 404 RESOURCE_NOT_FOUND when the institution does not exist', async () => {
+      const { service } = buildService({
+        institutionsRepo: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+      await expect(service.suspend('missing', 'super-1')).rejects.toMatchObject({
+        status: 404,
+        response: { code: 'RESOURCE_NOT_FOUND' },
+      });
+    });
+
+    it('emails every institution_member with role = admin', async () => {
+      const { service, membersRepo, emailProvider } = buildService({ members: ADMINS });
+
+      await service.suspend('inst-1', 'super-1');
+
+      expect(membersRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { institution: { id: 'inst-1' }, role: 'admin' } }),
+      );
+      expect(emailProvider.send).toHaveBeenCalledTimes(2);
+      expect(emailProvider.send).toHaveBeenCalledWith({
+        kind: 'institution_suspended',
+        to: 'admin1@example.com',
+        institutionName: 'Colegio San Benito',
+      });
+    });
+
+    it('keeps the transition when the email fails, and still notifies the other admins', async () => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('smtp down'))
+        .mockResolvedValueOnce(undefined);
+      const { service } = buildService({ members: ADMINS, send });
+
+      // Best-effort email (ADR-040 point 4): the status change already
+      // committed, so a bounce must not surface as a failed request.
+      await expect(service.suspend('inst-1', 'super-1')).resolves.toEqual({
+        id: 'inst-1',
+        status: 'suspended',
+      });
+      expect(send).toHaveBeenCalledTimes(2);
     });
   });
 });

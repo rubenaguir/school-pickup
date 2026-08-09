@@ -78,6 +78,17 @@ export default tseslint.config(
     },
   },
 
+  // Scripts de mantenimiento fuera de `src` (p.ej. apps/api/scripts): no
+  // entran en el `include` de ningun tsconfig, asi que se lintean sin reglas
+  // de tipos — igual que los archivos de config de abajo. Sin este bloque el
+  // parser por defecto intentaria leerlos como JS y fallaria en la primera
+  // anotacion de tipo.
+  {
+    files: ['apps/*/scripts/**/*.{ts,mts,cts}', 'packages/*/scripts/**/*.{ts,mts,cts}'],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: { globals: { ...globals.node } },
+  },
+
   // Archivos de config TS (vite.config.ts, etc.): reglas sin tipos.
   {
     files: ['**/*.config.{ts,mts,cts}'],

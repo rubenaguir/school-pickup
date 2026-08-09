@@ -11,6 +11,7 @@ import { InstitutionsController } from './institutions.controller';
 import { InstitutionsService } from './institutions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
+import { EMAIL_PROVIDER } from '@casillego/shared';
 import { Institution, InstitutionMember } from '@casillego/shared/entities';
 
 interface InstitutionRecord {
@@ -100,6 +101,9 @@ describe('InstitutionsController (HTTP)', () => {
           return Promise.resolve(found ? { ...found } : null);
         },
       ),
+      // Only reached by the status transitions, which live in
+      // InstitutionStatusController and have their own spec.
+      find: vi.fn().mockResolvedValue([]),
     };
 
     const fakeDataSource = {
@@ -129,6 +133,9 @@ describe('InstitutionsController (HTTP)', () => {
         { provide: getRepositoryToken(Institution), useValue: institutionsRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: membersRepo },
         { provide: DataSource, useValue: fakeDataSource },
+        // InstitutionsService also drives the status transitions, which notify
+        // by email; none of the routes in this spec send anything.
+        { provide: EMAIL_PROVIDER, useValue: { send: vi.fn() } },
       ],
     })
       .overrideGuard(JwtAuthGuard)

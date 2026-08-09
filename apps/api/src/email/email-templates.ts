@@ -95,6 +95,33 @@ export function buildEmailTemplate(message: EmailMessage): RenderedEmail {
         `),
       };
     }
+    case 'institution_approved': {
+      return {
+        subject: `${message.institutionName} ya está aprobada en CasiLlego`,
+        html: wrapHtml(`
+          <p>La institución <strong>${message.institutionName}</strong> ya está aprobada en CasiLlego.</p>
+          <p>Desde ahora puedes completar su perfil, dar de alta al personal y empezar a recibir solicitudes de asociación de los tutores.</p>
+        `),
+      };
+    }
+    case 'institution_suspended': {
+      return {
+        subject: `${message.institutionName} quedó suspendida en CasiLlego`,
+        html: wrapHtml(`
+          <p>La institución <strong>${message.institutionName}</strong> quedó suspendida en CasiLlego.</p>
+          <p>Mientras dure la suspensión no se pueden aprobar solicitudes nuevas ni editar el perfil. Si crees que se trata de un error, responde a este correo.</p>
+        `),
+      };
+    }
+    case 'institution_reactivated': {
+      return {
+        subject: `${message.institutionName} vuelve a estar activa en CasiLlego`,
+        html: wrapHtml(`
+          <p>Levantamos la suspensión de <strong>${message.institutionName}</strong>: la institución vuelve a estar activa en CasiLlego.</p>
+          <p>Su operación continúa donde se quedó, sin ningún cambio en los datos.</p>
+        `),
+      };
+    }
     default: {
       const exhaustiveCheck: never = message;
       throw new Error(`Unhandled EmailMessage kind: ${JSON.stringify(exhaustiveCheck)}`);
