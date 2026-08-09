@@ -2081,7 +2081,15 @@ exactas de cada métrica.
    compara 1–19 de julio contra 1–19 de junio (mismo corte de día, no el mes
    completo anterior) — comparación de periodo parcial vs. periodo parcial
    equivalente, no mes completo vs. mes parcial (que sesgaría el comparativo
-   a la baja artificialmente).
+   a la baja artificialmente). **Caso borde de meses cortos (aclaración
+   sobre la implementación):** cuando el mes anterior tiene menos días que
+   el recorte del mes actual (ej. el 31 de marzo comparado contra 30 días
+   desde el 1 de febrero, que caerían el 3 de marzo — días que el periodo
+   actual ya cuenta), el periodo anterior se recorta para que **nunca se
+   solape** con el inicio del mes actual, en vez de extenderse hacia el mes
+   siguiente. El mes corto simplemente reporta menos días de comparación;
+   es preferible subcontar unos días a contar una recogida dos veces en
+   ambos periodos.
 3. **"Solicitudes pendientes" son dos métricas separadas**, no una sola:
    `enrollmentsPending` (conteo de `enrollments.status = pending`, a nivel de
    toda la plataforma) e `institutionsPendingApproval` (conteo de
