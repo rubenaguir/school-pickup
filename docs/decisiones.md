@@ -708,6 +708,24 @@ Se resuelven aquí.
      `institution.status != approved`) y la validación de `category`/`type` en
      esa misma spec ya estaban correctamente codificados en **409** bajo esta
      lectura ampliada.
+
+     **Nota de acoplamiento frontend (detectada en Fase 7, Capa 3b/3c).**
+     `PATCH /enrollments/:id/approve` responde **422** cuando
+     `institutions.status != approved` (regla cruzada — la institución es una
+     entidad distinta del `enrollment`), mientras que `PATCH /institutions/:id`
+     responde **409** para el mismo escenario de fondo sobre sí misma (conflicto
+     con su propio estado). Ambos códigos son correctos bajo esta convención,
+     pero `apps/portal` **depende silenciosamente de esta distinción** para
+     decidir el comportamiento de la UI: en la bandeja de aprobación
+     (`usePendingEnrollments.ts`), `isStaleRow` solo considera "obsoleta" una
+     fila ante `409`/`404` — un `422` deja la fila visible con un error inline
+     (`setRowError`), en vez de refrescar el listado y hacerla desaparecer. Si
+     en el futuro se "homogeneiza" el código de `approve` a `409` para que
+     coincida con el de `institutions.md`, sin saberlo se rompe ese
+     comportamiento del frontend en silencio — ningún test de la capa API lo
+     detectaría, porque la convención en sí seguiría siendo válida. Cualquier
+     cambio futuro al código HTTP de estos dos endpoints debe revisar
+     `usePendingEnrollments.ts` explícitamente antes de aplicarse.
    - **Protección del último admin:** el cambio de `role`
      (`PATCH /institution-members/:id`) y cualquier baja de personal deben
      rechazarse con **422** si el miembro afectado es el único con `role = admin`
