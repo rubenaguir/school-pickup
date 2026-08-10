@@ -2,6 +2,13 @@ import { clearTokens, createApiClient } from '@casillego/shared';
 
 const DEFAULT_BASE_URL = 'http://localhost:3000/api';
 
+/**
+ * Root of the REST API, including its `/api` global prefix. Exported because
+ * the gate console derives the WebSocket origin from it (ADR-052): one origin
+ * to configure per deployment, not two that can drift apart.
+ */
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
+
 export const tokenStorage = window.localStorage;
 
 /**
@@ -10,7 +17,7 @@ export const tokenStorage = window.localStorage;
  * wraps it.
  */
 export const apiClient = createApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL,
+  baseUrl: apiBaseUrl,
   storage: tokenStorage,
   onSessionExpired: () => {
     // The refresh token was rejected too. This runs outside the React tree —

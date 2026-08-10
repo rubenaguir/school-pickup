@@ -33,7 +33,11 @@ import {
 } from '../delivery-points/useInstitutionMembers';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { INSTITUTION_PROFILE_PATH, PENDING_ENROLLMENTS_PATH } from '../routes/paths';
+import {
+  GATE_CONSOLE_PATH,
+  INSTITUTION_PROFILE_PATH,
+  PENDING_ENROLLMENTS_PATH,
+} from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -743,6 +747,9 @@ export function DeliveryPoints() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
+                Consola de puerta
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

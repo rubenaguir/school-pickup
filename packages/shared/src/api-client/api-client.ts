@@ -34,6 +34,18 @@ export interface RequestOptions {
    * the two calls that must never trigger a refresh of their own.
    */
   skipAuth?: boolean;
+  /**
+   * Send authenticated as usual, but hand a 401 straight back to the caller
+   * instead of refreshing the token and replaying the request.
+   *
+   * For the endpoint whose 401 is not about the session: `PATCH
+   * /pickup-requests/:id/deliver` answers `401 INVALID_DELIVERY_CODE` when the
+   * typed code does not match, a failed verification of a shared secret and not
+   * an authentication failure (ADR-031 point 2). Replaying it would write a
+   * second `audit_log` row for a single typo, and a refresh that happened to
+   * fail would sign the operator out over a mistyped 4-digit code. See ADR-052.
+   */
+  skipRefreshOn401?: boolean;
 }
 
 export interface ApiClientOptions {
@@ -144,7 +156,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     const skipAuth = requestOptions?.skipAuth ?? false;
     const response = await send(method, path, body, skipAuth ? null : readAccessToken(storage));
 
-    if (response.status !== 401 || skipAuth) {
+    if (response.status !== 401 || skipAuth || (requestOptions?.skipRefreshOn401 ?? false)) {
       return parse<T>(response);
     }
 

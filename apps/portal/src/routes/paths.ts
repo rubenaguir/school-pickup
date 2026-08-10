@@ -23,5 +23,13 @@ export const INSTITUTION_PROFILE_PATH = '/institution';
  */
 export const DELIVERY_POINTS_PATH = '/delivery-points';
 
+/**
+ * Gate console of one delivery point
+ * (specs/features/021-confirmar-llegada-y-entrega.md). Unlike the three routes
+ * above, it is not restricted by `role`: any `institution_member` operates it,
+ * so a coordinator can cover for an absent gate operator (ADR-011).
+ */
+export const GATE_CONSOLE_PATH = '/gate-console';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;

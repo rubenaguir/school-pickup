@@ -155,6 +155,33 @@ describe('createApiClient', () => {
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
+  it('never refreshes on a 401 marked skipRefreshOn401, and sends the request once', async () => {
+    // PATCH /pickup-requests/:id/deliver answers 401 INVALID_DELIVERY_CODE for a
+    // mistyped code (ADR-031 pt.2). Replaying it would write a second audit_log
+    // row per typo; a failed refresh would sign the operator out. See ADR-052.
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(
+        respond(401, { code: 'INVALID_DELIVERY_CODE', message: 'Delivery code does not match.' }),
+      );
+    const client = build(fetchImpl);
+
+    await expect(
+      client.patch(
+        '/pickup-requests/pr-1/deliver',
+        { deliveryCode: '0000' },
+        { skipRefreshOn401: true },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_CODE', status: 401 });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // Unlike skipAuth, the call still goes out authenticated.
+    expect(fetchImpl.mock.calls[0][1]?.headers).toMatchObject({
+      Authorization: 'Bearer stale-access',
+    });
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
   it('falls back to UNKNOWN_ERROR for an error body with no code (Nest default shape)', async () => {
     // JwtAuthGuard/500s bypass the controllers, so they answer
     // { message, statusCode } with no `code` — there is no exception filter.

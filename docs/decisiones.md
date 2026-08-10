@@ -3087,3 +3087,106 @@ en la cola en vivo), no relaja **a quién** se le expone.
   `PickupRequestBoardPayload` — este último sin cambios, a propósito).
 - `specs/api-contracts/pickup-realtime-mqtt.md`,
   `specs/api-contracts/pickup-requests.md` (formas de payload a actualizar).
+
+## ADR-052 — Consola de puerta: excepción al refresh automático en el `401` del código de entrega, y decisiones de la pantalla en vivo
+
+**Contexto.** Al construir la Consola de puerta (feature 021, Capa 3e) sobre
+la plomería ya decidida (ADR-050 puente WebSocket, ADR-051 `deliveryCode` en
+el payload de cola) aparecieron cinco decisiones que ninguno de esos ADR
+cubre. Una de ellas es un defecto real de la capa compartida, no una
+preferencia de pantalla: **el interceptor de refresh de ADR-042 punto 4 trata
+todo `401` como sesión expirada**, y `PATCH /pickup-requests/:id/deliver`
+responde `401 INVALID_DELIVERY_CODE` cuando el código tecleado no coincide
+(ADR-031 punto 2) — que no es un fallo de autenticación, sino la verificación
+fallida de un secreto compartido. Con el interceptor tal como estaba, un
+operador que se equivoca al teclear provoca un refresh de token y **un
+segundo envío del `PATCH`**: dos filas en `audit_log` por un solo intento
+(contradiciendo feature 021, que registra una por intento), y —si el refresh
+llegara a fallar— el cierre de sesión del operador por un error de tecleo.
+
+**Decisión.**
+1. **Nueva opción `skipRefreshOn401` en el cliente de API compartido**
+   (`packages/shared/src/api-client`), usada únicamente por
+   `PATCH /pickup-requests/:id/deliver`. La llamada sale autenticada como
+   cualquier otra —a diferencia de `skipAuth`, que además omite el header—
+   pero su `401` se devuelve tal cual al llamador, sin refrescar el token ni
+   reintentar. Es una excepción explícita y por llamada, no un cambio de la
+   regla general de ADR-042 punto 4: hoy `INVALID_DELIVERY_CODE` es el único
+   `401` del API que no habla de la sesión (ADR-031 punto 2), y un `401` sin
+   marcar sigue significando exactamente lo que significaba.
+2. **La cola de la consola se ordena por ETA ascendente**, con las filas sin
+   ETA calculado al final y desempate por nombre del alumno. El endpoint
+   devuelve `created_at DESC` (ADR-024 punto 9), que es el orden correcto
+   para un histórico y el equivocado para una puerta:
+   `specs/api-contracts/pickup-requests.md` ya lo anticipa al justificar por
+   qué el payload de cola no lleva `startedAt` ("la consola ordena por ETA").
+   Un ETA desconocido no es un ETA inminente, de ahí que hunda la fila en vez
+   de subirla; el desempate por nombre existe para que dos renders de los
+   mismos datos no reordenen la pantalla.
+3. **Un delta en estado terminal (`delivered`/`cancelled`) saca la fila de la
+   cola**, y un delta más viejo (`updatedAt` anterior) que el que ya está en
+   pantalla se descarta. Lo primero mantiene la fusión coherente con el
+   snapshot, que solo devuelve estados activos (ADR-050 punto 6); lo segundo
+   evita que un mensaje que se adelanta a otro, o uno que estaba en vuelo
+   mientras se re-pedía el snapshot tras una reconexión, resucite un estado
+   viejo. La fusión (`mergeQueueDelta`) es una función pura y se prueba, no
+   se clica.
+4. **Confirmar la entrega no actualiza la fila localmente.** Tras un `PATCH`
+   exitoso la pantalla marca la fila como confirmada, pero **quien la saca de
+   la cola es el delta del WebSocket**, no el frontend: el canal en vivo es
+   la única fuente de verdad de lo que la puerta está sosteniendo, y una
+   actualización optimista discreparía de él en cuanto cualquier otra cosa
+   fallara. Si el socket está caído en ese momento, la fila se va al
+   reconectar, cuando se vuelve a pedir el snapshot.
+5. **Reconexión: el socket primero, el snapshot desde su `open`.** Al abrir
+   (también al reabrir) se pide el snapshot REST, y los deltas que llegan
+   mientras esa petición está en vuelo se acumulan y se aplican encima del
+   snapshot, en vez de perderse contra una respuesta que ya nació vieja.
+   Backoff simple y con techo bajo (1s → 2s → 5s → 10s): esta pantalla vive
+   en una tablet en la puerta durante una ventana de salida que dura minutos,
+   así que una consola que tarda medio minuto en volver es una consola que se
+   perdió el evento. Los cuatro códigos de cierre de aplicación
+   (`4400`/`4401`/`4403`/`4404`) **no se reintentan** — el handshake fue
+   rechazado, reintentarlo solo lo haría rechazar otra vez; se traducen por
+   su `reason` (mismo criterio que los `code` REST, ADR-028) y se muestran
+   como aviso. Cualquier otro cierre es un fallo de transporte y sí se
+   reintenta, con indicador visible de "Reconectando…".
+6. **El origen del WebSocket se deriva de `VITE_API_BASE_URL`** (`http`→`ws`,
+   `https`→`wss`, sin el prefijo `/api`), no de una variable de entorno
+   propia: un despliegue configura un solo origen, no dos que puedan quedar
+   desincronizados.
+
+**Consecuencias.** El puente WebSocket queda con un consumidor real y un
+patrón de cliente reutilizable (snapshot desde `open` + buffer + backoff)
+para el tablero (`apps/board`) y el tracking del padre (`apps/parent`) cuando
+se aborden. `skipRefreshOn401` queda disponible para cualquier `401` futuro
+que no hable de la sesión, pero **no se aplica por defecto**: agregarlo a una
+llamada nueva exige justificar por qué su `401` no es una sesión expirada.
+
+## Referencias
+
+- ADR-011 (la consola de puerta no restringe por `role`: la ruta
+  `/gate-console` no exige `admin`, a diferencia de las otras tres del
+  portal).
+- ADR-024 (punto 9: paginación por defecto de 20, que esta pantalla eleva a
+  100 porque una puerta en hora de salida sostiene más de veinte coches y no
+  hay paginador que recorrer; punto 11: el `deliveryCode` se despliega para
+  que el operador lo compare).
+- ADR-028 (los `code` en inglés se traducen en el frontend, incluido el
+  `reason` de los cierres del WebSocket).
+- ADR-031 (punto 2: `INVALID_DELIVERY_CODE` como `401` de tercera categoría —
+  el defecto que el punto 1 corrige; puntos 7 y 8: la fila de `audit_log` que
+  se duplicaba).
+- ADR-034 (botón "Reportar incidencia": visible, deshabilitado, sin wiring —
+  respetado tal cual en esta pantalla).
+- ADR-042 (punto 4: refresh automático y transparente en cualquier `401` — la
+  regla a la que el punto 1 abre una excepción explícita).
+- ADR-049 (precedente de ADR de pantalla: decisiones de implementación de una
+  pantalla del portal agrupadas en un ADR propio).
+- ADR-050 (puntos 6 y 7: snapshot REST separado de los deltas; reconexión
+  como responsabilidad del frontend, resuelta aquí).
+- ADR-051 (punto 3: `PickupRequestQueueSummary` con los mismos campos que el
+  payload de tiempo real — lo que permite que `QueueRow` sea un solo tipo).
+- `specs/features/021-confirmar-llegada-y-entrega.md`,
+  `specs/api-contracts/pickup-requests.md`,
+  `specs/api-contracts/delivery-point-queue-ws.md`.
