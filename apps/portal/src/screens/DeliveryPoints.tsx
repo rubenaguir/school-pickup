@@ -34,6 +34,7 @@ import {
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import {
+  DISMISSAL_SCHEDULE_PATH,
   GATE_CONSOLE_PATH,
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
@@ -721,15 +722,21 @@ export function DeliveryPoints() {
         }}
       >
         <Card>
+          {/* Con el quinto destino ("Horarios de salida") el bloque de
+              navegación ya no cabe junto al título en 820px: el encabezado
+              envuelve y baja entero en vez de encimarse sobre el h1. */}
           <div
             style={{
               display: 'flex',
               alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: 16,
+              flexWrap: 'wrap',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
+            >
               <span style={EYEBROW_STYLE}>Configuración</span>
               <h1
                 style={{
@@ -746,7 +753,14 @@ export function DeliveryPoints() {
                 {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
+              >
+                Horarios de salida
+              </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
                 Consola de puerta
               </Button>

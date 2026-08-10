@@ -1,7 +1,11 @@
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useNavigate } from 'react-router';
 import { Alert } from '../components/Alert';
-import { DELIVERY_POINTS_PATH, INSTITUTION_PROFILE_PATH } from '../routes/paths';
+import {
+  DELIVERY_POINTS_PATH,
+  DISMISSAL_SCHEDULE_PATH,
+  INSTITUTION_PROFILE_PATH,
+} from '../routes/paths';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -241,6 +245,13 @@ export function PendingEnrollments() {
                 onClick={() => void navigate(DELIVERY_POINTS_PATH)}
               >
                 Puntos de entrega
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
+              >
+                Horarios de salida
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

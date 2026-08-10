@@ -15,7 +15,11 @@ import {
 import type { QueueRow } from '../gate-console/queue-rows';
 import { useDeliveryPointQueue, type ConnectionState } from '../gate-console/useDeliveryPointQueue';
 import { Alert } from '../components/Alert';
-import { DELIVERY_POINTS_PATH, PENDING_ENROLLMENTS_PATH } from '../routes/paths';
+import {
+  DELIVERY_POINTS_PATH,
+  DISMISSAL_SCHEDULE_PATH,
+  PENDING_ENROLLMENTS_PATH,
+} from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -420,6 +424,13 @@ export function GateConsole() {
                 onClick={() => void navigate(DELIVERY_POINTS_PATH)}
               >
                 Puntos de entrega
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
+              >
+                Horarios de salida
               </Button>
               <Button
                 variant="outline"

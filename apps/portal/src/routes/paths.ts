@@ -24,6 +24,16 @@ export const INSTITUTION_PROFILE_PATH = '/institution';
 export const DELIVERY_POINTS_PATH = '/delivery-points';
 
 /**
+ * Recurring dismissal windows and special days
+ * (specs/features/010-gestionar-horarios-recurrentes.md and
+ * 011-gestionar-dias-especiales.md). One route for the two entities: they are
+ * the rule and its exceptions, and reading either alone is misleading
+ * (ADR-053). Protected like the other configuration screens: any member may
+ * read, only `admin` may write.
+ */
+export const DISMISSAL_SCHEDULE_PATH = '/dismissal-schedule';
+
+/**
  * Gate console of one delivery point
  * (specs/features/021-confirmar-llegada-y-entrega.md). Unlike the three routes
  * above, it is not restricted by `role`: any `institution_member` operates it,

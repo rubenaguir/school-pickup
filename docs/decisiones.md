@@ -3209,3 +3209,114 @@ llamada.
 - `specs/features/021-confirmar-llegada-y-entrega.md`,
   `specs/api-contracts/pickup-requests.md`,
   `specs/api-contracts/delivery-point-queue-ws.md`.
+
+## ADR-053 — Pantalla de horarios de salida: una pantalla para dos entidades, normalización de `time` en la API y validación de cliente
+
+**Contexto.** La pantalla de horarios (features 010 y 011,
+`specs/api-contracts/dismissal-windows.md` y
+`specs/api-contracts/dismissal-exceptions.md`) es la primera del portal que
+cubre dos entidades a la vez, la primera con un borrado físico y la primera
+que consume columnas `time` de Postgres. Al implementarla salieron tres
+cosas que las tres pantallas anteriores no habían enfrentado.
+
+**Decisión.**
+
+1. **La API normaliza `time` a `HH:mm` antes de responder; no lo hace el
+   cliente.** Los dos contratos documentan `HH:mm` en toda respuesta y los DTO
+   de escritura lo exigen con `@IsMilitaryTime()`, que rechaza los segundos.
+   Pero node-postgres devuelve una columna `time` como `HH:MM:SS`, así que la
+   API estaba entregando un valor que ningún cliente podía devolverle: leer
+   una ventana y hacerle `PATCH` con su propio `startTime` daba
+   `400 INVALID_PAYLOAD`. Peor, un `PATCH` parcial mezclaba los dos formatos
+   en una misma respuesta (el campo tocado venía del DTO en `HH:mm`, el resto
+   de la fila en `HH:MM:SS`). El arreglo va en `toResponse` de los dos
+   servicios, vía `apps/api/src/common/military-time.util.ts`, no en el
+   frontend: es la API la que está fuera de su contrato, y el portal es solo
+   su primer consumidor — el worker y el tablero heredarían el mismo defecto.
+   Los segundos siempre son `00`; el dominio no tiene resolución sub-minuto.
+2. **Una sola pantalla, dos secciones apiladas, dos hooks independientes.**
+   Las dos entidades son la regla y su excepción (ADR-015): un día especial
+   solo se entiende junto a la ventana que sobreescribe, y separarlas en dos
+   rutas obligaría a saltar entre ellas para responder "¿a qué hora sale
+   primaria el 20 de julio?". Se apilan en vez de ir en pestañas para que las
+   dos estén a la vista sin un clic. Cada sección tiene su propio hook, su
+   propio estado de carga, su propio `EmptyState` y su propio `ErrorState`:
+   que fallen los días especiales no puede dejar en blanco los horarios
+   recurrentes. El listado completo se trae de una vez y el filtro
+   activos/pausados se resuelve en cliente, mismo criterio y mismas razones
+   que ADR-049 punto 1.
+3. **Los días especiales se traen sin `from`/`to`.** El contrato ofrece el
+   rango, pero una institución configura un puñado de fechas por ciclo, y
+   esconder las pasadas detrás de un selector volvería incomprensibles las
+   colisiones: para entender un 409 o un 422 hay que poder ver la fila con la
+   que se chocó. Si alguna institución llega a acumular años de historial,
+   este es el primer punto a revisar.
+4. **`weekday`, las horas y las fechas se validan en el cliente antes de
+   enviar**, en `dismissal-schedule-validation.ts` — funciones puras con su
+   test, porque la config raíz de vitest solo levanta `.ts` (ADR-021). La
+   validación replica exactamente los DTO de `apps/api` y nada más: no hay
+   regla `endTime > startTime` porque `specs/entities/dismissal_window.md` no
+   define ninguna, y no se inventa un invariante desde una pantalla.
+5. **`409 DUPLICATE_DISMISSAL_EXCEPTION` y `422
+   CONFLICTING_DISMISSAL_EXCEPTION` se traducen distinto**, y "todos los
+   niveles" es una casilla explícita en el formulario, no el efecto lateral de
+   dejar el campo `level` vacío. Son dos choques distintos (ADR-018 punto 10):
+   el 409 es misma fecha y mismo nivel, y se resuelve cambiando el nivel; el
+   422 es "todos los niveles" coexistiendo con cualquier otra excepción de esa
+   fecha, y cambiar el nivel no lo resuelve. Darles el mismo texto daría un
+   consejo equivocado en la mitad de los casos. Como marcar la casilla es lo
+   que hace que la fecha entera quede ocupada, tiene que ser una elección
+   deliberada; un campo vacío no comunica eso.
+6. **Borrar un día especial pide confirmación; pausar/activar una ventana no.**
+   El borrado es físico y es el único de todo el portal (feature 011): la
+   confirmación lo dice con esas palabras, a diferencia de la de "desactivar"
+   en puntos de entrega (ADR-049 punto 3), que promete lo contrario. Pausar y
+   activar son reversibles con un clic y no destruyen nada, así que van
+   directo — la confirmación de ADR-049 punto 3 existía porque desactivar
+   sacaba al punto del flujo de recogidas en curso, y pausar una ventana no
+   quita nada equivalente.
+
+7. **Las horas se capturan con `<input type="time">` nativo, aunque el
+   navegador lo pinte en 12 horas.** `.claude/rules/design-system.md` pide
+   reloj de 24 horas, y las filas del listado lo cumplen (`14:00 – 14:30`,
+   `tabular-nums`). El control nativo no: Chrome lo renderiza según el idioma
+   de la interfaz del navegador, no según el `lang` del documento ni el del
+   propio input — se verificó poniéndole `lang="es-ES"` en caliente y no
+   cambia —, así que en un navegador en es-MX muestra `12:15 p. m.`. El valor
+   que viaja y el que se muestra en la fila siguen siendo `HH:mm` de 24 horas;
+   lo único en 12 horas es la carátula del selector. Se acepta en vez de
+   construir un control de hora propio, que sería sumar un componente al
+   design system desde una pantalla — justo lo que ADR-036 y ADR-049 punto 2
+   prohíben. El `hint` de cada campo dice "Reloj de 24 horas." para que no
+   haya ambigüedad sobre lo que se guarda. Si esto llegara a molestar, la
+   solución es una decisión de design system, no de esta pantalla.
+
+**Consecuencias.** La pantalla puede tener dos formularios abiertos a la vez,
+uno por sección, cosa que la de puntos de entrega no permitía. La regla de un
+solo coral por vista se resuelve con la precedencia explícita: mientras haya
+cualquier formulario abierto, su submit es el coral y los dos botones
+"Nuevo…" bajan a `outline`. El punto 1 es un cambio de comportamiento de la
+API, no solo del portal: cualquier consumidor que ya dependiera de recibir
+`HH:MM:SS` se rompería — hoy no hay ninguno, el portal es el primero.
+
+## Referencias
+
+- `specs/features/010-gestionar-horarios-recurrentes.md`,
+  `specs/features/011-gestionar-dias-especiales.md`.
+- `specs/api-contracts/dismissal-windows.md`,
+  `specs/api-contracts/dismissal-exceptions.md`.
+- `specs/entities/dismissal_window.md`, `specs/entities/dismissal_exception.md`.
+- ADR-015 (horarios recurrentes y excepciones en tablas separadas; `label`,
+  `level`, `status`).
+- ADR-018 (punto 10: restricción única `(institution_id, date, level)` y la
+  validación de capa de aplicación para `level = NULL`).
+- ADR-021 (la config raíz de vitest solo recoge `.ts`; los frontends no tienen
+  entorno jsdom todavía).
+- ADR-022 (punto 1: escritura exige `role = admin`; punto 5, ampliado por
+  ADR-026 punto 3: 422 para la validación cruzada).
+- ADR-028 (punto 1: los `code` en inglés se traducen en el frontend).
+- ADR-049 (precedente de ADR de pantalla; punto 1: filtrado en cliente;
+  punto 3: confirmación antes de una acción destructiva; punto 4:
+  `active`/`inactive` no reutiliza la paleta de los 5 estados).
+- `.claude/rules/design-system.md` (un solo coral por pantalla, estados
+  vacíos factuales, reloj 24h con `tabular-nums`).

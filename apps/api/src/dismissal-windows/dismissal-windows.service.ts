@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { DismissalWindowStatus } from '@casillego/shared';
 import { DismissalWindow, type Institution } from '@casillego/shared/entities';
+import { toMilitaryTime } from '../common/military-time.util';
 import { CreateDismissalWindowDto } from './dto/create-dismissal-window.dto';
 import { UpdateDismissalWindowDto } from './dto/update-dismissal-window.dto';
 import type { DismissalWindowResponse, ListDismissalWindowsResponse } from './dto/responses';
@@ -79,8 +80,11 @@ export class DismissalWindowsService {
       id: entity.id,
       institutionId: entity.institutionId,
       weekday: entity.weekday,
-      startTime: entity.startTime,
-      endTime: entity.endTime,
+      // `HH:mm`, never the `HH:MM:SS` Postgres hands back for a `time` column:
+      // the contract documents `HH:mm` and the write DTOs reject seconds, so an
+      // unnormalised read is a payload the client cannot send back (ADR-053).
+      startTime: toMilitaryTime(entity.startTime),
+      endTime: toMilitaryTime(entity.endTime),
       label: entity.label,
       level: entity.level,
       status: entity.status,

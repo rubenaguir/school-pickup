@@ -63,6 +63,29 @@ describe('DismissalWindowsService', () => {
         expect.objectContaining({ where: { institution: { id: 'inst-1' } } }),
       );
     });
+
+    // Postgres hands a `time` column back as HH:MM:SS, but the contract
+    // documents HH:mm and @IsMilitaryTime rejects seconds on the way in — an
+    // unnormalised read would be a payload the client cannot send back.
+    // ADR-053.
+    it('trims the seconds Postgres adds to a time column', async () => {
+      const { service } = buildService({
+        dismissalWindowsRepo: {
+          find: vi
+            .fn()
+            .mockResolvedValue([
+              buildDismissalWindow({ startTime: '13:00:00', endTime: '14:30:00' }),
+            ]),
+        },
+      });
+
+      const result = await service.list('inst-1');
+
+      expect(result.dismissalWindows[0]).toMatchObject({
+        startTime: '13:00',
+        endTime: '14:30',
+      });
+    });
   });
 
   describe('create', () => {

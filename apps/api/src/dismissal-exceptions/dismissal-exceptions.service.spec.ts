@@ -204,5 +204,21 @@ describe('DismissalExceptionsService', () => {
         expect.objectContaining({ where: { institution: { id: 'inst-1' } } }),
       );
     });
+
+    // Postgres hands a `time` column back as HH:MM:SS, but the contract
+    // documents HH:mm and @IsMilitaryTime rejects seconds on the way in — an
+    // unnormalised read would be a payload the client cannot send back.
+    // ADR-053.
+    it('trims the seconds Postgres adds to a time column', async () => {
+      const { service } = buildService({
+        repo: {
+          find: vi.fn().mockResolvedValue([buildDismissalException({ time: '11:00:00' })]),
+        },
+      });
+
+      const result = await service.list('inst-1');
+
+      expect(result.dismissalExceptions[0]).toMatchObject({ time: '11:00' });
+    });
   });
 });

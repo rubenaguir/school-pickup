@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, IsNull, LessThanOrEqual, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import { isUniqueViolation } from '../common/db-errors.util';
+import { toMilitaryTime } from '../common/military-time.util';
 import { DismissalException, type Institution } from '@casillego/shared/entities';
 import { CreateDismissalExceptionDto } from './dto/create-dismissal-exception.dto';
 import { UpdateDismissalExceptionDto } from './dto/update-dismissal-exception.dto';
@@ -156,7 +157,10 @@ export class DismissalExceptionsService {
       date: entity.date,
       name: entity.name,
       level: entity.level,
-      time: entity.time,
+      // `HH:mm`, never the `HH:MM:SS` Postgres hands back for a `time` column:
+      // the contract documents `HH:mm` and the write DTOs reject seconds, so an
+      // unnormalised read is a payload the client cannot send back (ADR-053).
+      time: toMilitaryTime(entity.time),
     };
   }
 }
