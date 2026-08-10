@@ -1,4 +1,4 @@
-import type { EnrollmentStatus } from '@casillego/shared';
+import type { EnrollmentStatus, InstitutionType } from '@casillego/shared';
 
 export interface EnrollmentResponse {
   id: string;
@@ -14,6 +14,9 @@ export interface MyEnrollmentResponse {
   studentId: string;
   studentFullName: string;
   institutionId: string;
+  institutionName: string;
+  institutionType: InstitutionType;
+  institutionCategory: string | null;
   status: EnrollmentStatus;
   gradeOrGroup: string | null;
   enrollmentCode: string;

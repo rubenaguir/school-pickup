@@ -69,11 +69,26 @@ export const ADMIN_METRICS_PATH = '/admin/metrics';
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;
 
 /**
- * Landing screen of the tutor (parent) view — the first of the five tutor
- * screens (docs/design-brief.md, "Rol: tutor (padre)"). Only a placeholder
- * lives here for now; each real screen is a following slice (ADR-056 point
- * 7). Where anyone without an institution membership lands after login,
- * including a brand-new tutor account with zero children yet (ADR-056
- * point 5).
+ * Landing screen of the tutor (parent) view — "Mis hijos", the first of the
+ * five tutor screens (docs/design-brief.md, "Rol: tutor (padre)"). Where
+ * anyone without an institution membership lands after login, including a
+ * brand-new tutor account with zero children yet (ADR-056 point 5).
  */
 export const STUDENTS_PATH = '/students';
+
+/**
+ * Alta de alumno (specs/features/004-alta-alumno.md), linked from the
+ * "Agregar alumno" button on "Mis hijos". Route reserved here; the screen
+ * itself is a following tutor slice, same incremental pattern STUDENTS_PATH
+ * followed under ADR-056 point 7.
+ */
+export const NEW_STUDENT_PATH = '/students/new';
+
+/**
+ * Associate one student to an institution (specs/features/005-asociar-institucion.md),
+ * linked per-student from "Mis hijos". Route reserved here; the screen itself
+ * is a following tutor slice, same pattern as `NEW_STUDENT_PATH`.
+ */
+export function associateInstitutionPath(studentId: string): string {
+  return `/students/${studentId}/associate`;
+}

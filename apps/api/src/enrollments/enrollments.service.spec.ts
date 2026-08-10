@@ -12,6 +12,8 @@ function buildInstitution(overrides?: Partial<Institution>): Institution {
   return {
     id: 'inst-1',
     name: 'Escuela Uno',
+    type: 'school',
+    category: null,
     status: 'approved',
     joinCode: 'CSB-2024',
     ...overrides,
@@ -23,6 +25,7 @@ function buildEnrollment(overrides?: Partial<Enrollment>): Enrollment {
     id: 'enr-1',
     student: { id: 'stu-1', fullName: 'Ana Pérez' } as Student,
     institutionId: 'inst-1',
+    institution: buildInstitution(),
     status: 'pending',
     gradeOrGroup: null,
     enrollmentCode: 'ENR-ABCD1234',
@@ -227,6 +230,36 @@ describe('EnrollmentsService', () => {
       expect(result.enrollments).toHaveLength(1);
       expect(result.enrollments[0]).toMatchObject({ studentId: 'stu-1', status: 'pending' });
       expect(enrollmentsRepo.find).toHaveBeenCalledOnce();
+    });
+
+    it('enriches each enrollment with the institution name, type and category (ADR-057)', async () => {
+      const { service } = buildService({
+        studentGuardians: {
+          find: vi.fn().mockResolvedValue([{ student: { id: 'stu-1' } }]),
+        },
+        enrollments: {
+          find: vi.fn().mockResolvedValue([
+            buildEnrollment({
+              institutionId: 'inst-2',
+              institution: buildInstitution({
+                id: 'inst-2',
+                name: 'Ballet CDMX',
+                type: 'extracurricular',
+                category: 'Ballet',
+              }),
+            }),
+          ]),
+        },
+      });
+
+      const result = await service.listMine('user-1', {});
+
+      expect(result.enrollments[0]).toMatchObject({
+        institutionId: 'inst-2',
+        institutionName: 'Ballet CDMX',
+        institutionType: 'extracurricular',
+        institutionCategory: 'Ballet',
+      });
     });
   });
 

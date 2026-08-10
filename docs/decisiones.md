@@ -3540,3 +3540,42 @@ a `InstitutionContext` (ADR-042) pero con dos diferencias reales:
   "es tutor").
 - `specs/entities/user.md` ("tutor" derivado de datos, no es un flag).
 - `docs/design-brief.md` (las cinco pantallas de "Rol: tutor (padre)").
+
+## ADR-057 — `GET /enrollments/mine` se enriquece con `institutionName`, `institutionType`, `institutionCategory`
+
+**Contexto.** La pantalla "Mis hijos" (`docs/design-brief.md`) necesita
+mostrar, por cada alumno, las instituciones a las que está asociado — el
+brief pide explícitamente que las tarjetas muestren tipo y, en
+actividades, categoría. `GET /enrollments/mine` (perspectiva de tutor)
+solo devuelve `institutionId`, nunca el nombre. A diferencia de otras
+pantallas del portal, aquí **no existe ningún camino alternativo** para
+resolverlo: `GET /institutions/:id` exige `InstitutionMembershipGuard`
+(el tutor no es personal de esa institución, y no tiene por qué serlo), y
+`GET /institutions?search=...` (ADR-037) es búsqueda por nombre, no
+resolución por id. Sin este cambio, la pantalla no puede mostrar lo que la
+spec pide sin inventar un endpoint nuevo solo para esto.
+
+**Decisión.**
+1. **`GET /enrollments/mine` se enriquece** con `institutionName`,
+   `institutionType`, `institutionCategory` (los mismos tres campos que ya
+   expone `GET /institutions?search=...` para su propósito de tarjeta,
+   ADR-037) — vía `JOIN` contra `institutions`, sin tabla nueva ni cambio
+   de esquema.
+2. **`GET /enrollments?institutionId=...` (perspectiva de institución) no
+   cambia** — ya conoce su propia institución por contexto, agregar estos
+   campos ahí sería redundante.
+3. **Sin restricción adicional de `status` de la institución** — a
+   diferencia de la búsqueda por nombre (ADR-037, que solo devuelve
+   `approved`), aquí el tutor ya tiene una relación real (solicitó o es
+   guardián activo de un `enrollments` existente) con esa institución sin
+   importar su estado actual; ocultarle el nombre porque la institución
+   está `pending`/`suspended` no protege nada y le rompe la pantalla.
+
+## Referencias
+
+- `docs/design-brief.md` (pantalla "Mis hijos": tipo y categoría en cada
+  tarjeta).
+- `specs/api-contracts/enrollments.md` (`GET /enrollments/mine`, forma
+  enriquecida).
+- ADR-037 (mismos tres campos, precedente de propósito distinto — no se
+  reutiliza el endpoint, se reutiliza la forma de los campos).

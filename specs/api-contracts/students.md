@@ -79,6 +79,14 @@ creado él, si en el futuro otro tutor lo autoriza).
 Los tres últimos campos provienen de la fila de `student_guardians` del
 usuario autenticado para ese alumno, no de `students` directamente.
 
+Solo incluye vínculos con `student_guardians.status = active`: un guardián
+`invited` (invitación sin aceptar, feature 015) o `revoked` (baja, terminal)
+no ve ese alumno en su lista — ver "Reglas de autorización" arriba, que ya
+limita la visibilidad a una relación real. El campo `guardianStatus` de la
+respuesta es entonces siempre `active` en la práctica; el enum se documenta
+completo porque es el de la columna, no porque los otros dos valores puedan
+aparecer aquí.
+
 **Errores**
 | Código | Caso |
 |---|---|

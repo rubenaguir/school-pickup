@@ -135,7 +135,7 @@ export class EnrollmentsService {
         student: { id: In(studentIds) },
         ...(query.status ? { status: query.status } : {}),
       },
-      relations: { student: true },
+      relations: { student: true, institution: true },
       order: { requestedAt: 'DESC' },
     });
 
@@ -284,6 +284,9 @@ export class EnrollmentsService {
       studentId: enrollment.student.id,
       studentFullName: enrollment.student.fullName,
       institutionId: enrollment.institutionId,
+      institutionName: enrollment.institution.name,
+      institutionType: enrollment.institution.type,
+      institutionCategory: enrollment.institution.category,
       status: enrollment.status,
       gradeOrGroup: enrollment.gradeOrGroup,
       enrollmentCode: enrollment.enrollmentCode,

@@ -24,30 +24,7 @@ import { InstitutionProfile } from './screens/InstitutionProfile';
 import { Login } from './screens/Login';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
-
-/**
- * Stand-in for the five tutor screens (docs/design-brief.md) — the next
- * slices replace this with the real screens, one at a time (ADR-056 point 7).
- */
-function StudentsPlaceholder() {
-  return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
-        color: 'var(--ink-400)',
-        fontSize: 14,
-      }}
-    >
-      Mis hijos — próximamente
-    </main>
-  );
-}
+import { Students } from './screens/Students';
 
 export function App() {
   return (
@@ -67,7 +44,7 @@ export function App() {
               <Route path={GATE_CONSOLE_PATH} element={<GateConsole />} />
               <Route path={PERSONNEL_PATH} element={<Personnel />} />
             </Route>
-            <Route path={STUDENTS_PATH} element={<StudentsPlaceholder />} />
+            <Route path={STUDENTS_PATH} element={<Students />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}

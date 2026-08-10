@@ -20,6 +20,9 @@ import {
 
 interface InstitutionRecord {
   id: string;
+  name: string;
+  type: 'school' | 'extracurricular';
+  category: string | null;
   status: 'pending' | 'approved' | 'suspended';
   joinCode: string;
 }
@@ -82,7 +85,14 @@ describe('EnrollmentsController (HTTP)', () => {
   let enrollments: Map<string, EnrollmentRecord>;
 
   function toInstitutionEntity(record: InstitutionRecord): Institution {
-    return { id: record.id, status: record.status, joinCode: record.joinCode } as Institution;
+    return {
+      id: record.id,
+      name: record.name,
+      type: record.type,
+      category: record.category,
+      status: record.status,
+      joinCode: record.joinCode,
+    } as Institution;
   }
 
   function toGuardianEntity(record: StudentGuardianRecord): StudentGuardian {
@@ -95,10 +105,12 @@ describe('EnrollmentsController (HTTP)', () => {
   }
 
   function toEnrollmentEntity(record: EnrollmentRecord): Enrollment {
+    const institutionRecord = institutions.get(record.institutionId);
     return {
       id: record.id,
       student: { id: record.studentId, fullName: students.get(record.studentId)?.fullName ?? '' },
       institutionId: record.institutionId,
+      institution: institutionRecord ? toInstitutionEntity(institutionRecord) : undefined,
       status: record.status,
       gradeOrGroup: record.gradeOrGroup,
       enrollmentCode: record.enrollmentCode,
@@ -251,6 +263,9 @@ describe('EnrollmentsController (HTTP)', () => {
   function seedInstitution(overrides: Partial<InstitutionRecord> = {}): string {
     const id = overrides.id ?? randomUUID();
     institutions.set(id, {
+      name: 'Escuela Uno',
+      type: 'school',
+      category: null,
       status: 'approved',
       joinCode: `JOIN-${id.slice(0, 8)}`,
       ...overrides,
@@ -443,6 +458,35 @@ describe('EnrollmentsController (HTTP)', () => {
       const body = res.body as { enrollments: { studentId: string }[] };
       expect(body.enrollments).toHaveLength(1);
       expect(body.enrollments[0]?.studentId).toBe(myStudentId);
+    });
+
+    it('enriches each enrollment with the institution name, type and category (ADR-057)', async () => {
+      const institutionId = seedInstitution({
+        name: 'Ballet CDMX',
+        type: 'extracurricular',
+        category: 'Ballet',
+      });
+      const studentId = seedStudent();
+      seedGuardianLink(studentId, 'user-1');
+      seedEnrollment({ studentId, institutionId, requestedByUserId: 'user-1' });
+
+      const res = await request(server).get('/enrollments/mine').set('x-test-user-id', 'user-1');
+
+      expect(res.status).toBe(200);
+      const body = res.body as {
+        enrollments: {
+          institutionId: string;
+          institutionName: string;
+          institutionType: string;
+          institutionCategory: string | null;
+        }[];
+      };
+      expect(body.enrollments[0]).toMatchObject({
+        institutionId,
+        institutionName: 'Ballet CDMX',
+        institutionType: 'extracurricular',
+        institutionCategory: 'Ballet',
+      });
     });
 
     it('rejects an unauthenticated request with 401', async () => {

@@ -85,6 +85,9 @@ autorización" arriba.
       "studentId": "uuid",
       "studentFullName": "string",
       "institutionId": "uuid",
+      "institutionName": "string",
+      "institutionType": "school | extracurricular",
+      "institutionCategory": "string | null",
       "status": "pending | approved | rejected",
       "gradeOrGroup": "string | null",
       "enrollmentCode": "string",
@@ -94,6 +97,12 @@ autorización" arriba.
   ]
 }
 ```
+
+`institutionName`, `institutionType`, `institutionCategory` vienen de un
+`JOIN` contra `institutions` (ADR-057) — sin restricción de `institutions.status`,
+a diferencia de `GET /institutions?search=...` (ADR-037), que solo devuelve
+`approved`: aquí el tutor ya tiene una relación real con la institución vía el
+`enrollments` existente, sin importar su estado actual.
 
 **Errores**
 | Código | Caso |
@@ -213,6 +222,9 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
   feature 006 (bandeja de staff).
 - ADR-025 (punto 5: `institutions.status != approved` → 422; punto 6: registro en
   `audit_log` de `enrollment.approved` / `enrollment.rejected`).
+- ADR-057 (`GET /enrollments/mine` enriquecido con `institutionName`,
+  `institutionType`, `institutionCategory`; `GET /enrollments?institutionId=...`
+  sin cambios).
 
 ## Preguntas abiertas
 
