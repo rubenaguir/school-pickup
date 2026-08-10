@@ -30,6 +30,18 @@ export interface InstitutionContextValue {
   role: InstitutionMemberRole | null;
   error: ApiError | null;
   retry: () => void;
+  /**
+   * Applies a role change to the membership of `institutionId` in place,
+   * without a refetch. Exists for the one case where this context can go
+   * stale mid-session: the signed-in admin changes their own role from the
+   * personnel screen (possible whenever the institution has more than one
+   * admin — the last-admin protection does not block it). Without this, the
+   * screen kept offering write actions the next request would answer with
+   * `403 ADMIN_ROLE_REQUIRED`, since nothing else re-reads
+   * `GET /institution-members/mine` mid-session (ADR-054, Capa 3g follow-up).
+   * A no-op if `institutionId` does not match any loaded membership.
+   */
+  updateRole: (institutionId: string, role: InstitutionMemberRole) => void;
 }
 
 const InstitutionContext = createContext<InstitutionContextValue | null>(null);
@@ -46,6 +58,14 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     setStatus('loading');
     setError(null);
     setAttempt((n) => n + 1);
+  }, []);
+
+  const updateRole = useCallback((institutionId: string, role: InstitutionMemberRole) => {
+    setMemberships((current) =>
+      current.map((membership) =>
+        membership.institutionId === institutionId ? { ...membership, role } : membership,
+      ),
+    );
   }, []);
 
   useEffect(() => {
@@ -87,8 +107,9 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       role: current?.role ?? null,
       error,
       retry,
+      updateRole,
     };
-  }, [status, memberships, error, retry]);
+  }, [status, memberships, error, retry, updateRole]);
 
   return <InstitutionContext.Provider value={value}>{children}</InstitutionContext.Provider>;
 }

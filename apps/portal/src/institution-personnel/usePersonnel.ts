@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import type { InstitutionMemberRole } from '@casillego/shared';
 import { apiClient } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { useInstitution } from '../institution/InstitutionContext';
 import { inviteOutcome, type InviteOutcome } from './personnel-rules';
 import {
   useInstitutionMembers,
@@ -87,6 +89,8 @@ function asApiError(caught: unknown): ApiError {
  */
 export function usePersonnel(institutionId: string | null): PersonnelValue {
   const { status, members, setMembers, error, reload } = useInstitutionMembers(institutionId);
+  const { session } = useAuth();
+  const { updateRole: updateOwnRole } = useInstitution();
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -163,6 +167,17 @@ export function usePersonnel(institutionId: string | null): PersonnelValue {
               member.id === saved.id ? { ...member, role: saved.role } : member,
             ),
           );
+          // The one case where this write changes what the signed-in user is
+          // allowed to do: an admin can change their own role when the
+          // institution has more than one (the last-admin protection only
+          // blocks a change that would leave zero). `InstitutionContext` is
+          // otherwise never re-read mid-session, so without this the screen
+          // would keep every write action enabled until a remount, and the
+          // next attempt would land a surprise 403 (ADR-054, Capa 3g
+          // follow-up).
+          if (saved.userId === session?.sub) {
+            updateOwnRole(saved.institutionId, saved.role);
+          }
         })
         .catch((caught: unknown) => {
           setRowError({ memberId, error: asApiError(caught) });
@@ -171,7 +186,7 @@ export function usePersonnel(institutionId: string | null): PersonnelValue {
           setBusyId((current) => (current === memberId ? null : current));
         });
     },
-    [setMembers],
+    [setMembers, session, updateOwnRole],
   );
 
   const remove = useCallback(

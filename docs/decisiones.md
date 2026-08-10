@@ -3386,18 +3386,24 @@ garantizar.
    recogidas.** "Activo"/"Invitado"/"Suspendido" es `users.status`, no un
    estado de recogida; mismo criterio que ADR-049 punto 4 con
    `active`/`inactive` de un punto de entrega.
+7. **Resuelto en el mismo slice — no diferido:** cuando el `PATCH` que
+   `changeRole` acaba de resolver cambió el rol del propio usuario
+   autenticado (`saved.userId === session.sub`, comparado en `usePersonnel`
+   contra `useAuth()`), se llama a `InstitutionContext.updateRole(institutionId,
+   role)`. Es un setter nuevo sobre `memberships`, no un refetch de
+   `GET /institution-members/mine`: aplica el rol en memoria y no pasa por
+   `status = 'loading'`, así que ninguna pantalla que dependa de
+   `useInstitution().role` parpadea. Es el único caso en que este `PATCH`
+   cambia lo que el usuario autenticado puede hacer — cambiar el rol de
+   *otro* miembro no toca `InstitutionContext` en absoluto.
 
-**Consecuencias.** Un `admin` que se degrade a sí mismo —posible cuando hay
-más de uno— pierde el acceso de escritura a esta pantalla en el momento en
-que `InstitutionContext` se vuelva a cargar; no hay recarga forzada del
-contexto tras un `PATCH` sobre la propia membresía, así que hasta el siguiente
-montaje seguirá viendo las acciones habilitadas y recibirá
-`403 ADMIN_ROLE_REQUIRED` al usarlas. Se acepta: es un caso raro, el error se
-traduce, y forzar la recarga del contexto desde una pantalla es un acoplamiento
-peor que el síntoma. El punto 1 deja `delivery-points/` importando de
+**Consecuencias.** El punto 1 deja `delivery-points/` importando de
 `institution-personnel/`, primera dependencia entre dos módulos de pantalla del
 portal — la dirección es la correcta (el dueño del recurso es quien lo
-gestiona), no al revés.
+gestiona), no al revés. `InstitutionContext` gana su primer setter puntual
+(`updateRole`) además de `retry`; no se generaliza a un setter genérico de
+`memberships` porque este es, por ahora, el único caso en que una pantalla
+necesita corregir el contexto sin recargarlo entero.
 
 ## Referencias
 
