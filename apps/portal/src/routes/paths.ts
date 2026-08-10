@@ -48,5 +48,22 @@ export const GATE_CONSOLE_PATH = '/gate-console';
  */
 export const PERSONNEL_PATH = '/personnel';
 
+/**
+ * Institution approval queue, for the platform operator
+ * (specs/features/025-aprobacion-suspension-institucion.md). Under
+ * `SuperAdminRoute`, not `ProtectedRoute`: a super-admin does not carry
+ * institution membership (ADR-055 point 2). Where a super-admin lands after
+ * login (ADR-055 point 4) — the same role `PENDING_ENROLLMENTS_PATH` plays
+ * for an institution admin.
+ */
+export const ADMIN_INSTITUTIONS_PATH = '/admin/institutions';
+
+/**
+ * Global metrics for the platform operator
+ * (specs/features/024-metricas-globales-super-admin.md). Same guard as
+ * `ADMIN_INSTITUTIONS_PATH` (ADR-055 point 2).
+ */
+export const ADMIN_METRICS_PATH = '/admin/metrics';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;

@@ -2129,14 +2129,6 @@ exactas de cada métrica.
    datos lo justifica más adelante, la optimización (vista materializada, job
    agendado) es una decisión de rendimiento separada, no de este ADR.
 
-## Referencias
-
-- `specs/entities/user.md` (`is_super_admin`, ya existente).
-- `docs/design-brief.md` (sección "Rol: super-admin (operador)").
-- `docs/plan-implementacion.md` (slice diferido de Fase 1, ahora resuelto).
-- ADR-022 (punto 4: `InstitutionMembershipGuard`, contraste con el guard
-  nuevo).
-
 ## ADR-039 — `GET /institutions/:id/members`: OR entre membresía y `is_super_admin`
 
 **Contexto.** `specs/api-contracts/institution-members.md` gatea
@@ -3427,3 +3419,51 @@ necesita corregir el contexto sin recargarlo entero.
 - ADR-053 (precedente inmediato: hooks independientes por sección, traducción
   distinta para códigos distintos).
 - `.claude/rules/design-system.md`.
+## ADR-055 — Plomería de rutas para super-admin: `AuthContext` expone `isSuperAdmin`, `SuperAdminRoute` sin `InstitutionContext`
+
+**Contexto.** `HOME_PATH` (adonde redirige todo login exitoso) apunta a
+`PENDING_ENROLLMENTS_PATH`, envuelto en `ProtectedRoute` →
+`InstitutionProvider`/`InstitutionGate`. Un super-admin puro (sin ninguna
+membresía — el caso real de `superadmin.capa3@example.com`) recibiría hoy
+el mensaje "No perteneces a ninguna institución" inmediatamente después de
+iniciar sesión, un mensaje falso y que bloquea el acceso a cualquier
+pantalla, incluidas las de super-admin. Además, `AuthContext` no expone el
+claim `isSuperAdmin`, aunque ya viaja en el JWT (`POST /auth/login`,
+`specs/api-contracts/auth.md`).
+
+**Decisión.**
+1. **`AuthContext` expone `isSuperAdmin: boolean`**, decodificado del mismo
+   JWT que ya provee `sub`/`email`.
+2. **`SuperAdminRoute` nuevo**, paralelo a `ProtectedRoute`, sin envolver en
+   `InstitutionProvider` — un super-admin no necesita ni tiene por qué
+   tener contexto de institución para operar estas pantallas. Redirige a
+   `/login` si no hay sesión; redirige a `HOME_PATH` si hay sesión pero
+   `isSuperAdmin` es `false` (no es una pantalla que exista para pedir
+   perdón, simplemente no es alcanzable por la ruta normal para quien no
+   tiene el flag).
+3. **Rutas nuevas**: `ADMIN_INSTITUTIONS_PATH = '/admin/institutions'`,
+   `ADMIN_METRICS_PATH = '/admin/metrics'` — namespace `/admin/` espejo del
+   ya usado en el backend (`GET /admin/metrics`, `GET
+   /admin/institutions`, ADR-038/ADR-040).
+4. **Redirección post-login condicional**: si `isSuperAdmin === true`, el
+   login redirige a `ADMIN_INSTITUTIONS_PATH` en vez de `HOME_PATH` — es el
+   equivalente de "pantalla hero" para este rol, misma lógica que
+   `PENDING_ENROLLMENTS_PATH` lo es para un admin de institución (la cola
+   de aprobación es la acción operativa más frecuente en ambos casos:
+   solicitudes de alumnos para uno, instituciones para el otro).
+5. **Caso híbrido (super-admin que también es `institution_member` de
+   alguna institución) no se resuelve aquí** — la regla del punto 4 prioriza
+   siempre el destino de super-admin. No hay ningún usuario de prueba en
+   ese caso hoy; se refina cuando aparezca la necesidad real, no antes.
+6. **Las seis pantallas existentes no cambian** — siguen bajo
+   `ProtectedRoute`/`InstitutionContext` sin modificación. Un super-admin
+   que navegue manualmente a una de ellas sigue viendo el estado vacío real
+   ("no perteneces a ninguna institución"), que es factualmente correcto
+   para ese caso.
+
+## Referencias
+
+- ADR-038 (`SuperAdminGuard`, namespace `/admin/` en el backend).
+- ADR-042 (`InstitutionContext`, `ProtectedRoute` original).
+- `specs/api-contracts/auth.md` (claim `isSuperAdmin` en el access token).
+

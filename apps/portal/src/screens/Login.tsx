@@ -1,13 +1,14 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Button } from '@casillego/ui';
-import { ApiError } from '@casillego/shared';
+import { ApiError, decodeAccessToken, readAccessToken } from '@casillego/shared';
+import { tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage } from '../auth/auth-error-messages';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
-import { HOME_PATH } from '../routes/paths';
+import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
 
 /** Affordance with no endpoint behind it yet — visible but inert (ADR-043 point 4). */
 const INERT_LINK_STYLE = {
@@ -35,7 +36,7 @@ function EyeIcon({ crossed }: { crossed: boolean }) {
 }
 
 export function Login() {
-  const { session, login } = useAuth();
+  const { session, isSuperAdmin, login } = useAuth();
   const navigate = useNavigate();
   const emailId = useId();
   const passwordId = useId();
@@ -46,8 +47,13 @@ export function Login() {
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // A super-admin's home is the institution approval queue, not
+  // HOME_PATH — the same role PENDING_ENROLLMENTS_PATH plays for an
+  // institution admin (ADR-055 point 4).
+  const destination = isSuperAdmin ? ADMIN_INSTITUTIONS_PATH : HOME_PATH;
+
   if (session) {
-    return <Navigate to={HOME_PATH} replace />;
+    return <Navigate to={destination} replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -56,7 +62,16 @@ export function Login() {
     setSubmitting(true);
     try {
       await login(email, password);
-      void navigate(HOME_PATH, { replace: true });
+      // `isSuperAdmin` above is a closure over the render before this submit,
+      // where there was no session yet — still `false` here even for a
+      // super-admin, since `login()` updating `AuthContext` state does not
+      // retroactively change it. The freshly stored token is decoded
+      // directly instead, same as `AuthContext.login` does internally.
+      const freshToken = readAccessToken(tokenStorage);
+      const freshClaims = freshToken ? decodeAccessToken(freshToken) : null;
+      void navigate(freshClaims?.isSuperAdmin ? ADMIN_INSTITUTIONS_PATH : HOME_PATH, {
+        replace: true,
+      });
     } catch (caught) {
       setError(
         caught instanceof ApiError

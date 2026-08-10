@@ -11,6 +11,12 @@ import { apiClient, tokenStorage } from '../api/client';
 export interface AuthContextValue {
   /** Claims of the stored access token, or null when signed out. */
   session: AccessTokenClaims | null;
+  /**
+   * `session?.isSuperAdmin ?? false` — pulled out as its own field so callers
+   * (`SuperAdminRoute`, `Login`) do not each repeat the null check (ADR-055
+   * point 1).
+   */
+  isSuperAdmin: boolean;
   /** Throws an ApiError the caller is expected to translate by `code`. */
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -43,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ session, login, logout }),
+    () => ({ session, isSuperAdmin: session?.isSuperAdmin ?? false, login, logout }),
     [session, login, logout],
   );
 
