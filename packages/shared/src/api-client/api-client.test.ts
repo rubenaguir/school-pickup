@@ -155,7 +155,7 @@ describe('createApiClient', () => {
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
-  it('never refreshes on a 401 marked skipRefreshOn401, and sends the request once', async () => {
+  it('never refreshes on a 401 whose code is listed in skipRefreshForCodes', async () => {
     // PATCH /pickup-requests/:id/deliver answers 401 INVALID_DELIVERY_CODE for a
     // mistyped code (ADR-031 pt.2). Replaying it would write a second audit_log
     // row per typo; a failed refresh would sign the operator out. See ADR-052.
@@ -170,7 +170,7 @@ describe('createApiClient', () => {
       client.patch(
         '/pickup-requests/pr-1/deliver',
         { deliveryCode: '0000' },
-        { skipRefreshOn401: true },
+        { skipRefreshForCodes: ['INVALID_DELIVERY_CODE'] },
       ),
     ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_CODE', status: 401 });
 
@@ -178,6 +178,33 @@ describe('createApiClient', () => {
     // Unlike skipAuth, the call still goes out authenticated.
     expect(fetchImpl.mock.calls[0][1]?.headers).toMatchObject({
       Authorization: 'Bearer stale-access',
+    });
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('still refreshes on a 401 from the same call when the code is a different one', async () => {
+    // Same endpoint, same status, expired token: JwtAuthGuard bypasses the
+    // controllers, so its body carries no `code` at all and collapses to
+    // UNKNOWN_ERROR — which is not in the exempt list, so the session is
+    // renewed and the delivery is replayed (ADR-052 pt.1).
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(respond(401, { message: 'Unauthorized', statusCode: 401 }))
+      .mockResolvedValueOnce(respond(200, { accessToken: 'fresh-access' }))
+      .mockResolvedValueOnce(respond(200, { id: 'pr-1', status: 'delivered' }));
+    const client = build(fetchImpl);
+
+    const result = await client.patch<{ status: string }>(
+      '/pickup-requests/pr-1/deliver',
+      { deliveryCode: '7723' },
+      { skipRefreshForCodes: ['INVALID_DELIVERY_CODE'] },
+    );
+
+    expect(result.status).toBe('delivered');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls[1][0]).toBe(`${BASE_URL}/auth/refresh`);
+    expect(fetchImpl.mock.calls[2][1]?.headers).toMatchObject({
+      Authorization: 'Bearer fresh-access',
     });
     expect(onSessionExpired).not.toHaveBeenCalled();
   });

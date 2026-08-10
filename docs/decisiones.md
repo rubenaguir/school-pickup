@@ -3105,15 +3105,31 @@ segundo envío del `PATCH`**: dos filas en `audit_log` por un solo intento
 llegara a fallar— el cierre de sesión del operador por un error de tecleo.
 
 **Decisión.**
-1. **Nueva opción `skipRefreshOn401` en el cliente de API compartido**
-   (`packages/shared/src/api-client`), usada únicamente por
-   `PATCH /pickup-requests/:id/deliver`. La llamada sale autenticada como
-   cualquier otra —a diferencia de `skipAuth`, que además omite el header—
-   pero su `401` se devuelve tal cual al llamador, sin refrescar el token ni
-   reintentar. Es una excepción explícita y por llamada, no un cambio de la
-   regla general de ADR-042 punto 4: hoy `INVALID_DELIVERY_CODE` es el único
-   `401` del API que no habla de la sesión (ADR-031 punto 2), y un `401` sin
-   marcar sigue significando exactamente lo que significaba.
+1. **Nueva opción `skipRefreshForCodes` en el cliente de API compartido**
+   (`packages/shared/src/api-client`): una lista de `code` cuyo `401` **no**
+   es una sesión expirada y por tanto se devuelve tal cual al llamador, sin
+   refrescar el token ni reintentar. La usa únicamente
+   `PATCH /pickup-requests/:id/deliver`, con un solo elemento
+   (`INVALID_DELIVERY_CODE`). La llamada sale autenticada como cualquier otra
+   —a diferencia de `skipAuth`, que además omite el header—.
+
+   **La exención se decide por el `code` del cuerpo de la respuesta, nunca
+   por el endpoint.** Un mismo endpoint responde los dos tipos de `401`: el
+   del código tecleado que no coincide, y el que `JwtAuthGuard` devuelve
+   cuando el access token de verdad expiró — y cuál de los dos fue solo se
+   sabe **después** de que la respuesta llega, no cuando se arma la petición.
+   Una bandera booleana fijada de antemano trataría el token expirado del
+   operador como si fuera un código mal tecleado: no es un agujero de
+   seguridad (el servidor sigue rechazando la petición), pero sí una sesión
+   que deja de renovarse sola y un mensaje equivocado en pantalla. Por eso el
+   cliente lee el cuerpo del `401` antes de decidir; el `401` de
+   `JwtAuthGuard` no trae `code` propio (colapsa a `UNKNOWN_ERROR`,
+   ADR-028), no está en la lista, y refresca y reintenta como cualquier otro.
+
+   Es una excepción explícita y acotada a un `code`, no un cambio de la regla
+   general de ADR-042 punto 4: hoy `INVALID_DELIVERY_CODE` es el único `401`
+   del API que no habla de la sesión (ADR-031 punto 2), y cualquier otro
+   sigue significando exactamente lo que significaba.
 2. **La cola de la consola se ordena por ETA ascendente**, con las filas sin
    ETA calculado al final y desempate por nombre del alumno. El endpoint
    devuelve `created_at DESC` (ADR-024 punto 9), que es el orden correcto
@@ -3159,9 +3175,12 @@ llegara a fallar— el cierre de sesión del operador por un error de tecleo.
 **Consecuencias.** El puente WebSocket queda con un consumidor real y un
 patrón de cliente reutilizable (snapshot desde `open` + buffer + backoff)
 para el tablero (`apps/board`) y el tracking del padre (`apps/parent`) cuando
-se aborden. `skipRefreshOn401` queda disponible para cualquier `401` futuro
-que no hable de la sesión, pero **no se aplica por defecto**: agregarlo a una
-llamada nueva exige justificar por qué su `401` no es una sesión expirada.
+se aborden. `skipRefreshForCodes` queda disponible para cualquier `401`
+futuro que no hable de la sesión, pero **no se aplica por defecto**: sumar un
+`code` a la lista exige justificar por qué ese `code` concreto no es una
+sesión expirada — y como la exención es por `code` y no por endpoint, agregar
+uno nunca deja de renovar la sesión en el resto de los `401` de esa misma
+llamada.
 
 ## Referencias
 

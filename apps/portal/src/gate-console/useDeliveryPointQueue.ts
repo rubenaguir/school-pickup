@@ -13,6 +13,13 @@ import { buildQueueSocketUrl, fatalCloseReason, reconnectDelayMs } from './queue
  */
 const QUEUE_PAGE_SIZE = 100;
 
+/**
+ * The one `code` whose 401 this screen must not read as an expired session
+ * (ADR-052 point 1). Named here rather than inlined so the exemption is
+ * visible as a list of one, and adding a second demands the same reasoning.
+ */
+const SKIP_REFRESH_CODES = ['INVALID_DELIVERY_CODE'] as const;
+
 export type QueueStatus = 'loading' | 'ready' | 'error';
 
 /**
@@ -243,10 +250,12 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
       .patch(
         `/pickup-requests/${encodeURIComponent(pickupRequestId)}/deliver`,
         { deliveryCode },
-        // 401 INVALID_DELIVERY_CODE is a mistyped code, not an expired session:
-        // replaying it would log a second failed attempt in `audit_log` for one
-        // typo (ADR-031 point 2, ADR-052).
-        { skipRefreshOn401: true },
+        // Only this one code skips the refresh: it is a mistyped code, not an
+        // expired session, and replaying it would log a second failed attempt in
+        // `audit_log` for one typo (ADR-031 point 2, ADR-052 point 1). A 401
+        // from this same call for any other reason — an actually expired token —
+        // renews the session and replays the delivery like any other request.
+        { skipRefreshForCodes: SKIP_REFRESH_CODES },
       )
       .then(() => {
         // The row is NOT removed here. The queue delta that follows the

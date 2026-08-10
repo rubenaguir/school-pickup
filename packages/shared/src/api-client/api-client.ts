@@ -35,17 +35,23 @@ export interface RequestOptions {
    */
   skipAuth?: boolean;
   /**
-   * Send authenticated as usual, but hand a 401 straight back to the caller
-   * instead of refreshing the token and replaying the request.
+   * `code` values whose 401 is **not** an expired session, and must therefore
+   * be handed straight back to the caller instead of triggering a refresh and
+   * a replay of the request. Any other 401 on the same call — including the one
+   * `JwtAuthGuard` answers for a genuinely expired token — refreshes as usual.
    *
-   * For the endpoint whose 401 is not about the session: `PATCH
-   * /pickup-requests/:id/deliver` answers `401 INVALID_DELIVERY_CODE` when the
-   * typed code does not match, a failed verification of a shared secret and not
-   * an authentication failure (ADR-031 point 2). Replaying it would write a
-   * second `audit_log` row for a single typo, and a refresh that happened to
-   * fail would sign the operator out over a mistyped 4-digit code. See ADR-052.
+   * The decision is made on the `code` of the response body, never on the
+   * endpoint alone: one endpoint can answer both kinds of 401, and which one it
+   * was is only knowable after the response arrives (ADR-052 point 1).
+   *
+   * The case it exists for: `PATCH /pickup-requests/:id/deliver` answers
+   * `401 INVALID_DELIVERY_CODE` when the typed code does not match — a failed
+   * verification of a shared secret, not an authentication failure (ADR-031
+   * point 2). Replaying it would write a second `audit_log` row for a single
+   * typo, and a refresh that happened to fail would sign the operator out over
+   * a mistyped 4-digit code.
    */
-  skipRefreshOn401?: boolean;
+  skipRefreshForCodes?: readonly string[];
 }
 
 export interface ApiClientOptions {
@@ -156,8 +162,23 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     const skipAuth = requestOptions?.skipAuth ?? false;
     const response = await send(method, path, body, skipAuth ? null : readAccessToken(storage));
 
-    if (response.status !== 401 || skipAuth || (requestOptions?.skipRefreshOn401 ?? false)) {
+    if (response.status !== 401 || skipAuth) {
       return parse<T>(response);
+    }
+
+    // A 401 the caller declared as "not a session problem" is only recognizable
+    // from the body, so it is read here instead of by `parse` — a response body
+    // can only be consumed once (ADR-052 point 1). Everything else about this
+    // 401, including a genuinely expired token on the very same endpoint, falls
+    // through to the refresh below.
+    const skipRefreshForCodes = requestOptions?.skipRefreshForCodes;
+    if (skipRefreshForCodes && skipRefreshForCodes.length > 0) {
+      const apiError = toApiError(response.status, await response.text());
+      if (skipRefreshForCodes.includes(apiError.code)) {
+        throw apiError;
+      }
+      // Falls through having already consumed the body: nothing below reads it
+      // again — the refresh replays the request and parses that new response.
     }
 
     // Transparent refresh (ADR-042 point 4): one attempt, then replay the
