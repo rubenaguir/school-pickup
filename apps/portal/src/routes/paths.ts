@@ -41,5 +41,12 @@ export const DISMISSAL_SCHEDULE_PATH = '/dismissal-schedule';
  */
 export const GATE_CONSOLE_PATH = '/gate-console';
 
+/**
+ * Staff directory of the institution (specs/features/012-invitar-personal.md).
+ * Protected like the other configuration screens: any member may read the
+ * list, only `admin` may invite, change a role or remove someone.
+ */
+export const PERSONNEL_PATH = '/personnel';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;

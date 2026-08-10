@@ -31,16 +31,10 @@ const SAVE_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
 };
 
-/**
- * Codes reachable from GET /institutions/:id/members, la fuente del selector
- * de operador (ADR-039). El 404 solo lo alcanza un super-admin, que no llega a
- * esta pantalla; se traduce igual por completitud.
- */
-const MEMBERS_MESSAGES: Record<string, string> = {
-  NOT_INSTITUTION_MEMBER: 'No perteneces a esta institución.',
-  RESOURCE_NOT_FOUND: 'Esta institución ya no existe.',
-  NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
-};
+// Los códigos de GET /institutions/:id/members —la fuente del selector de
+// operador— viven con su hook, en `institution-personnel/`: la pantalla de
+// personal carga el mismo listado y traducirlo dos veces los dejaría diverger.
+// Ver `institutionMembersErrorMessage`.
 
 const FALLBACK = 'Error desconocido';
 
@@ -50,8 +44,4 @@ export function deliveryPointListErrorMessage(code: string): string {
 
 export function deliveryPointSaveErrorMessage(code: string): string {
   return SAVE_MESSAGES[code] ?? FALLBACK;
-}
-
-export function institutionMembersErrorMessage(code: string): string {
-  return MEMBERS_MESSAGES[code] ?? FALLBACK;
 }

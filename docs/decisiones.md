@@ -3320,3 +3320,104 @@ API, no solo del portal: cualquier consumidor que ya dependiera de recibir
   `active`/`inactive` no reutiliza la paleta de los 5 estados).
 - `.claude/rules/design-system.md` (un solo coral por pantalla, estados
   vacíos factuales, reloj 24h con `tabular-nums`).
+
+## ADR-054 — Pantalla de personal: un solo hook para el `GET`, los tres finales de la invitación, y la protección del último admin como prevención + manejo del 422
+
+**Contexto.** La pantalla de personal (feature 012,
+`specs/api-contracts/institution-members.md`) es la sexta del portal y la
+primera que muta un listado que otra pantalla ya leía: el selector de
+operador de puntos de entrega vive de `GET /institutions/:id/members` desde
+la Capa 3d. Es también la primera con un endpoint cuya respuesta tiene tres
+finales distintos para el mismo `201`, y la primera con una regla de negocio
+(`422 LAST_ADMIN_PROTECTED`) que el cliente puede anticipar pero no
+garantizar.
+
+**Decisión.**
+
+1. **El `GET` vive en un solo hook, en `institution-personnel/`, con dos
+   consumidores.** `useInstitutionMembers` se movió de `delivery-points/`
+   —donde su propio comentario ya anticipaba la mudanza— y ahora devuelve la
+   fila completa del contrato, no la proyección que necesitaba el selector.
+   Encima de él, `usePersonnel` agrega las tres escrituras. La separación no
+   es ceremonia: el selector de operador no debe recibir funciones de
+   invitar ni de dar de baja, y el `PATCH`/`DELETE` necesita escribir sobre
+   la lista cargada, por eso el hook de lectura expone su `setMembers`. Con
+   el hook se mudó también la traducción de los códigos de ese `GET`
+   (`institutionMembersErrorMessage`), que la pantalla de puntos de entrega
+   ahora importa desde `institution-personnel/`: dos mapas para el mismo
+   endpoint terminarían divergiendo.
+2. **El aviso posterior a invitar distingue los tres caminos, y el tercero
+   se deduce del `id` de la membresía, no de un heurístico.**
+   `POST .../members/invite` termina de tres formas —alta inmediata de
+   alguien que ya tenía cuenta, primera invitación por correo, y reenvío a
+   quien sigue `invited`— y las tres importan a quien invita: solo una envió
+   un correo y solo una deja a la persona pudiendo entrar ya. `invitationSent`
+   separa la primera de las otras dos, pero el cuerpo de una primera
+   invitación y el de un reenvío son idénticos (ADR-022 punto 5: el reenvío
+   reutiliza la fila existente). Lo que las separa es que el `member.id` que
+   vuelve **ya estaba en el listado en pantalla**. Esa comparación es
+   `inviteOutcome()`, función pura con su test, y no una adivinanza sobre el
+   texto del correo o el `userStatus`.
+3. **La protección del último admin se previene en la UI y además se maneja
+   como error real.** Si el listado cargado muestra un solo `admin`, esa fila
+   trae el selector de rol y el botón de baja deshabilitados, con el motivo
+   en el `title` —mismo patrón que el resto del portal para acciones que el
+   rol no permite—. Pero la lista es una foto: entre cargarla y actuar, otro
+   administrador pudo haber sido dado de baja desde otra sesión, así que
+   `422 LAST_ADMIN_PROTECTED` se traduce igual, con el mismo texto accionable
+   ("nombra a otro administrador antes de…"), no con un error genérico.
+   Deshabilitar es cortesía; el servidor es la garantía.
+4. **Tras invitar, el listado se recarga; tras cambiar rol o dar de baja, no.**
+   Es la primera pantalla que rompe el patrón de "la respuesta trae la fila de
+   vuelta" de ADR-049, y por una razón concreta: la respuesta de `invite` trae
+   solo la membresía (`id`, `userId`, `role`) — no el `fullName` ni el `email`
+   de un `users` que ya existía, que es justo lo que la fila tiene que mostrar.
+   Construirla a mano sería inventar datos. El `PATCH` y el `DELETE` sí se
+   aplican en memoria: el primero solo puede haber cambiado `role`, y el
+   segundo quita la fila entera.
+5. **Listado en columnas dentro de una sola `Card`, con scroll horizontal,
+   en vez de una tarjeta por persona.** El diseño describe "cuentas... con su
+   estado y último acceso" (`docs/design-brief.md`), y una columna solo se lee
+   como columna si las filas se alinean. En una ventana angosta la lista se
+   desplaza de lado en vez de comprimir el selector de rol a un ancho
+   inservible. "Último acceso" es un `—` estático, sin campo detrás, tal como
+   fijó ADR-035.
+6. **El estado del miembro es un `Badge` neutral, no uno de la paleta de
+   recogidas.** "Activo"/"Invitado"/"Suspendido" es `users.status`, no un
+   estado de recogida; mismo criterio que ADR-049 punto 4 con
+   `active`/`inactive` de un punto de entrega.
+
+**Consecuencias.** Un `admin` que se degrade a sí mismo —posible cuando hay
+más de uno— pierde el acceso de escritura a esta pantalla en el momento en
+que `InstitutionContext` se vuelva a cargar; no hay recarga forzada del
+contexto tras un `PATCH` sobre la propia membresía, así que hasta el siguiente
+montaje seguirá viendo las acciones habilitadas y recibirá
+`403 ADMIN_ROLE_REQUIRED` al usarlas. Se acepta: es un caso raro, el error se
+traduce, y forzar la recarga del contexto desde una pantalla es un acoplamiento
+peor que el síntoma. El punto 1 deja `delivery-points/` importando de
+`institution-personnel/`, primera dependencia entre dos módulos de pantalla del
+portal — la dirección es la correcta (el dueño del recurso es quien lo
+gestiona), no al revés.
+
+## Referencias
+
+- `specs/features/012-invitar-personal.md`,
+  `specs/features/013-aceptar-invitacion-personal.md` (el otro extremo del
+  camino de correo nuevo).
+- `specs/api-contracts/institution-members.md`.
+- `specs/entities/institution_member.md` (sin columna `status`; único
+  `(institution_id, user_id)`), `specs/entities/user.md`.
+- ADR-011 (roles organizacionales).
+- ADR-022 (punto 1: escritura exige `role = admin`; punto 5: reenvío por el
+  mismo endpoint y protección del último admin).
+- ADR-025 (punto 9: `DELETE /institution-members/:id`).
+- ADR-028 (punto 1: los `code` en inglés se traducen en el frontend).
+- ADR-030 (`users.full_name` nullable mientras la invitación no se acepta).
+- ADR-035 (columna "Último acceso": placeholder visual, sin campo detrás).
+- ADR-039 (`GET /institutions/:id/members`: membresía o super-admin).
+- ADR-049 (precedente de ADR de pantalla; punto 3: confirmación antes de una
+  acción destructiva; punto 4: los estados propios no reutilizan la paleta de
+  recogidas).
+- ADR-053 (precedente inmediato: hooks independientes por sección, traducción
+  distinta para códigos distintos).
+- `.claude/rules/design-system.md`.

@@ -16,8 +16,8 @@ import { institutionStatusLabel, roleLabel } from '../institution/institution-la
 import {
   deliveryPointListErrorMessage,
   deliveryPointSaveErrorMessage,
-  institutionMembersErrorMessage,
 } from '../delivery-points/delivery-point-error-messages';
+import { institutionMembersErrorMessage } from '../institution-personnel/personnel-error-messages';
 import {
   deliveryPointStatusLabel,
   memberOptionLabel,
@@ -29,8 +29,8 @@ import {
 } from '../delivery-points/useDeliveryPoints';
 import {
   useInstitutionMembers,
-  type InstitutionMemberOption,
-} from '../delivery-points/useInstitutionMembers';
+  type InstitutionMemberRow,
+} from '../institution-personnel/useInstitutionMembers';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import {
@@ -38,6 +38,7 @@ import {
   GATE_CONSOLE_PATH,
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
+  PERSONNEL_PATH,
 } from '../routes/paths';
 
 const EYEBROW_STYLE = {
@@ -270,7 +271,7 @@ function buildChanges(deliveryPoint: DeliveryPoint | null, form: FormValues): De
 interface DeliveryPointFormProps {
   /** `null` while creating. */
   deliveryPoint: DeliveryPoint | null;
-  members: InstitutionMemberOption[];
+  members: InstitutionMemberRow[];
   membersLoading: boolean;
   membersErrorMessage: string | null;
   membersErrorCode: string | null;
@@ -763,6 +764,9 @@ export function DeliveryPoints() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
                 Consola de puerta
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
+                Personal
               </Button>
               <Button
                 variant="outline"

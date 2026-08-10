@@ -5,6 +5,7 @@ import {
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
   INSTITUTION_PROFILE_PATH,
+  PERSONNEL_PATH,
 } from '../routes/paths';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
@@ -252,6 +253,9 @@ export function PendingEnrollments() {
                 onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
               >
                 Horarios de salida
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
+                Personal
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

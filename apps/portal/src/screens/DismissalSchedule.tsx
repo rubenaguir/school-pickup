@@ -49,6 +49,7 @@ import {
   GATE_CONSOLE_PATH,
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
+  PERSONNEL_PATH,
 } from '../routes/paths';
 
 const EYEBROW_STYLE = {
@@ -965,6 +966,9 @@ export function DismissalSchedule() {
                 onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
               >
                 Aprobaciones
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
+                Personal
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

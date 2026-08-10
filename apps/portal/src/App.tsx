@@ -9,6 +9,7 @@ import {
   INSTITUTION_PROFILE_PATH,
   LOGIN_PATH,
   PENDING_ENROLLMENTS_PATH,
+  PERSONNEL_PATH,
 } from './routes/paths';
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
@@ -16,6 +17,7 @@ import { GateConsole } from './screens/GateConsole';
 import { InstitutionProfile } from './screens/InstitutionProfile';
 import { Login } from './screens/Login';
 import { PendingEnrollments } from './screens/PendingEnrollments';
+import { Personnel } from './screens/Personnel';
 
 export function App() {
   return (
@@ -29,6 +31,7 @@ export function App() {
             <Route path={DELIVERY_POINTS_PATH} element={<DeliveryPoints />} />
             <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />
             <Route path={GATE_CONSOLE_PATH} element={<GateConsole />} />
+            <Route path={PERSONNEL_PATH} element={<Personnel />} />
           </Route>
           {/* Includes "/": every unknown path lands on the home route, which
               redirects to /login when there is no session. */}

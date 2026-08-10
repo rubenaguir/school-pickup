@@ -1,6 +1,6 @@
 import type { DeliveryPointStatus } from '@casillego/shared';
 import { roleLabel } from '../institution/institution-labels';
-import type { InstitutionMemberOption } from './useInstitutionMembers';
+import type { InstitutionMemberRow } from '../institution-personnel/useInstitutionMembers';
 
 /**
  * The API speaks English enums; every visible string in the portal is Spanish
@@ -20,7 +20,7 @@ export function deliveryPointStatusLabel(status: DeliveryPointStatus): string {
  * for an invited user who has not accepted yet (ADR-030), and the email is the
  * only thing that identifies them until they do.
  */
-export function memberOptionLabel(member: InstitutionMemberOption): string {
+export function memberOptionLabel(member: InstitutionMemberRow): string {
   const name = member.fullName ?? member.email;
   return `${name} · ${roleLabel(member.role)}`;
 }
