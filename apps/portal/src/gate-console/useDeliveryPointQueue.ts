@@ -180,7 +180,7 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
 
       // Read on every attempt, never captured once: a reconnection that happens
       // after the REST client renewed the access token must hand the gateway
-      // the renewed one. <ProtectedRoute> already gated on a session, so an
+      // the renewed one. <AuthenticatedLayout> already gated on a session, so an
       // absent token here means it was cleared in another tab — the handshake
       // is then rejected (4400) and the channel closes for good, which is what
       // an emptied session deserves.

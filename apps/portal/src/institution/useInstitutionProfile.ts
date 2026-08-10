@@ -82,7 +82,7 @@ function asApiError(caught: unknown): ApiError {
  * Loads and edits the profile of one institution (feature 008).
  *
  * `institutionId` comes from `useInstitution()`; it is null only while the
- * membership lookup is in flight, which `<ProtectedRoute>` already gates on.
+ * membership lookup is in flight, which `<InstitutionGate>` already gates on.
  */
 export function useInstitutionProfile(institutionId: string | null): InstitutionProfileValue {
   const [status, setStatus] = useState<InstitutionProfileStatus>('loading');

@@ -3467,3 +3467,76 @@ claim `isSuperAdmin`, aunque ya viaja en el JWT (`POST /auth/login`,
 - ADR-042 (`InstitutionContext`, `ProtectedRoute` original).
 - `specs/api-contracts/auth.md` (claim `isSuperAdmin` en el access token).
 
+
+## ADR-056 — Plomería de vistas de tutor: `TutorContext`, layout combinado con switcher, "vacío" no bloquea
+
+**Contexto.** Las cinco pantallas de tutor (mis hijos, alta de alumno,
+asociar institución, tutores autorizados, perfil/vehículos —
+`docs/design-brief.md`) necesitan su propia resolución de contexto, análoga
+a `InstitutionContext` (ADR-042) pero con dos diferencias reales:
+
+1. **No hay flag en el JWT.** A diferencia de `isSuperAdmin`, "tutor" se
+   deriva de datos (`GET /students`, vacío o no — ver
+   `specs/entities/user.md`, `specs/api-contracts/students.md`), no de un
+   claim. Hay que consultarlo, no leerlo del token.
+2. **El caso híbrido es plausible y común** (un padre que también es
+   personal de una institución) — a diferencia del super-admin, donde se
+   decidió ignorar el híbrido (ADR-055 punto 5), aquí el humano confirmó
+   explícitamente que quiere un **switcher persistente**, no una prioridad
+   fija.
+
+**Decisión.**
+1. **`TutorContext` nuevo** (`apps/portal/src/tutor/`), misma forma que
+   `InstitutionContext`: `status` (`loading | ready | empty | error`),
+   `students: StudentSummary[]`, `retry`. Resuelve `GET /students` una vez
+   al montar.
+2. **Asimetría deliberada con `InstitutionGate`: `status === 'empty'` NO
+   bloquea.** Un tutor con cero hijos es el estado inicial normal de
+   cualquier cuenta de tutor recién creada — debe poder llegar a "Alta de
+   alumno" sin fricción. No existe un `TutorGate` que bloquee como
+   `InstitutionGate`; cada pantalla maneja su propio estado vacío
+   internamente (ej. "Mis hijos" muestra `EmptyState` invitando a agregar
+   el primero). Solo `status === 'error'` (fallo real de red/servidor) se
+   maneja a nivel de layout, igual que hoy.
+3. **`AuthenticatedLayout` nuevo**, reemplaza el cuerpo actual de
+   `ProtectedRoute`: monta `InstitutionProvider` **y** `TutorProvider`
+   **siempre**, en paralelo, sin importar cuál vista esté activa —
+   ninguno de los dos depende del otro para resolverse. `SuperAdminRoute`
+   (ADR-055) no cambia, sigue siendo su propio árbol sin ninguno de estos
+   dos providers.
+4. **`activeMode: 'institution' | 'tutor'`**, estado nuevo (contexto
+   ligero o parte de `AuthenticatedLayout`, implementación libre). Un
+   switcher persistente en la navegación (visible **solo** cuando ambos
+   `InstitutionContext.status === 'ready'` y `TutorContext.status` es
+   `'ready'` **o** `'empty'` — es decir, cuando de verdad hay dos vistas
+   entre las que cambiar) permite alternar sin recargar la página. Las
+   rutas de cada vista siguen siendo alcanzables directo por URL sin pasar
+   por el switcher — `activeMode` decide qué nav/pantalla de aterrizaje se
+   muestra por defecto, no es un guard de autorización adicional (la
+   autorización real la sigue dando cada contexto por separado).
+5. **Prioridad de aterrizaje tras login** (orden, el primero que aplique
+   gana): super-admin (ADR-055, sin cambios) → institución (si
+   `InstitutionContext.status === 'ready'`, `HOME_PATH` actual) → tutor
+   (`STUDENTS_PATH`, nuevo, aterrizaje por defecto para cualquier caso
+   restante, incluido alguien sin institución y sin hijos todavía — el
+   estado vacío de "Mis hijos" es la invitación natural a agregar el
+   primero).
+6. **No confundir con el switcher de multi-institución, todavía diferido**
+   (ADR-042 punto 5: `current = memberships[0]`, sin cambios). Son dos ejes
+   distintos — instituciones vs. institución/tutor — y este ADR no resuelve
+   el primero.
+7. **Alcance de esta tarea: solo plomería.** `STUDENTS_PATH` se monta con
+   un placeholder simple (mismo patrón que ADR-055 con `/admin/*`) — las
+   cinco pantallas reales son tareas siguientes, una por una, mismo ritmo
+   que el resto de Fase 7.
+
+## Referencias
+
+- ADR-042 (`InstitutionContext`, `ProtectedRoute` original, switcher de
+  multi-institución diferido en su punto 5).
+- ADR-055 (precedente inmediato: plomería de rutas para un rol nuevo,
+  `SuperAdminRoute`).
+- `specs/api-contracts/students.md` (`GET /students`, fuente de verdad de
+  "es tutor").
+- `specs/entities/user.md` ("tutor" derivado de datos, no es un flag).
+- `docs/design-brief.md` (las cinco pantallas de "Rol: tutor (padre)").

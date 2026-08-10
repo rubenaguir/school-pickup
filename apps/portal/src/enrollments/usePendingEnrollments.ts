@@ -91,7 +91,7 @@ function isStaleRow(error: ApiError): boolean {
  * Loads the pending-approval inbox of one institution and resolves its rows.
  *
  * `institutionId` comes from `useInstitution()`; it is null only while the
- * membership lookup is in flight, which `<ProtectedRoute>` already gates on —
+ * membership lookup is in flight, which `<InstitutionGate>` already gates on —
  * the null branch exists so this hook stays honest about its input, not
  * because the screen can render with it.
  */

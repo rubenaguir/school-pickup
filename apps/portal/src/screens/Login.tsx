@@ -2,13 +2,35 @@ import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Button } from '@casillego/ui';
 import { ApiError, decodeAccessToken, readAccessToken } from '@casillego/shared';
-import { tokenStorage } from '../api/client';
+import { apiClient, tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage } from '../auth/auth-error-messages';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
-import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
+import { ADMIN_INSTITUTIONS_PATH, HOME_PATH, STUDENTS_PATH } from '../routes/paths';
+
+/**
+ * Landing priority right after a fresh login (ADR-056 point 5): super-admin
+ * first, unchanged from ADR-055 point 4; then the institution view, for any
+ * account that carries at least one membership; otherwise the tutor view —
+ * the natural landing for a tutor-only account, including one with zero
+ * children yet (the "empty" state of `TutorContext` is not a block, ADR-056
+ * point 2). A failed lookup falls back to `HOME_PATH`, same as before this
+ * account existed: `InstitutionGate` there already knows how to show that
+ * failure with a retry.
+ */
+async function resolveLoginDestination(isSuperAdmin: boolean): Promise<string> {
+  if (isSuperAdmin) {
+    return ADMIN_INSTITUTIONS_PATH;
+  }
+  try {
+    const response = await apiClient.get<{ memberships: unknown[] }>('/institution-members/mine');
+    return response.memberships.length > 0 ? HOME_PATH : STUDENTS_PATH;
+  } catch {
+    return HOME_PATH;
+  }
+}
 
 /** Affordance with no endpoint behind it yet — visible but inert (ADR-043 point 4). */
 const INERT_LINK_STYLE = {
@@ -69,9 +91,8 @@ export function Login() {
       // directly instead, same as `AuthContext.login` does internally.
       const freshToken = readAccessToken(tokenStorage);
       const freshClaims = freshToken ? decodeAccessToken(freshToken) : null;
-      void navigate(freshClaims?.isSuperAdmin ? ADMIN_INSTITUTIONS_PATH : HOME_PATH, {
-        replace: true,
-      });
+      const destination = await resolveLoginDestination(freshClaims?.isSuperAdmin ?? false);
+      void navigate(destination, { replace: true });
     } catch (caught) {
       setError(
         caught instanceof ApiError

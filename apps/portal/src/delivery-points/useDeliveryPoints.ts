@@ -94,7 +94,7 @@ function asApiError(caught: unknown): ApiError {
  * set is a handful of gates per institution (ADR-049 point 1).
  *
  * `institutionId` comes from `useInstitution()`; it is null only while the
- * membership lookup is in flight, which `<ProtectedRoute>` already gates on.
+ * membership lookup is in flight, which `<InstitutionGate>` already gates on.
  */
 export function useDeliveryPoints(institutionId: string | null): DeliveryPointsValue {
   const [status, setStatus] = useState<DeliveryPointsStatus>('loading');

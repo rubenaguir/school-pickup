@@ -85,7 +85,7 @@ function asApiError(caught: unknown): ApiError {
  * one place (ADR-054 point 1).
  *
  * `institutionId` comes from `useInstitution()`; it is null only while the
- * membership lookup is in flight, which `<ProtectedRoute>` already gates on.
+ * membership lookup is in flight, which `<InstitutionGate>` already gates on.
  */
 export function usePersonnel(institutionId: string | null): PersonnelValue {
   const { status, members, setMembers, error, reload } = useInstitutionMembers(institutionId);

@@ -51,7 +51,7 @@ export const PERSONNEL_PATH = '/personnel';
 /**
  * Institution approval queue, for the platform operator
  * (specs/features/025-aprobacion-suspension-institucion.md). Under
- * `SuperAdminRoute`, not `ProtectedRoute`: a super-admin does not carry
+ * `SuperAdminRoute`, not `AuthenticatedLayout`: a super-admin does not carry
  * institution membership (ADR-055 point 2). Where a super-admin lands after
  * login (ADR-055 point 4) — the same role `PENDING_ENROLLMENTS_PATH` plays
  * for an institution admin.
@@ -67,3 +67,13 @@ export const ADMIN_METRICS_PATH = '/admin/metrics';
 
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;
+
+/**
+ * Landing screen of the tutor (parent) view — the first of the five tutor
+ * screens (docs/design-brief.md, "Rol: tutor (padre)"). Only a placeholder
+ * lives here for now; each real screen is a following slice (ADR-056 point
+ * 7). Where anyone without an institution membership lands after login,
+ * including a brand-new tutor account with zero children yet (ADR-056
+ * point 5).
+ */
+export const STUDENTS_PATH = '/students';
