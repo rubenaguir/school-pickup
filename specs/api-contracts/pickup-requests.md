@@ -225,11 +225,10 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   (`total: 0`), no los entregados — no es un error de payload, es un filtro que
   no puede intersecar nada.
 - Autorización distinta (solo `institution_member`, ver arriba).
-- Misma forma de respuesta que el modo `enrollmentId` — es el mismo endpoint. La
-  Consola de puerta obtiene los datos de despliegue (nombre del alumno, vehículo)
-  de los mensajes de tiempo real y de `GET /pickup-requests/:id`.
+- **Forma de respuesta distinta** (ADR-051 punto 3): `PickupRequestQueueSummary`,
+  no el `PickupRequestSummary` genérico del modo `enrollmentId`. Ver abajo.
 
-**Response 200**
+**Response 200 — modo `enrollmentId`** (`PickupRequestSummary`; sin cambios)
 ```json
 {
   "pickupRequests": [
@@ -246,6 +245,49 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   "total": "number"
 }
 ```
+
+**Response 200 — modo `deliveryPointId`** (`PickupRequestQueueSummary`)
+```json
+{
+  "pickupRequests": [
+    {
+      "pickupRequestId": "uuid",
+      "status": "en_route | arriving | arrived",
+      "studentFullName": "string (join: student vía enrollment)",
+      "gradeOrGroup": "string | null (join: enrollment)",
+      "vehicleDescription": "string | null",
+      "vehiclePlate": "string | null",
+      "deliveryCode": "string (4 dígitos)",
+      "estimatedArrivalAt": "string (timestamptz) | null",
+      "etaSeconds": "number | null",
+      "updatedAt": "string (timestamptz)"
+    }
+  ],
+  "limit": "number",
+  "offset": "number",
+  "total": "number"
+}
+```
+
+**Por qué dos formas y no una** (ADR-051 punto 3). Cada fila de este modo replica
+**campo por campo** el payload que `buildQueuePayload()` publica en
+`deliveryPointQueueTopic` (`specs/api-contracts/pickup-realtime-mqtt.md`) más
+nada: mismos nombres, incluido **`pickupRequestId` en vez de `id`** — a propósito
+distinto de la convención genérica del resto de la API. Así la Consola de puerta
+fusiona el snapshot inicial y los deltas del WebSocket sin ninguna
+transformación intermedia; cualquier divergencia entre las dos formas
+reintroduce justamente el desajuste que esta forma existe para eliminar.
+
+`PickupRequestSummary` se mantiene deliberadamente delgado para el modo
+`enrollmentId`: es la perspectiva del tutor sobre su histórico, sin necesidad
+operativa de `deliveryCode`, vehículo ni nombre del alumno (que ya conoce).
+
+`deliveryCode` se incluye aquí por la misma regla que ya rige en
+`GET /pickup-requests/:id` (ADR-024 punto 11): visible para cualquier
+`institution_member` de la institución, sin restricción de `role`. ADR-051
+extiende **dónde** aparece, no **a quién** se expone. `startedAt`/`completedAt`
+no aparecen: en una cola de estados activos `completedAt` es siempre `null`, y la
+consola ordena por ETA, no por hora de inicio.
 
 **Errores**
 | Código | `code` | Caso |
@@ -378,6 +420,8 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   puntos 7 y 8: nombre y contenido de la fila de `audit_log`).
 - ADR-050 (punto 6: filtro `deliveryPointId` como snapshot REST de la Consola de
   puerta — solo estados activos, autorización solo por `institution_member`).
+- ADR-051 (punto 3: `PickupRequestQueueSummary`, forma propia del modo
+  `deliveryPointId`, espejo del payload de tiempo real, con `deliveryCode`).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
   continúan ese snapshot).
 - `docs/arquitectura.md` (§`InstitutionMembershipGuard`: los tres patrones de

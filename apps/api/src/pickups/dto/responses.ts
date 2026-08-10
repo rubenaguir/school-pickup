@@ -62,3 +62,32 @@ export interface ListPickupRequestsResponse {
   offset: number;
   total: number;
 }
+
+/**
+ * Row shape of `GET /pickup-requests?deliveryPointId=` (ADR-051 pt.3).
+ * Deliberately NOT `PickupRequestSummary`: it mirrors
+ * `PickupRequestQueuePayload` field for field, plus `deliveryCode` — including
+ * `pickupRequestId` instead of the API-wide `id`, so the gate console can merge
+ * this snapshot with the WebSocket deltas without any transformation in
+ * between. `PickupRequestSummary` stays as it is for the `enrollmentId` filter:
+ * that is the guardian's history view, which needs none of these fields.
+ */
+export interface PickupRequestQueueSummary {
+  pickupRequestId: string;
+  status: PickupRequestStatus;
+  studentFullName: string;
+  gradeOrGroup: string | null;
+  vehicleDescription: string | null;
+  vehiclePlate: string | null;
+  deliveryCode: string;
+  estimatedArrivalAt: string | null;
+  etaSeconds: number | null;
+  updatedAt: string;
+}
+
+export interface ListDeliveryPointQueueResponse {
+  pickupRequests: PickupRequestQueueSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}

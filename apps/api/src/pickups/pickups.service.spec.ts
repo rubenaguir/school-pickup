@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { In } from 'typeorm';
+import { buildQueuePayload } from '@casillego/shared';
 import { PickupsService } from './pickups.service';
 import {
   PickupRequest,
@@ -299,22 +300,33 @@ describe('PickupsService', () => {
         },
         1,
       );
-      expect(mqttClient.publish).toHaveBeenNthCalledWith(
-        2,
-        'school-pickup/institution/inst-1/delivery-point/dp-1/queue',
-        {
-          pickupRequestId: 'pr-1',
-          status: 'en_route',
-          studentFullName: 'Ana Pérez',
-          gradeOrGroup: '3°B',
-          vehicleDescription: 'Honda CRV gris',
-          vehiclePlate: 'ABC-123',
-          estimatedArrivalAt: null,
-          etaSeconds: null,
-          updatedAt: '2026-07-16T08:00:00.000Z',
-        },
-        1,
-      );
+      // The queue payload is asserted off the recorded call rather than with
+      // toHaveBeenNthCalledWith, because deliveryCode is generated on create:
+      // only its shape is knowable here. The toEqual below still pins the exact
+      // key set — an extra field would fail it. Note the board assertion above
+      // carries no deliveryCode at all: that asymmetry is ADR-051 pt.2.
+      const publishMock = mqttClient.publish as ReturnType<typeof vi.fn>;
+      const [queueTopic, queuePayload, queueQos] = publishMock.mock.calls[1] as [
+        string,
+        Record<string, unknown>,
+        number,
+      ];
+
+      expect(queueTopic).toBe('school-pickup/institution/inst-1/delivery-point/dp-1/queue');
+      expect(queueQos).toBe(1);
+      expect(queuePayload.deliveryCode).toMatch(/^\d{4}$/);
+      expect(queuePayload).toEqual({
+        pickupRequestId: 'pr-1',
+        status: 'en_route',
+        studentFullName: 'Ana Pérez',
+        gradeOrGroup: '3°B',
+        vehicleDescription: 'Honda CRV gris',
+        vehiclePlate: 'ABC-123',
+        deliveryCode: queuePayload.deliveryCode,
+        estimatedArrivalAt: null,
+        etaSeconds: null,
+        updatedAt: '2026-07-16T08:00:00.000Z',
+      });
     });
 
     it('does not assign an inactive delivery point even when it matches the group', async () => {
@@ -782,6 +794,9 @@ describe('PickupsService', () => {
               buildOwnedPickupRequest({
                 status: 'arrived',
                 deliveryPoint: { id: DP_ID } as DeliveryPoint,
+                deliveryCode: '4821',
+                vehicleDescription: 'Honda CRV gris',
+                vehiclePlate: 'ABC-123',
               }),
             ],
             1,
@@ -791,18 +806,67 @@ describe('PickupsService', () => {
 
       const result = await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID });
 
-      // deliveryPointId surfaces only because the relation is loaded; without
-      // it every summary of a queue would report null for its own gate.
       expect(result.pickupRequests).toEqual([
         {
-          id: 'pr-1',
+          pickupRequestId: 'pr-1',
           status: 'arrived',
-          startedAt: '2026-07-16T08:00:00.000Z',
-          completedAt: null,
-          deliveryPointId: DP_ID,
+          studentFullName: 'Ana Pérez',
+          gradeOrGroup: '3°B',
+          vehicleDescription: 'Honda CRV gris',
+          vehiclePlate: 'ABC-123',
+          deliveryCode: '4821',
+          estimatedArrivalAt: null,
+          etaSeconds: null,
+          updatedAt: '2026-07-16T08:00:00.000Z',
         },
       ]);
       expect(result).toMatchObject({ limit: 20, offset: 0, total: 1 });
+    });
+
+    // ADR-051 pt.3: the shape exists so the console can merge snapshot and
+    // deltas untouched. If the two drift apart, that stops being true.
+    it('returns rows shaped exactly like the WebSocket delta payload', async () => {
+      const pickupRequest = buildOwnedPickupRequest({
+        status: 'arrived',
+        deliveryCode: '4821',
+        vehicleDescription: 'Honda CRV gris',
+        vehiclePlate: 'ABC-123',
+      });
+      const { service } = buildService({
+        pickupRequests: { findAndCount: vi.fn().mockResolvedValue([[pickupRequest], 1]) },
+      });
+
+      const result = await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID });
+
+      const queuePayload = buildQueuePayload({
+        pickupRequestId: pickupRequest.id,
+        status: pickupRequest.status,
+        studentFullName: pickupRequest.enrollment.student.fullName,
+        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        deliveryPointId: DP_ID,
+        estimatedArrivalAt: null,
+        etaSeconds: null,
+        arrivalMode: pickupRequest.arrivalMode,
+        vehicleDescription: pickupRequest.vehicleDescription,
+        vehiclePlate: pickupRequest.vehiclePlate,
+        deliveryCode: pickupRequest.deliveryCode,
+        updatedAt: pickupRequest.updatedAt.toISOString(),
+      });
+
+      expect(result.pickupRequests[0]).toEqual(queuePayload);
+    });
+
+    it('never returns the generic summary shape (no id, no deliveryPointId)', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID });
+
+      expect(result.pickupRequests[0]).not.toHaveProperty('id');
+      expect(result.pickupRequests[0]).not.toHaveProperty('deliveryPointId');
     });
 
     it('filters to active statuses only, never history', async () => {
@@ -816,7 +880,7 @@ describe('PickupsService', () => {
           deliveryPoint: { id: DP_ID },
           status: In(['en_route', 'arriving', 'arrived']),
         },
-        relations: { deliveryPoint: true },
+        relations: { enrollment: { student: true } },
         order: { createdAt: 'DESC' },
         take: 20,
         skip: 0,

@@ -77,6 +77,13 @@ Cada cliente recibe únicamente los mensajes cuyo topic corresponde al
 `institutionId` + `deliveryPointId` con que fue autorizado. Nunca los de otro
 punto de entrega, ni los de otra institución.
 
+Ese payload incluye `deliveryCode` (ADR-051): es la razón por la que la
+autorización de la conexión importa tanto — el canal transporta el código de
+verificación de la entrega, y solo debe llegar a un `institution_member`
+autenticado de la institución dueña del punto. El snapshot REST que precede a
+este canal devuelve exactamente los mismos campos, para que el cliente fusione
+ambos sin transformarlos.
+
 ## Mensajes cliente → servidor
 
 Ninguno. El canal es unidireccional en la práctica: toda acción de la consola

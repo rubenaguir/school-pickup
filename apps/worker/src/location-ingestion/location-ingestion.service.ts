@@ -143,6 +143,7 @@ export class LocationIngestionService {
       arrivalMode: pickupRequest.arrivalMode,
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
+      deliveryCode: pickupRequest.deliveryCode,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
 

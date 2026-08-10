@@ -42,11 +42,13 @@ import { randomDeliveryCode } from './delivery-code.util';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type {
+  ListDeliveryPointQueueResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
   PickupRequestCancelResponse,
   PickupRequestDeliverResponse,
   PickupRequestDetailResponse,
+  PickupRequestQueueSummary,
   PickupRequestResponse,
   PickupRequestSummary,
 } from './dto/responses';
@@ -216,11 +218,15 @@ export class PickupsService {
    * through the institution_member side of that method's OR (a delivery point
    * has no individual-guardian perspective) and it returns active statuses
    * only, never history.
+   *
+   * Its rows are `PickupRequestQueueSummary`, not `PickupRequestSummary`: the
+   * same fields the WebSocket deltas carry, so the console merges both without
+   * transforming either (ADR-051 pt.3).
    */
   async listByDeliveryPoint(
     userId: string,
     query: ListPickupRequestsQueryDto & { deliveryPointId: string },
-  ): Promise<ListPickupRequestsResponse> {
+  ): Promise<ListDeliveryPointQueueResponse> {
     const access = await this.deliveryPointAccess.checkMemberAccess(query.deliveryPointId, userId);
     if (access.outcome === 'not_found') {
       throw new NotFoundException(RESOURCE_NOT_FOUND);
@@ -241,14 +247,16 @@ export class PickupsService {
           query.status ? ACTIVE_STATUSES.filter((s) => s === query.status) : ACTIVE_STATUSES,
         ),
       },
-      relations: { deliveryPoint: true },
+      // studentFullName and gradeOrGroup are joins, not columns of
+      // pickup_requests — the console cannot render a queue row without them.
+      relations: { enrollment: { student: true } },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
     });
 
     return {
-      pickupRequests: pickupRequests.map((pickupRequest) => this.toSummary(pickupRequest)),
+      pickupRequests: pickupRequests.map((pickupRequest) => this.toQueueSummary(pickupRequest)),
       limit,
       offset,
       total,
@@ -535,6 +543,7 @@ export class PickupsService {
       arrivalMode: pickupRequest.arrivalMode,
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
+      deliveryCode: pickupRequest.deliveryCode,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
 
@@ -603,6 +612,29 @@ export class PickupsService {
       startedAt: pickupRequest.startedAt.toISOString(),
       completedAt: pickupRequest.completedAt ? pickupRequest.completedAt.toISOString() : null,
       deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
+    };
+  }
+
+  /**
+   * Field for field the same object `buildQueuePayload` publishes over MQTT
+   * (ADR-051 pt.3) — keep the two in step: a field added to one and not the
+   * other reintroduces exactly the snapshot/delta mismatch this shape exists
+   * to remove.
+   */
+  private toQueueSummary(pickupRequest: PickupRequest): PickupRequestQueueSummary {
+    return {
+      pickupRequestId: pickupRequest.id,
+      status: pickupRequest.status,
+      studentFullName: pickupRequest.enrollment.student.fullName,
+      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      vehicleDescription: pickupRequest.vehicleDescription,
+      vehiclePlate: pickupRequest.vehiclePlate,
+      deliveryCode: pickupRequest.deliveryCode,
+      estimatedArrivalAt: pickupRequest.estimatedArrivalAt
+        ? pickupRequest.estimatedArrivalAt.toISOString()
+        : null,
+      etaSeconds: pickupRequest.etaSeconds,
+      updatedAt: pickupRequest.updatedAt.toISOString(),
     };
   }
 }

@@ -18,6 +18,12 @@ export interface PickupRequestRealtimeSnapshot {
   arrivalMode: ArrivalMode | null;
   vehicleDescription: string | null;
   vehiclePlate: string | null;
+  /**
+   * Only `buildQueuePayload` copies this out (ADR-051 pt.2). It reaches the
+   * gate console, which must display it to verify the handover, and never the
+   * board — a public screen in the institution's lobby.
+   */
+  deliveryCode: string;
   updatedAt: string;
 }
 
@@ -42,6 +48,7 @@ export interface PickupRequestQueuePayload {
   gradeOrGroup: string | null;
   vehicleDescription: string | null;
   vehiclePlate: string | null;
+  deliveryCode: string;
   estimatedArrivalAt: string | null;
   etaSeconds: number | null;
   updatedAt: string;
@@ -60,6 +67,9 @@ export function buildBoardPayload(
     estimatedArrivalAt: snapshot.estimatedArrivalAt,
     etaSeconds: snapshot.etaSeconds,
     arrivalMode: snapshot.arrivalMode,
+    // deliveryCode is deliberately NOT copied here (ADR-051 pt.2): the board
+    // is a public screen. Adding it "for symmetry" with the queue payload is
+    // the exact mistake the tests below guard against.
     updatedAt: snapshot.updatedAt,
   };
 }
@@ -75,6 +85,7 @@ export function buildQueuePayload(
     gradeOrGroup: snapshot.gradeOrGroup,
     vehicleDescription: snapshot.vehicleDescription,
     vehiclePlate: snapshot.vehiclePlate,
+    deliveryCode: snapshot.deliveryCode,
     estimatedArrivalAt: snapshot.estimatedArrivalAt,
     etaSeconds: snapshot.etaSeconds,
     updatedAt: snapshot.updatedAt,

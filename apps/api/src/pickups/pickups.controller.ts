@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type {
+  ListDeliveryPointQueueResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
   PickupRequestCancelResponse,
@@ -43,7 +44,7 @@ export class PickupsController {
   list(
     @Query() query: ListPickupRequestsQueryDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<ListPickupRequestsResponse> {
+  ): Promise<ListPickupRequestsResponse | ListDeliveryPointQueueResponse> {
     return query.deliveryPointId !== undefined
       ? this.pickupsService.listByDeliveryPoint(request.user.sub, {
           ...query,

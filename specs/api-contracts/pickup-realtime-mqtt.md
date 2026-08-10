@@ -128,8 +128,15 @@ school-pickup/institution/{institutionId}/board
 
 El tablero hace la cuenta regresiva por aritmética entre recálculos usando
 `etaSeconds`/`estimatedArrivalAt`, sin llamadas extra (ver `docs/arquitectura.md`
-§ETA y costo). El `deliveryCode` **no** viaja en este payload (es visible solo en
-la app del tutor).
+§ETA y costo).
+
+El `deliveryCode` **no** viaja en este payload, y no debe agregarse nunca
+(ADR-051 punto 2): el `board` es una pantalla pública en la recepción de la
+institución, visible a cualquiera que pase — exponer ahí el código de
+verificación es una categoría de exposición distinta de la que ADR-024 punto 11
+autorizó (miembros autenticados). Que el payload de cola sí lo lleve no es
+motivo para "emparejar" los dos: la asimetría es la decisión.
+`buildBoardPayload()` tiene un test dedicado que falla si alguien lo arrastra.
 
 ## Topic — cola de un punto de entrega
 
@@ -152,6 +159,7 @@ school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
   "gradeOrGroup": "string | null (join: enrollment)",
   "vehicleDescription": "string | null",
   "vehiclePlate": "string | null",
+  "deliveryCode": "string (4 dígitos)",
   "estimatedArrivalAt": "string (timestamptz) | null",
   "etaSeconds": "number | null",
   "updatedAt": "string (timestamptz)"
@@ -159,9 +167,21 @@ school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
 ```
 
 La consola muestra `vehicleDescription`/`vehiclePlate` (snapshot, ADR-014) para
-reconocer al vehículo en la puerta. El `deliveryCode` no viaja por MQTT: se
-verifica vía `PATCH /pickup-requests/:id/deliver` (el tutor lo muestra en su app,
-el staff lo teclea).
+reconocer al vehículo en la puerta.
+
+**`deliveryCode` sí viaja en este payload, y solo en este** (ADR-051). La
+consola no puede cumplir su función sin él: el staff compara el código que
+muestra el tutor contra el que la consola despliega (feature 021). Esto **no
+relaja a quién se expone** — sigue siendo lo que ADR-024 punto 11 ya
+estableció, cualquier `institution_member` de la institución, sin restricción de
+`role` — solo agrega **dónde**: antes únicamente en `GET
+/pickup-requests/:id`. La verificación de la entrega sigue siendo server-side
+vía `PATCH /pickup-requests/:id/deliver` (ADR-024 punto 4): que el código sea
+visible no lo convierte en la autorización.
+
+Nota de seguridad: quien consume este topic hoy es el `api`, que lo reenvía por
+su puente WebSocket solo a `institution_members` autenticados (ADR-050). El
+código nunca llega a un navegador sin autorizar.
 
 ### El navegador no consume este topic directamente (ADR-050)
 
@@ -211,6 +231,7 @@ aislamiento multi-tenant para este topic es el puente del `api`, no el broker
   `parseLocationTopic` en `packages/shared`).
 - ADR-050 (el navegador nunca se conecta al broker; puente WebSocket en el `api`,
   suscripción por comodín al topic de cola y `parseDeliveryPointQueueTopic`).
+- ADR-051 (`deliveryCode` en el payload de cola, nunca en el de tablero).
 - `specs/api-contracts/delivery-point-queue-ws.md` (contrato del puente).
 - `docs/arquitectura.md` (nombres de topic, ACL por tenant, flujo de tiempo
   real, estructura y ciclo de vida MQTT del `worker`).

@@ -3034,3 +3034,56 @@ autorización aplica.
   handshake, autorización y códigos de cierre 4400/4401/4403/4404).
 - `specs/features/021-confirmar-llegada-y-entrega.md` (contexto operativo
   de la consola de puerta).
+
+## ADR-051 — `deliveryCode` en el payload de cola (REST y WS), nunca en el de tablero
+
+**Contexto.** Al construir la plomería de la Consola de puerta (ADR-050) se
+detectó que ni el snapshot REST (`PickupRequestSummary`, genérico y
+deliberadamente delgado) ni el payload de cola en tiempo real
+(`PickupRequestQueuePayload`, lo que de verdad viaja por
+`deliveryPointQueueTopic`) incluyen `delivery_code`. La consola no puede
+cumplir su función central sin él — feature 021: *"el staff verifica el
+`delivery_code`... la consola de puerta lo despliega directamente"*.
+ADR-024 (punto 11) ya estableció que el código es visible para cualquier
+`institution_member` de la institución, sin restricción de rol, vía
+`GET /pickup-requests/:id` — este ADR extiende **dónde** se expone (también
+en la cola en vivo), no relaja **a quién** se le expone.
+
+**Decisión.**
+1. **`deliveryCode` se agrega a `PickupRequestRealtimeSnapshot`**
+   (`packages/shared/src/pickup-request-payloads.ts`) — el snapshot
+   compartido de entrada que ya construye `pickups.service.ts` al publicar.
+2. **Solo `buildQueuePayload()` lo incluye en su salida.**
+   `buildBoardPayload()` **no cambia** — sigue sin `deliveryCode`,
+   deliberadamente. El tablero (`apps/board`) es una pantalla pública en la
+   recepción de la institución, visible a cualquiera que pase — mostrar ahí
+   el código de verificación sería una exposición real, distinta del caso
+   ya resuelto por ADR-024 (visible solo a `institution_members`
+   autenticados, nunca a un público no identificado).
+3. **Nueva forma de respuesta para `GET /pickup-requests?deliveryPointId=...`**,
+   distinta de `PickupRequestSummary` (que se mantiene sin cambios para el
+   filtro `enrollmentId`, deliberadamente delgado — perspectiva del tutor,
+   sin necesidad operativa de estos campos). La nueva forma,
+   `PickupRequestQueueSummary`, replica **exactamente** los campos de
+   `PickupRequestQueuePayload` más `deliveryCode` — mismos nombres de
+   campo, incluido `pickupRequestId` en vez de `id` (deliberadamente
+   distinto de la convención genérica del resto de la API), para que el
+   frontend pueda fusionar el snapshot inicial y los deltas del WebSocket
+   sin ninguna transformación intermedia.
+4. **Autorización sin cambios** — sigue siendo la misma regla ya
+   establecida en ADR-050 punto 6 para el filtro `deliveryPointId` (solo
+   `institution_member`, sin lado de tutor en la OR).
+
+## Referencias
+
+- ADR-024 (punto 11: `delivery_code` visible a cualquier
+  `institution_member`, sin restricción de rol — la base de este ADR).
+- ADR-050 (punto 6: snapshot REST del filtro `deliveryPointId`, forma
+  original insuficiente).
+- `specs/features/021-confirmar-llegada-y-entrega.md` (necesidad operativa
+  del código en la consola).
+- `packages/shared/src/pickup-request-payloads.ts`
+  (`PickupRequestRealtimeSnapshot`, `PickupRequestQueuePayload`,
+  `PickupRequestBoardPayload` — este último sin cambios, a propósito).
+- `specs/api-contracts/pickup-realtime-mqtt.md`,
+  `specs/api-contracts/pickup-requests.md` (formas de payload a actualizar).
