@@ -17,35 +17,12 @@ import {
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
 import { GateConsole } from './screens/GateConsole';
+import { GlobalMetrics } from './screens/GlobalMetrics';
+import { InstitutionApproval } from './screens/InstitutionApproval';
 import { InstitutionProfile } from './screens/InstitutionProfile';
 import { Login } from './screens/Login';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
-
-/**
- * Stand-in for the two super-admin screens (institution approval, feature
- * 025; global metrics, feature 024) — the next slice replaces these with the
- * real screens (ADR-055). Only the routing/guard plumbing is in scope here.
- */
-function AdminPlaceholder({ title }: { title: string }) {
-  return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
-        color: 'var(--ink-400)',
-        fontSize: 14,
-      }}
-    >
-      {title}
-    </main>
-  );
-}
 
 export function App() {
   return (
@@ -64,14 +41,8 @@ export function App() {
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}
           <Route element={<SuperAdminRoute />}>
-            <Route
-              path={ADMIN_INSTITUTIONS_PATH}
-              element={<AdminPlaceholder title="Aprobación de instituciones — próximamente" />}
-            />
-            <Route
-              path={ADMIN_METRICS_PATH}
-              element={<AdminPlaceholder title="Métricas globales — próximamente" />}
-            />
+            <Route path={ADMIN_INSTITUTIONS_PATH} element={<InstitutionApproval />} />
+            <Route path={ADMIN_METRICS_PATH} element={<GlobalMetrics />} />
           </Route>
           {/* Includes "/": every unknown path lands on the home route, which
               redirects to /login when there is no session. */}
