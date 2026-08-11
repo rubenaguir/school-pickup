@@ -295,7 +295,9 @@ de una petición, así que vive en los hooks de NestJS:
 - **QoS distinto según la dirección del mensaje, no un valor único para todo
   MQTT:**
   - **QoS 0** ("at most once") en la ingesta de ubicación
-    (`parent → worker`, topic `.../pickup/{pickupRequestId}/location`): es un
+    (`parent → api → worker`, topic `.../pickup/{pickupRequestId}/location`
+    — `apps/api` media la publicación, ADR-062, el navegador nunca llega
+    directo al broker): es un
     stream de estado efímero donde la siguiente lectura de GPS reemplaza a la
     anterior, no un evento transaccional. Perder una lectura no tiene
     consecuencia — llega otra en segundos — y garantizar su entrega costaría
@@ -337,10 +339,16 @@ que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
    automáticamente su `delivery_point_id` matcheando
    `enrollments.grade_or_group` contra `delivery_points.assigned_groups` (ver
    ADR-012).
-2. La app `parent` publica su ubicación a
-   `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`.
-3. El `worker`, suscrito, recibe la ubicación, recalcula el ETA (con throttling)
-   y persiste la última posición y `estimated_arrival_at`.
+2. La app `parent` envía su ubicación vía `POST /pickup-requests/:id/location`
+   (nunca se conecta directo al broker — ADR-050, ADR-062); `apps/api`
+   verifica que el `pickup_request` pertenezca al tutor autenticado y
+   republica al broker a
+   `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`
+   con su propia conexión MQTT ya existente.
+3. El `worker`, suscrito al mismo topic de siempre, recibe la ubicación,
+   recalcula el ETA (con throttling) y persiste la última posición y
+   `estimated_arrival_at` — sin cambios respecto a antes: el origen del
+   mensaje (`api` en vez de `parent` directo) le es transparente.
 4. El `worker` publica el estado actualizado:
    - Siempre al feed agregado del tablero:
      `school-pickup/institution/{institutionId}/board`.
@@ -369,7 +377,7 @@ que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
   school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
       # cola específica de cada punto de entrega (para su consola)
   school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
-      # ubicación publicada por la app del padre
+      # ubicación republicada por apps/api en nombre del padre (ADR-062)
   ```
 - **Patrón de suscripción del `worker` (comodín).** El `worker` no se suscribe a
   un topic de ubicación por cada trayecto: se suscribe una sola vez, al arrancar,

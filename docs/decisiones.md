@@ -3809,3 +3809,68 @@ distintas para el mismo tipo de servicio.
   de entorno, reutilizado aquí).
 - `docs/plan-implementacion.md` (pendiente residual de Fase 6, ahora
   resuelto).
+
+## ADR-062 — Ingesta de ubicación del padre: `POST` mediado por `apps/api`, nunca publicación directa del navegador al broker
+
+**Contexto.** `docs/arquitectura.md` (anterior a ADR-050) documenta que
+*"la app `parent` publica su ubicación"* directo al topic MQTT
+`.../pickup/{pickupRequestId}/location`. Esa oración nunca se implementó
+—`apps/parent` no existe todavía (Fase 8, arrancando ahora)— pero de
+construirse tal cual está escrita, contradiría directamente ADR-050: el
+navegador nunca debe conectarse directo al broker Mosquitto de
+producción, ni para suscribirse ni, por la misma razón, para publicar. El
+argumento de ADR-050 aplica igual aquí, y arguiblemente con más peso: un
+cliente con credenciales directas al broker no solo podría leer topics
+ajenos — podría publicar ubicaciones falsas en el `pickup_request` de
+otra persona, corrompiendo un dato que el `worker` procesa sin volver a
+verificar contra quién lo envió.
+
+**Decisión.**
+1. **`apps/parent` nunca publica directo a MQTT.** Envía su ubicación vía
+   un endpoint REST nuevo — `POST /pickup-requests/:id/location` — que ya
+   pasa por `JwtAuthGuard` y la misma verificación de propiedad que ya usa
+   `PickupsService.assertOwner` (el `guardian_user_id` del `pickup_request`
+   debe ser el usuario autenticado — mismo criterio que
+   `PATCH .../arrived`/`.../cancel`, no un mecanismo nuevo).
+2. **`apps/api` republica al broker** con su propia conexión MQTT ya
+   existente (la misma que usa `PickupsService` para publicar
+   transiciones de estado, `MQTT_CLIENT` inyectable) — al topic exacto que
+   el `worker` ya espera
+   (`school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`),
+   sin cambiar nada del lado del `worker`: sigue suscrito al mismo
+   wildcard de siempre (ADR-031 punto 4), ajeno a que el mensaje ahora
+   llega por un camino distinto.
+3. **QoS 0 se mantiene** para este topic (ya justificado en
+   `docs/arquitectura.md`: stream efímero, la siguiente lectura reemplaza
+   a la anterior, perder una no tiene consecuencia) — el cambio de
+   transporte (REST→MQTT en vez de MQTT directo) no cambia esa decisión.
+4. **`docs/arquitectura.md` y `specs/api-contracts/pickup-realtime-mqtt.md`
+   se corrigen** para reflejar el flujo real:
+   `parent → POST /pickup-requests/:id/location → api → MQTT → worker`,
+   no `parent → MQTT → worker` directo. Es una corrección de premisa
+   desactualizada, mismo criterio que otras correcciones de esta sesión
+   (ej. el comentario obsoleto de la migración 401, Fase 6) — no se marca
+   como "ADR que supersede", se corrige el texto para que documente la
+   realidad.
+5. **Frecuencia de envío**: sigue siendo responsabilidad del cliente
+   (`apps/parent`, `watchPosition` del navegador) decidir cuándo llama a
+   este endpoint — el throttling real (20s o 150m, ADR-024 punto 2) sigue
+   viviendo en el `worker` al recalcular ETA, no se duplica en el `api`.
+   El `api` simplemente reenvía cada `POST` que reciba, sin agregar su
+   propio throttling — evita dos lugares con la misma lógica de
+   limitación pudiendo divergir.
+
+## Referencias
+
+- ADR-050 (principio "el navegador nunca se conecta directo al broker",
+  extendido aquí de suscripción a publicación).
+- ADR-024 (punto 2: throttling de recálculo de ETA, sigue en el
+  `worker`, sin cambios).
+- ADR-031 (punto 4: patrón de suscripción del `worker` por wildcard, sin
+  cambios — el mensaje le sigue llegando igual).
+- `docs/arquitectura.md` (texto a corregir: "la app parent publica su
+  ubicación" → flujo mediado por `api`).
+- `specs/api-contracts/pickup-realtime-mqtt.md` (topic de ubicación
+  entrante, mismo topic, origen del mensaje corregido).
+- `apps/api/src/pickups/pickups.service.ts` (`assertOwner`, reutilizado
+  para este endpoint nuevo).

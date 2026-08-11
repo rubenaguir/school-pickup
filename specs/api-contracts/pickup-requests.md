@@ -297,6 +297,43 @@ consola ordena por ETA, no por hora de inicio.
 | 403 | `NOT_INSTITUTION_MEMBER` | modo `enrollmentId`: el usuario no es guardián del alumno **ni** miembro de la institución del `enrollments` (falla el OR). Modo `deliveryPointId`: el usuario no es `institution_members` de la institución dueña del `delivery_points` |
 | 404 | `RESOURCE_NOT_FOUND` | el `enrollments` o el `delivery_points` indicado no existe |
 
+## `POST /pickup-requests/:id/location`
+
+El tutor envía una lectura de GPS mientras va en camino. Ver ADR-062 — el
+`api` republica esta lectura al broker MQTT
+(`school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`)
+con su propia conexión; el navegador nunca se conecta directo al broker
+(ADR-050). Misma autorización que `PATCH .../arrived`/`.../cancel`
+(`assertOwner` — el `guardian_user_id` dueño del `pickup_requests`).
+
+**Request**
+```json
+{
+  "lat": "number",
+  "lng": "number",
+  "accuracyMeters": "number | null",
+  "recordedAt": "string (timestamptz, ISO 8601)"
+}
+```
+
+**Response 202** — aceptado, sin cuerpo. La republicación al broker es
+fire-and-forget desde la perspectiva del cliente (QoS 0, mismo criterio ya
+documentado en `docs/arquitectura.md` para este topic — perder una lectura
+no tiene consecuencia, llega otra en segundos).
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | `lat`/`lng`/`recordedAt` ausentes o mal formados |
+| 401 | — | no autenticado |
+| 403 | `NOT_STUDENT_GUARDIAN` | el usuario autenticado no es el `guardian_user_id` dueño |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | el `pickup_requests` ya está en un estado terminal (`delivered`/`cancelled`) — no tiene sentido seguir enviando ubicación de un trayecto terminado |
+
+**Sin throttling en el `api`** (ADR-062 punto 5) — cada `POST` recibido se
+republica tal cual; el throttling real de recálculo de ETA (20s/150m,
+ADR-024 punto 2) sigue viviendo exclusivamente en el `worker`.
+
 ## `PATCH /pickup-requests/:id/arrived`
 
 El tutor confirma "ya llegué". Ver feature 021. Transición a `arrived`.

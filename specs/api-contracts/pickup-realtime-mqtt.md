@@ -21,12 +21,25 @@ seguridad"); este documento fija los topics y **una estimación** de los payload
 
 - Prefijo raíz de proyecto `school-pickup/` (el broker Mosquitto es compartido
   con otras apps; el prefijo aísla el namespace).
-- **ACL por tenant** en el broker: cada cliente solo publica/consume topics de su
-  propia institución. Un tutor de una institución NO puede suscribirse a los de
-  otra. Cualquier `institution_members` puede suscribirse a cualquier topic de
-  delivery-point de su institución (ADR-011).
-- TLS obligatorio (WSS). Autenticación por usuario/token en el broker, nunca
-  anónimo; los tokens los emite el `api` tras el login.
+- **Ningún navegador se conecta jamás directo al broker** (ADR-050, ADR-062
+  — corrige el diseño original de este documento, que asumía conexión
+  directa del cliente con token emitido por el `api`). Solo `apps/api` y
+  `apps/worker` mantienen conexión real al broker, con sus propias
+  credenciales de servidor.
+- Los navegadores (`portal`, `board`, `parent`) acceden a datos en tiempo
+  real vía un **puente WebSocket propio de `apps/api`** (ADR-050): el
+  navegador se conecta por WSS al `api`, autenticado con el mismo JWT que
+  usa para REST; el `api` reenvía server-side lo que recibe del broker,
+  filtrado por institución/recurso según la misma autorización que ya usan
+  los endpoints REST equivalentes (`InstitutionMembershipGuard` o
+  verificación de propiedad, según el caso).
+- Para el sentido inverso (un navegador que necesita **publicar** un dato,
+  como la ubicación del tutor en camino), el patrón es el mismo pero al
+  revés: el navegador llama un endpoint REST del `api` (autenticado igual
+  que cualquier otro), y es el `api` quien publica al broker con su propia
+  conexión (ADR-062) — nunca el navegador directo.
+- TLS obligatorio (WSS) para la conexión `api`↔broker y para el puente
+  WebSocket `navegador`↔`api`.
 
 ## Topic — ubicación entrante
 
@@ -34,11 +47,16 @@ seguridad"); este documento fija los topics y **una estimación** de los payload
 school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location
 ```
 
-- **Publica:** la app `parent` (el tutor en camino), vía MQTT.js sobre WSS. Un
-  topic concreto por trayecto, construido con `pickupLocationTopic()` de
-  `packages/shared`.
+- **Publica:** `apps/api`, en nombre del tutor, vía `MQTT_CLIENT` — nunca la
+  app `parent` directo (ADR-050, ADR-062). El tutor llama
+  `POST /pickup-requests/:id/location` (`specs/api-contracts/pickup-requests.md`);
+  el `api` verifica que el `pickup_request` le pertenezca y republica al
+  topic exacto de abajo. Un topic concreto por trayecto, construido con
+  `pickupLocationTopic()` de `packages/shared` (misma función, ahora
+  llamada desde el `api` en vez de imaginariamente desde el navegador).
 - **Consume:** el `worker` (feature 019), que persiste cada lectura en
-  `location_updates` y recalcula el ETA con throttling vía `MapsProvider`.
+  `location_updates` y recalcula el ETA con throttling vía `MapsProvider`
+  — sin cambios, el origen del mensaje le es transparente.
 
 **Payload** (una lectura de GPS; campos anclados a `location_updates`)
 ```json
