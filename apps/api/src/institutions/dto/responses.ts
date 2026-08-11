@@ -37,3 +37,18 @@ export interface InstitutionStatusResponse {
   id: string;
   status: InstitutionStatus;
 }
+
+/** One row of GET /institutions?search=... (feature 005, ADR-037). */
+export interface InstitutionSearchListItem {
+  id: string;
+  name: string;
+  type: InstitutionType;
+  category: string | null;
+}
+
+export interface SearchInstitutionsResponse {
+  institutions: InstitutionSearchListItem[];
+  limit: number;
+  offset: number;
+  total: number;
+}

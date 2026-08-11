@@ -5,6 +5,7 @@ import { SuperAdminRoute } from './routes/SuperAdminRoute';
 import {
   ADMIN_INSTITUTIONS_PATH,
   ADMIN_METRICS_PATH,
+  ASSOCIATE_INSTITUTION_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
   GATE_CONSOLE_PATH,
@@ -16,6 +17,7 @@ import {
   PERSONNEL_PATH,
   STUDENTS_PATH,
 } from './routes/paths';
+import { AssociateInstitution } from './screens/AssociateInstitution';
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
 import { GateConsole } from './screens/GateConsole';
@@ -48,6 +50,7 @@ export function App() {
             </Route>
             <Route path={STUDENTS_PATH} element={<Students />} />
             <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
+            <Route path={ASSOCIATE_INSTITUTION_PATH} element={<AssociateInstitution />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}

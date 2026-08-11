@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, ILike, Repository } from 'typeorm';
 import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
 import type { InstitutionStatus } from '@casillego/shared';
 import { AuditLog, Institution, InstitutionMember, type User } from '@casillego/shared/entities';
@@ -8,14 +8,19 @@ import { generateUniqueJoinCode, randomJoinCodeSuffix } from '../auth/join-code.
 import { isUniqueViolation } from '../common/db-errors.util';
 import { geoPointToLatLng, latLngToGeoPoint } from './geo-point.mapper';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
+import { SearchInstitutionsQueryDto } from './dto/search-institutions-query.dto';
 import type {
   GetInstitutionResponse,
   InstitutionStatusResponse,
   RegenerateJoinCodeResponse,
+  SearchInstitutionsResponse,
   UpdateInstitutionResponse,
 } from './dto/responses';
 
 const MAX_JOIN_CODE_SAVE_ATTEMPTS = 5;
+/** ADR-024 point 9. */
+const DEFAULT_SEARCH_LIMIT = 20;
+const DEFAULT_SEARCH_OFFSET = 0;
 
 const INVALID_STATUS_TRANSITION = {
   code: 'INVALID_STATUS_TRANSITION',
@@ -258,6 +263,35 @@ export class InstitutionsService {
         // Deliberately swallowed, see the doc comment above.
       }
     }
+  }
+
+  /**
+   * GET /institutions?search=... (feature 005, ADR-037). Only `approved`
+   * institutions are visible here (ADR-019 point 4) — a `pending` or
+   * `suspended` institution must not appear as a candidate to associate.
+   */
+  async search(query: SearchInstitutionsQueryDto): Promise<SearchInstitutionsResponse> {
+    const limit = query.limit ?? DEFAULT_SEARCH_LIMIT;
+    const offset = query.offset ?? DEFAULT_SEARCH_OFFSET;
+
+    const [institutions, total] = await this.institutionsRepository.findAndCount({
+      where: { name: ILike(`%${query.search}%`), status: 'approved' },
+      order: { name: 'ASC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return {
+      institutions: institutions.map((institution) => ({
+        id: institution.id,
+        name: institution.name,
+        type: institution.type,
+        category: institution.category,
+      })),
+      limit,
+      offset,
+      total,
+    };
   }
 
   private async findOrFail(id: string): Promise<Institution> {

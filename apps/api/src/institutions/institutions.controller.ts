@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -17,9 +18,11 @@ import { InstitutionResource } from '../auth/guards/institution-resource.decorat
 import { Institution, InstitutionMember } from '@casillego/shared/entities';
 import { InstitutionsService } from './institutions.service';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
+import { SearchInstitutionsQueryDto } from './dto/search-institutions-query.dto';
 import type {
   GetInstitutionResponse,
   RegenerateJoinCodeResponse,
+  SearchInstitutionsResponse,
   UpdateInstitutionResponse,
 } from './dto/responses';
 
@@ -41,6 +44,15 @@ const INSTITUTION_RESOURCE = { entity: Institution, idParam: 'id', institutionCo
 @UseGuards(JwtAuthGuard)
 export class InstitutionsController {
   constructor(private readonly institutionsService: InstitutionsService) {}
+
+  // No InstitutionMembershipGuard, unlike every other route in this
+  // controller: the searching user has no relationship yet with the
+  // institution it might find — this is the step before POST /enrollments
+  // creates one (ADR-037).
+  @Get()
+  search(@Query() query: SearchInstitutionsQueryDto): Promise<SearchInstitutionsResponse> {
+    return this.institutionsService.search(query);
+  }
 
   @UseGuards(InstitutionMembershipGuard)
   @InstitutionResource(INSTITUTION_RESOURCE)

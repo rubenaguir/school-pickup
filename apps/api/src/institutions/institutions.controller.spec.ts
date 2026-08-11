@@ -89,6 +89,14 @@ describe('InstitutionsController (HTTP)', () => {
           [...institutions.values()].some((record) => record.joinCode === where.joinCode),
         ),
       ),
+      findAndCount: vi.fn(
+        ({ where, take, skip }: { where: { status: string }; take: number; skip: number }) => {
+          const matches = [...institutions.values()].filter(
+            (record) => record.status === where.status,
+          );
+          return Promise.resolve([matches.slice(skip, skip + take), matches.length]);
+        },
+      ),
     };
 
     const membersRepo = {
@@ -191,6 +199,37 @@ describe('InstitutionsController (HTTP)', () => {
         role: 'admin',
       },
     ];
+  });
+
+  describe('GET /institutions?search=...', () => {
+    it('finds an approved institution for a user who is not a member of it', async () => {
+      const res = await request(server)
+        .get('/institutions')
+        .query({ search: 'Test' })
+        .set('x-test-user-id', 'user-outsider');
+      expect(res.status).toBe(200);
+      const body = res.body as { institutions: { id: string }[]; limit: number; total: number };
+      expect(body.institutions).toEqual([
+        { id: 'inst-approved', name: 'Colegio Test', type: 'school', category: null },
+      ]);
+      expect(body.limit).toBe(20);
+      expect(body.total).toBe(1);
+    });
+
+    it('never returns a pending or suspended institution', async () => {
+      const res = await request(server)
+        .get('/institutions')
+        .query({ search: 'Test' })
+        .set('x-test-user-id', 'user-outsider');
+      const body = res.body as { institutions: { id: string }[] };
+      expect(body.institutions.map((institution) => institution.id)).not.toContain('inst-pending');
+    });
+
+    it('rejects a missing search param with 400 INVALID_PAYLOAD', async () => {
+      const res = await request(server).get('/institutions').set('x-test-user-id', 'user-admin');
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'INVALID_PAYLOAD' });
+    });
   });
 
   describe('GET /institutions/:id', () => {

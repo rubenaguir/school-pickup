@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ILike } from 'typeorm';
 import { InstitutionsService } from './institutions.service';
 import { Institution } from '@casillego/shared/entities';
 
@@ -37,7 +38,7 @@ interface MemberRecord {
 }
 
 function buildService(overrides?: {
-  institutionsRepo?: Partial<Record<'findOne' | 'save' | 'exists', unknown>>;
+  institutionsRepo?: Partial<Record<'findOne' | 'save' | 'exists' | 'findAndCount', unknown>>;
   members?: MemberRecord[];
   send?: ReturnType<typeof vi.fn>;
 }) {
@@ -45,6 +46,7 @@ function buildService(overrides?: {
     findOne: vi.fn().mockResolvedValue(buildInstitution()),
     save: vi.fn((entity: Institution) => Promise.resolve(entity)),
     exists: vi.fn().mockResolvedValue(false),
+    findAndCount: vi.fn().mockResolvedValue([[buildInstitution()], 1]),
     ...overrides?.institutionsRepo,
   };
 
@@ -101,6 +103,40 @@ describe('InstitutionsService', () => {
         status: 404,
         response: { code: 'RESOURCE_NOT_FOUND' },
       });
+    });
+  });
+
+  describe('search', () => {
+    it('searches by partial, case-insensitive name and applies default pagination', async () => {
+      const { service, institutionsRepo } = buildService();
+      const result = await service.search({ search: 'benito' });
+      expect(institutionsRepo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 20, skip: 0 }),
+      );
+      expect(result).toEqual({
+        institutions: [
+          { id: 'inst-1', name: 'Colegio San Benito', type: 'school', category: null },
+        ],
+        limit: 20,
+        offset: 0,
+        total: 1,
+      });
+    });
+
+    it('only queries status = approved, never pending or suspended', async () => {
+      const { service, institutionsRepo } = buildService();
+      await service.search({ search: 'colegio' });
+      expect(institutionsRepo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { name: ILike('%colegio%'), status: 'approved' } }),
+      );
+    });
+
+    it('respects an explicit limit/offset', async () => {
+      const { service, institutionsRepo } = buildService();
+      await service.search({ search: 'colegio', limit: 5, offset: 10 });
+      expect(institutionsRepo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5, skip: 10 }),
+      );
     });
   });
 

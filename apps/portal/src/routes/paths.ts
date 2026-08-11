@@ -85,9 +85,10 @@ export const NEW_STUDENT_PATH = '/students/new';
 
 /**
  * Associate one student to an institution (specs/features/005-asociar-institucion.md),
- * linked per-student from "Mis hijos". Route reserved here; the screen itself
- * is a following tutor slice, same pattern as `NEW_STUDENT_PATH`.
+ * linked per-student from "Mis hijos".
  */
+export const ASSOCIATE_INSTITUTION_PATH = '/students/:studentId/associate';
+
 export function associateInstitutionPath(studentId: string): string {
   return `/students/${studentId}/associate`;
 }
