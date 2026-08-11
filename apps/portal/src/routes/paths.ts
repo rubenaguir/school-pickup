@@ -65,6 +65,13 @@ export const ADMIN_INSTITUTIONS_PATH = '/admin/institutions';
  */
 export const ADMIN_METRICS_PATH = '/admin/metrics';
 
+/**
+ * Reportes operativos de la institución (specs/features/027-reportes-institucion.md).
+ * Unlike the other configuration screens, the read itself is `role = admin`
+ * (ADR-060 point 6) — a non-admin member cannot view it at all, not only edit it.
+ */
+export const REPORTS_PATH = '/reports';
+
 /** Where a signed-in user lands. */
 export const HOME_PATH = PENDING_ENROLLMENTS_PATH;
 

@@ -16,6 +16,7 @@ import {
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
   PROFILE_PATH,
+  REPORTS_PATH,
   STUDENTS_PATH,
   STUDENT_GUARDIANS_PATH,
   VEHICLES_PATH,
@@ -32,6 +33,7 @@ import { NewStudent } from './screens/NewStudent';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Profile } from './screens/Profile';
+import { Reports } from './screens/Reports';
 import { StudentGuardians } from './screens/StudentGuardians';
 import { Students } from './screens/Students';
 import { Vehicles } from './screens/Vehicles';
@@ -53,6 +55,7 @@ export function App() {
               <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />
               <Route path={GATE_CONSOLE_PATH} element={<GateConsole />} />
               <Route path={PERSONNEL_PATH} element={<Personnel />} />
+              <Route path={REPORTS_PATH} element={<Reports />} />
             </Route>
             <Route path={STUDENTS_PATH} element={<Students />} />
             <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />

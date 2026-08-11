@@ -22,6 +22,7 @@ import {
   DISMISSAL_SCHEDULE_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
+  REPORTS_PATH,
 } from '../routes/paths';
 
 /**
@@ -572,6 +573,9 @@ export function InstitutionProfile() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
                 Personal
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
+                Reportes
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

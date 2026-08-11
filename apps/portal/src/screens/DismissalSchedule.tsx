@@ -50,6 +50,7 @@ import {
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
+  REPORTS_PATH,
 } from '../routes/paths';
 
 const EYEBROW_STYLE = {
@@ -969,6 +970,9 @@ export function DismissalSchedule() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
                 Personal
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
+                Reportes
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión
