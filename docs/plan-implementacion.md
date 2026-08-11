@@ -305,14 +305,30 @@ obsoleto en migración 401) corregido.
       ADR-041 lo había especificado sin implementarlo — y CORS por allowlist.
       La ruta de la bandeja de aprobación ya existe como placeholder:
       `/enrollments/pending`.
-- [ ] Pantallas en orden de prioridad del `design-brief.md`: bandeja de
-      aprobación de alumnos (★, se monta en `/enrollments/pending`) → perfil de
-      institución/geocerca → puntos de entrega → consola de puerta → horarios →
-      personal → reportes
-- [ ] Vistas de tutor: mis hijos, alta de alumno, asociar institución,
-      tutores autorizados, perfil (vehículos, notificaciones)
-- [ ] Vistas de super-admin: aprobación de instituciones, métricas globales
-      (requiere especificar primero el slice diferido en Fase 1)
+- [x] Pantallas en orden de prioridad del `design-brief.md`: bandeja de
+      aprobación de alumnos ★ (`/enrollments/pending`, Capa 3b) → perfil de
+      institución/geocerca (Capa 3c, con mapa Mapbox — ADR-048) → puntos de
+      entrega (Capa 3d) → consola de puerta (Capa 3e, con puente WebSocket
+      en tiempo real — ADR-050/051/052) → horarios (Capa 3f, recurrentes +
+      días especiales) → personal (Capa 3g)
+  - [ ] Reportes — sin spec todavía, es la única pantalla de este bloque sin
+        construir (ver "Decisiones pendientes" más abajo)
+- [x] Vistas de super-admin: plomería (`isSuperAdmin` en `AuthContext`,
+      `SuperAdminRoute`, ADR-055) + aprobación/suspensión/reactivación de
+      instituciones + métricas globales (Capa 3h). El slice diferido de
+      Fase 1 ya se especificó e implementó (ADR-038, ADR-040) — este ítem
+      ya no depende de nada externo.
+- [x] Plomería de vistas de tutor: `TutorContext`, `AuthenticatedLayout`
+      combinado con switcher institución/tutor (ADR-056)
+- [x] Vistas de tutor: mis hijos (Capa 3i, requirió enriquecer
+      `GET /enrollments/mine` — ADR-057), alta de alumno (Capa 3j, sin foto
+      a propósito — ADR-058), asociar institución (Capa 3k, incluyó
+      implementar `GET /institutions?search=...`, que estaba especificado
+      desde ADR-037 pero nunca construido), tutores autorizados (Capa 3l),
+      mis vehículos (Capa 3m)
+  - [ ] Resto de "Perfil" de tutor (datos personales, preferencias de
+        notificación, cambio de contraseña) — sin contrato de API, ver
+        Backlog técnico
 
 ## Fase 8 — Frontend: `apps/parent` (PWA)
 
@@ -352,6 +368,7 @@ obsoleto en migración 401) corregido.
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
 | ~~Features de aprobación/suspensión de institución (super-admin)~~ | Fase 7 (vistas de super-admin) | ✅ Resuelto — ADR-040, `specs/features/025-aprobacion-suspension-institucion.md` |
 | ~~Endpoint de búsqueda de instituciones por nombre~~ | Fase 7 | ✅ Resuelto — ADR-037, `GET /institutions?search=...` |
+| Pantalla de Reportes (`docs/design-brief.md`) — sin feature ni contrato de API; es la única pantalla del checklist de institución sin construir | Fase 7 (pantalla de Reportes) | Abierto — necesita spec antes de poder construirse (tiempo promedio de recogida, alumnos activos, puntualidad, entregas por día — ninguna métrica está definida con precisión todavía) |
 
 ## Backlog técnico (no bloquea, pero no debe olvidarse)
 
