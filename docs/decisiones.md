@@ -3756,14 +3756,20 @@ distintas para el mismo tipo de servicio.
    interfaz — llama a la **Mapbox Directions API** (perfil `driving`),
    mapea `routes[0].duration` → `etaSeconds` y `routes[0].distance` →
    `distanceMeters`.
-2. **Token de acceso propio del `worker`**, variable de entorno separada
-   (`MAPBOX_ACCESS_TOKEN` o el nombre que uses, en el `.env` de
-   `apps/worker`) — **no se comparte ni se importa** del
-   `VITE_MAPBOX_TOKEN` de `apps/portal`. Mismo criterio que ADR-048 punto
-   5 (cada app resuelve su propia variable), extendido aquí a un
-   consumidor server-side. Puede ser el mismo valor de token de la cuenta
-   de Mapbox si así lo prefieres administrar — pero como variable de
-   entorno distinta, no importada entre apps.
+2. **Token de acceso propio del `worker`, variable de entorno separada**
+   (`MAPBOX_ACCESS_TOKEN`) — **no se comparte ni se importa** del
+   `VITE_MAPBOX_TOKEN` de `apps/portal`. **Corrección tras verificación en
+   vivo** (el texto original de este punto decía "en el `.env` de
+   `apps/worker`", que resultó incorrecto): `apps/api` y `apps/worker`
+   (los dos servicios Node/NestJS) cargan variables de entorno desde **el
+   `.env` de la raíz del monorepo** (`process.loadEnvFile(join(__dirname,
+   '../../../.env'))` en ambos `main.ts`), no de un `.env` propio por app
+   — a diferencia de `apps/portal`/`parent`/`board` (frontends Vite), que
+   sí leen cada uno su propio `.env` local. `MAPBOX_ACCESS_TOKEN` y
+   `MAPS_PROVIDER` van en el `.env` raíz. Un `apps/worker/.env` separado,
+   si llegó a crearse por asumir el patrón de los frontends, no lo lee
+   ningún proceso — bórralo o dócumentalo como no usado para no repetir la
+   confusión que causó el primer intento de verificación en vivo.
 3. **Selección por variable de entorno, mismo mecanismo que
    `EmailModule`** (`apps/api/src/email/email.module.ts` —
    `process.env.EMAIL_PROVIDER === 'resend' ? ... : ConsoleEmailProvider`):
@@ -3784,6 +3790,13 @@ distintas para el mismo tipo de servicio.
    desarrollo/tests, y el mecanismo de degradación del punto 4 lo
    convierte además en la ruta de recuperación ante fallos del proveedor
    real.
+6. **Verificado en vivo, no solo en código** (ver corrección del punto 2):
+   ETA real de 970s (~4401 m, ruta real por Paseo de la Reforma) contra
+   441s (~3671 m, línea recta) del cálculo haversine para el mismo par de
+   puntos — confirma que `MapboxMapsProvider` llama la Directions API de
+   verdad, no solo que compila y pasa tests mockeados. Con esto, el
+   pendiente residual de Fase 6 (`docs/plan-implementacion.md`) queda
+   cerrado de forma verificada, no solo documentada.
 
 ## Referencias
 
