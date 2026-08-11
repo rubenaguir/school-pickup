@@ -1180,6 +1180,125 @@ describe('PickupsService', () => {
     });
   });
 
+  describe('sendLocation', () => {
+    const dto = {
+      lat: 19.4326,
+      lng: -99.1332,
+      accuracyMeters: 12.5,
+      recordedAt: '2026-07-16T08:05:00.000Z',
+    };
+
+    it.each(['en_route', 'arriving', 'arrived'] as const)(
+      'republishes to the pickup location topic at QoS 0 while status is %s',
+      async (status) => {
+        const { service, mqttClient } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status })),
+          },
+        });
+
+        await service.sendLocation('user-1', 'pr-1', dto);
+
+        expect(mqttClient.publish).toHaveBeenCalledWith(
+          'school-pickup/institution/inst-1/pickup/pr-1/location',
+          {
+            lat: 19.4326,
+            lng: -99.1332,
+            accuracyMeters: 12.5,
+            recordedAt: '2026-07-16T08:05:00.000Z',
+          },
+          0,
+        );
+      },
+    );
+
+    it('defaults a missing accuracyMeters to null in the republished payload', async () => {
+      const { service, mqttClient } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'en_route' })),
+        },
+      });
+
+      await service.sendLocation('user-1', 'pr-1', {
+        lat: 19.4326,
+        lng: -99.1332,
+        recordedAt: '2026-07-16T08:05:00.000Z',
+      });
+
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ accuracyMeters: null }),
+        0,
+      );
+    });
+
+    it('rejects when the authenticated user is not the owner', async () => {
+      const { service, mqttClient } = buildService({
+        pickupRequests: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(buildOwnedPickupRequest({ guardian: { id: 'other-user' } })),
+        },
+      });
+
+      await expect(service.sendLocation('user-1', 'pr-1', dto)).rejects.toMatchObject({
+        response: { code: 'NOT_STUDENT_GUARDIAN' },
+      });
+      expect(mqttClient.publish).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 when the pickup_request does not exist', async () => {
+      const { service } = buildService({
+        pickupRequests: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.sendLocation('user-1', 'missing', dto)).rejects.toMatchObject({
+        response: { code: 'RESOURCE_NOT_FOUND' },
+      });
+    });
+
+    it.each(['delivered', 'cancelled'] as const)(
+      'rejects with 409 when the pickup_request is already %s, without publishing',
+      async (status) => {
+        const { service, mqttClient } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status })),
+          },
+        });
+
+        await expect(service.sendLocation('user-1', 'pr-1', dto)).rejects.toMatchObject({
+          response: { code: 'INVALID_STATUS_TRANSITION' },
+        });
+        expect(mqttClient.publish).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not fail the request when MQTT publish fails', async () => {
+      const { service, mqttClient } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'en_route' })),
+        },
+        mqttClient: { publish: vi.fn().mockRejectedValue(new Error('broker unreachable')) },
+      });
+
+      await expect(service.sendLocation('user-1', 'pr-1', dto)).resolves.toBeUndefined();
+      expect(mqttClient.publish).toHaveBeenCalled();
+    });
+
+    it('does not read or write pickup_request status/history rows (no transition)', async () => {
+      const { service, pickupRequestsRepo, statusHistoryRepo } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'en_route' })),
+        },
+      });
+
+      await service.sendLocation('user-1', 'pr-1', dto);
+
+      expect(pickupRequestsRepo.save).not.toHaveBeenCalled();
+      expect(statusHistoryRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('deliver', () => {
     it('transitions from arrived to delivered when the delivery code matches', async () => {
       const { service, auditLogRepo } = buildService({

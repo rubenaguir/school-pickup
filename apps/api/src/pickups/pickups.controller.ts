@@ -1,7 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
+import { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
   ListPickupRequestsResponse,
@@ -54,6 +66,16 @@ export class PickupsController {
           ...query,
           enrollmentId: query.enrollmentId!,
         });
+  }
+
+  @Post(':id/location')
+  @HttpCode(202)
+  sendLocation(
+    @Param('id') id: string,
+    @Body() dto: SendLocationDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    return this.pickupsService.sendLocation(request.user.sub, id, dto);
   }
 
   @Patch(':id/arrived')

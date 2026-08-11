@@ -17,6 +17,7 @@ import {
   deliveryPointQueueTopic,
   MQTT_CLIENT,
   type MqttClient,
+  pickupLocationTopic,
   type PickupRequestRealtimeSnapshot,
   type PickupRequestStatus,
 } from '@casillego/shared';
@@ -41,6 +42,7 @@ import {
 import { randomDeliveryCode } from './delivery-code.util';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
+import type { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
   ListPickupRequestsResponse,
@@ -284,6 +286,36 @@ export class PickupsService {
       status: updated.status,
       completedAt: updated.completedAt!.toISOString(),
     };
+  }
+
+  // ADR-062: apps/parent posts here instead of publishing to MQTT directly
+  // (ADR-050 — the browser never talks to the broker). No throttling here by
+  // design (ADR-062 pt.5); the api republishes every valid POST as-is, QoS 0.
+  async sendLocation(userId: string, id: string, dto: SendLocationDto): Promise<void> {
+    const pickupRequest = await this.findPickupRequestOrFail(id);
+    this.assertOwner(pickupRequest, userId);
+
+    if (pickupRequest.status === 'delivered' || pickupRequest.status === 'cancelled') {
+      throw new ConflictException(INVALID_STATUS_TRANSITION);
+    }
+
+    try {
+      await this.mqttClient.publish(
+        pickupLocationTopic(pickupRequest.institutionId, pickupRequest.id),
+        {
+          lat: dto.lat,
+          lng: dto.lng,
+          accuracyMeters: dto.accuracyMeters ?? null,
+          recordedAt: dto.recordedAt,
+        },
+        0,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to republish location update for pickup_request ${pickupRequest.id} to MQTT`,
+        error as Error,
+      );
+    }
   }
 
   async deliver(
