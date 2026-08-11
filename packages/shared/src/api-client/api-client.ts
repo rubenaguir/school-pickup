@@ -72,7 +72,8 @@ export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
   post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
-  del<T>(path: string, options?: RequestOptions): Promise<T>;
+  /** `body` is optional: `DELETE /vehicles/:id` is the one endpoint that reads one (`newPrimaryVehicleId`). */
+  del<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
 }
 
 const MISSING_REFRESH_TOKEN = {
@@ -200,6 +201,6 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     get: (path, requestOptions) => request('GET', path, undefined, requestOptions),
     post: (path, body, requestOptions) => request('POST', path, body, requestOptions),
     patch: (path, body, requestOptions) => request('PATCH', path, body, requestOptions),
-    del: (path, requestOptions) => request('DELETE', path, undefined, requestOptions),
+    del: (path, body, requestOptions) => request('DELETE', path, body, requestOptions),
   };
 }

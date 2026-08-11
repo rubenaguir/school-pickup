@@ -5,7 +5,12 @@ import { useTutor, type StudentSummary } from '../tutor/TutorContext';
 import { useMyEnrollments, type MyEnrollment } from '../students/useMyEnrollments';
 import { institutionTypeLabel } from '../students/student-labels';
 import { EnrollmentStatusPill } from '../students/EnrollmentStatusPill';
-import { NEW_STUDENT_PATH, associateInstitutionPath, studentGuardiansPath } from '../routes/paths';
+import {
+  NEW_STUDENT_PATH,
+  VEHICLES_PATH,
+  associateInstitutionPath,
+  studentGuardiansPath,
+} from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -209,6 +214,9 @@ export function Students() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Button variant="primary" size="md" onClick={() => void navigate(NEW_STUDENT_PATH)}>
                 Agregar alumno
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(VEHICLES_PATH)}>
+                Mis vehículos
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión
