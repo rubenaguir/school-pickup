@@ -10,7 +10,7 @@ import {
 import { useVehicles, type VehicleDraft, type VehicleRow } from '../vehicles/useVehicles';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { STUDENTS_PATH } from '../routes/paths';
+import { PROFILE_PATH, STUDENTS_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -357,9 +357,10 @@ function VehicleListRow({
 
 /**
  * "Mis vehículos" (specs/features/014-gestionar-vehiculos.md): catálogo
- * reutilizable del tutor, independiente de cualquier recogida (ADR-014). Solo
- * la parte de vehículos del "Perfil" del design brief — datos personales,
- * notificaciones y seguridad quedan en backlog.
+ * reutilizable del tutor, independiente de cualquier recogida (ADR-014). Es la
+ * mitad de vehículos del "Perfil" del design brief — el resto (datos
+ * personales, notificaciones, cambio de contraseña) vive en `Profile.tsx`
+ * (feature 026).
  */
 export function Vehicles() {
   const { session, logout } = useAuth();
@@ -468,6 +469,9 @@ export function Vehicles() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(STUDENTS_PATH)}>
                 Mis hijos
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(PROFILE_PATH)}>
+                Mi perfil
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

@@ -7,6 +7,7 @@ import { institutionTypeLabel } from '../students/student-labels';
 import { EnrollmentStatusPill } from '../students/EnrollmentStatusPill';
 import {
   NEW_STUDENT_PATH,
+  PROFILE_PATH,
   VEHICLES_PATH,
   associateInstitutionPath,
   studentGuardiansPath,
@@ -217,6 +218,9 @@ export function Students() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => void navigate(VEHICLES_PATH)}>
                 Mis vehículos
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigate(PROFILE_PATH)}>
+                Mi perfil
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión

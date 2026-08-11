@@ -109,10 +109,18 @@ export function studentGuardiansPath(studentId: string): string {
 }
 
 /**
- * "Mis vehículos" (specs/features/014-gestionar-vehiculos.md), the only part
- * of the "Perfil" tutor screen built so far — datos personales, notificaciones
- * y seguridad quedan en backlog (docs/design-brief.md, sección "Perfil").
+ * "Mis vehículos" (specs/features/014-gestionar-vehiculos.md), the vehicle
+ * half of the "Perfil" tutor screen — the rest (`PROFILE_PATH`) is feature 026.
  * Global to the tutor, not per-student: no route param, unlike
  * `STUDENT_GUARDIANS_PATH`.
  */
 export const VEHICLES_PATH = '/vehicles';
+
+/**
+ * Rest of "Perfil" (specs/features/026-perfil-tutor.md, ADR-059): datos
+ * personales, preferencias de notificación y cambio de contraseña. "Mis
+ * vehículos" (`VEHICLES_PATH`) stays its own route — the other half of the
+ * same design-brief section, already shipped in feature 014. No biometría:
+ * confirmed out of backend scope (ADR-059 point 6).
+ */
+export const PROFILE_PATH = '/profile';
