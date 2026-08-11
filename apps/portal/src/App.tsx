@@ -16,6 +16,7 @@ import {
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
   STUDENTS_PATH,
+  STUDENT_GUARDIANS_PATH,
 } from './routes/paths';
 import { AssociateInstitution } from './screens/AssociateInstitution';
 import { DeliveryPoints } from './screens/DeliveryPoints';
@@ -28,6 +29,7 @@ import { Login } from './screens/Login';
 import { NewStudent } from './screens/NewStudent';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
+import { StudentGuardians } from './screens/StudentGuardians';
 import { Students } from './screens/Students';
 
 export function App() {
@@ -51,6 +53,7 @@ export function App() {
             <Route path={STUDENTS_PATH} element={<Students />} />
             <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
             <Route path={ASSOCIATE_INSTITUTION_PATH} element={<AssociateInstitution />} />
+            <Route path={STUDENT_GUARDIANS_PATH} element={<StudentGuardians />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}

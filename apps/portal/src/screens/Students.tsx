@@ -5,7 +5,7 @@ import { useTutor, type StudentSummary } from '../tutor/TutorContext';
 import { useMyEnrollments, type MyEnrollment } from '../students/useMyEnrollments';
 import { institutionTypeLabel } from '../students/student-labels';
 import { EnrollmentStatusPill } from '../students/EnrollmentStatusPill';
-import { NEW_STUDENT_PATH, associateInstitutionPath } from '../routes/paths';
+import { NEW_STUDENT_PATH, associateInstitutionPath, studentGuardiansPath } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -104,13 +104,22 @@ function StudentCard({
               {student.fullName}
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void navigate(associateInstitutionPath(student.id))}
-          >
-            Asociar a institución
-          </Button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate(studentGuardiansPath(student.id))}
+            >
+              Tutores autorizados
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate(associateInstitutionPath(student.id))}
+            >
+              Asociar a institución
+            </Button>
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid var(--border-hairline)' }}>

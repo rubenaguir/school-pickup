@@ -92,3 +92,18 @@ export const ASSOCIATE_INSTITUTION_PATH = '/students/:studentId/associate';
 export function associateInstitutionPath(studentId: string): string {
   return `/students/${studentId}/associate`;
 }
+
+/**
+ * Tutores autorizados de un alumno
+ * (specs/features/015-invitar-tutor-autorizado.md,
+ * specs/features/017-gestionar-tutores-autorizados.md), linked per-student
+ * from "Mis hijos". Own route rather than an expandable panel inside
+ * "Mis hijos": it carries its own form (invitar), row-level actions
+ * (revocar, reasignar principal) and error states, same shape as
+ * `ASSOCIATE_INSTITUTION_PATH`.
+ */
+export const STUDENT_GUARDIANS_PATH = '/students/:studentId/guardians';
+
+export function studentGuardiansPath(studentId: string): string {
+  return `/students/${studentId}/guardians`;
+}

@@ -2,6 +2,7 @@ import type {
   EnrollmentStatus,
   InstitutionType,
   StudentGuardianRelationship,
+  StudentGuardianStatus,
 } from '@casillego/shared';
 
 const INSTITUTION_TYPE_LABELS: Record<InstitutionType, string> = {
@@ -38,6 +39,22 @@ const RELATIONSHIP_LABELS: Record<StudentGuardianRelationship, string> = {
 
 export function relationshipLabel(relationship: StudentGuardianRelationship): string {
   return RELATIONSHIP_LABELS[relationship];
+}
+
+/**
+ * `student_guardians.status` (specs/entities/student_guardian.md). Distinct
+ * from `users.status` (`userStatusLabel`, personnel screen): a guardian can be
+ * `invited` here even when the underlying `users` is already `active`
+ * (feature 015, caso (a)).
+ */
+const GUARDIAN_STATUS_LABELS: Record<StudentGuardianStatus, string> = {
+  active: 'Activo',
+  invited: 'Invitado',
+  revoked: 'Revocado',
+};
+
+export function guardianStatusLabel(status: StudentGuardianStatus): string {
+  return GUARDIAN_STATUS_LABELS[status];
 }
 
 const ENROLLMENT_STATUS_LABELS: Record<EnrollmentStatus, string> = {
