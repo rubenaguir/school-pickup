@@ -3737,3 +3737,62 @@ patrón de autorización que el resto de pantallas de configuración
 - `specs/entities/institution.md` (`arrival_tolerance_minutes`),
   `specs/entities/dismissal_window.md`, `specs/entities/dismissal_exception.md`.
 - `docs/design-brief.md` (pantalla "Reportes").
+
+## ADR-061 — `MapsProvider` real: Mapbox Directions API, mismo mecanismo de selección que `EmailProvider`
+
+**Contexto.** El pendiente residual de Fase 6 (`docs/plan-implementacion.md`,
+tabla de decisiones pendientes) — proveedor concreto de `MapsProvider`
+(cálculo de ETA con tráfico en vivo, usado por `apps/worker`) — sigue
+abierto desde antes de Fase 7, cubierto mientras tanto por
+`StubMapsProvider` (estimación por distancia haversine a velocidad
+promedio fija, ADR-031 punto 6). El humano ya tiene cuenta de Mapbox
+(usada para el widget de mapa del frontend, ADR-048) y confirma el mismo
+proveedor para el backend — evita manejar dos facturaciones de nube
+distintas para el mismo tipo de servicio.
+
+**Decisión.**
+1. **`MapboxMapsProvider` nuevo**, implementa el port `MapsProvider` ya
+   existente (`packages/shared/src/ports/maps-provider.ts`) sin cambiar su
+   interfaz — llama a la **Mapbox Directions API** (perfil `driving`),
+   mapea `routes[0].duration` → `etaSeconds` y `routes[0].distance` →
+   `distanceMeters`.
+2. **Token de acceso propio del `worker`**, variable de entorno separada
+   (`MAPBOX_ACCESS_TOKEN` o el nombre que uses, en el `.env` de
+   `apps/worker`) — **no se comparte ni se importa** del
+   `VITE_MAPBOX_TOKEN` de `apps/portal`. Mismo criterio que ADR-048 punto
+   5 (cada app resuelve su propia variable), extendido aquí a un
+   consumidor server-side. Puede ser el mismo valor de token de la cuenta
+   de Mapbox si así lo prefieres administrar — pero como variable de
+   entorno distinta, no importada entre apps.
+3. **Selección por variable de entorno, mismo mecanismo que
+   `EmailModule`** (`apps/api/src/email/email.module.ts` —
+   `process.env.EMAIL_PROVIDER === 'resend' ? ... : ConsoleEmailProvider`):
+   `MapsModule` usa un `useFactory` análogo,
+   `process.env.MAPS_PROVIDER === 'mapbox' ? new MapboxMapsProvider() :
+   new StubMapsProvider()`. Default sigue siendo el stub — nadie paga
+   llamadas a Mapbox en desarrollo local a menos que lo active
+   explícitamente.
+4. **Degradación ante fallo de la API real, no propagación de error.** Si
+   la llamada a Mapbox falla (timeout, error de red, cuota excedida),
+   `MapboxMapsProvider` cae de vuelta al mismo cálculo haversine que ya
+   usa `StubMapsProvider` (reutiliza `haversine-distance.util.ts`, no lo
+   duplica) y registra el fallo (log), en vez de lanzar una excepción que
+   interrumpiría el procesamiento de la ubicación entrante. El cálculo de
+   ETA no es tan crítico como para bloquear el flujo de ingesta de
+   ubicación por una falla transitoria del proveedor externo.
+5. **`StubMapsProvider` no se elimina** — sigue siendo el default de
+   desarrollo/tests, y el mecanismo de degradación del punto 4 lo
+   convierte además en la ruta de recuperación ante fallos del proveedor
+   real.
+
+## Referencias
+
+- ADR-031 (punto 6: `StubMapsProvider`, decisión de proveedor real
+  diferida hasta ahora).
+- ADR-017 (`MapsProvider` como port — este ADR no cambia esa interfaz).
+- ADR-048 (Mapbox GL JS en el frontend; mismo proveedor, consumidor
+  distinto).
+- `apps/api/src/email/email.module.ts` (patrón de selección por variable
+  de entorno, reutilizado aquí).
+- `docs/plan-implementacion.md` (pendiente residual de Fase 6, ahora
+  resuelto).

@@ -310,9 +310,9 @@ obsoleto en migración 401) corregido.
       institución/geocerca (Capa 3c, con mapa Mapbox — ADR-048) → puntos de
       entrega (Capa 3d) → consola de puerta (Capa 3e, con puente WebSocket
       en tiempo real — ADR-050/051/052) → horarios (Capa 3f, recurrentes +
-      días especiales) → personal (Capa 3g)
-  - [ ] Reportes — sin spec todavía, es la única pantalla de este bloque sin
-        construir (ver "Decisiones pendientes" más abajo)
+      días especiales) → personal (Capa 3g) → reportes (Capa 3o, ADR-060,
+      `specs/features/027-reportes-institucion.md` — incluye el algoritmo
+      de puntualidad contra horarios de salida)
 - [x] Vistas de super-admin: plomería (`isSuperAdmin` en `AuthContext`,
       `SuperAdminRoute`, ADR-055) + aprobación/suspensión/reactivación de
       instituciones + métricas globales (Capa 3h). El slice diferido de
@@ -329,8 +329,15 @@ obsoleto en migración 401) corregido.
 - [x] Resto de "Perfil" de tutor (datos personales, preferencias de
       notificación, cambio de contraseña — Capa 3n, ADR-059,
       `specs/features/026-perfil-tutor.md`). Biometría confirmada fuera de
-      alcance del backend, sin pendiente. **Con esto, el checklist completo
-      de vistas de tutor queda cerrado.**
+      alcance del backend, sin pendiente.
+
+**Fase 7 completa.** Las 14 pantallas de `apps/portal` (9 de institución +
+2 de super-admin + 5 de tutor — sí, 16 conteos nominales pero 2 pares
+comparten módulo/ruta) están construidas y verificadas de punta a punta
+contra el backend real, junto con la plomería de sesión, el puente
+WebSocket de tiempo real (base ya lista para Fase 8/9), y el design system
+completo en `packages/ui`. Sin pendientes abiertos en el checklist
+original de `docs/design-brief.md` para este frontend.
 
 ## Fase 8 — Frontend: `apps/parent` (PWA)
 
@@ -370,7 +377,7 @@ obsoleto en migración 401) corregido.
 | Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
 | ~~Features de aprobación/suspensión de institución (super-admin)~~ | Fase 7 (vistas de super-admin) | ✅ Resuelto — ADR-040, `specs/features/025-aprobacion-suspension-institucion.md` |
 | ~~Endpoint de búsqueda de instituciones por nombre~~ | Fase 7 | ✅ Resuelto — ADR-037, `GET /institutions?search=...` |
-| Pantalla de Reportes (`docs/design-brief.md`) — sin feature ni contrato de API; es la única pantalla del checklist de institución sin construir | Fase 7 (pantalla de Reportes) | Abierto — necesita spec antes de poder construirse (tiempo promedio de recogida, alumnos activos, puntualidad, entregas por día — ninguna métrica está definida con precisión todavía) |
+| ~~Pantalla de Reportes~~ | Fase 7 | ✅ Resuelto — ADR-060, `specs/features/027-reportes-institucion.md` |
 
 ## Backlog técnico (no bloquea, pero no debe olvidarse)
 
