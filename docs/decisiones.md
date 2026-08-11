@@ -3611,3 +3611,61 @@ S3/Cloudinary decidido en ningún ADR ni spec).
 - `specs/features/004-alta-alumno.md`, `specs/api-contracts/students.md`
   (`photoUrl` ya opcional, sin cambios).
 - `specs/entities/student.md`.
+
+## ADR-059 — `GET/PATCH /users/me` + `POST /users/me/change-password`: datos personales, preferencias de notificación y contraseña
+
+**Contexto.** El resto de "Perfil" de tutor (`docs/design-brief.md`: datos
+personales, preferencias de notificación, cambio de contraseña — la huella
+dactilar ya está confirmada fuera de alcance del backend,
+`specs/entities/user.md`) no tenía contrato de API. Se resuelve aquí antes
+de construir la pantalla.
+
+**Decisión.**
+1. **`GET /users/me`** — perspectiva propia, mismo patrón ya usado por
+   `GET /enrollments/mine`/`GET /institution-members/mine`: solo
+   `JwtAuthGuard`, sin restricción adicional. Devuelve `fullName`, `phone`,
+   `email` (de solo lectura — ver punto 4), y los cuatro booleanos de
+   notificación.
+2. **`PATCH /users/me`** — edita `fullName`, `phone`, y los cuatro
+   booleanos de notificación (`notifyEnrollmentApproved`,
+   `notifyDismissalReminder`, `notifyDeliveryConfirmed`,
+   `notifyProductNews`) en una sola llamada, edición parcial. Datos
+   personales y preferencias comparten endpoint porque ambos son
+   actualizaciones de campo simples sobre la misma entidad, sin reglas de
+   negocio cruzadas que ameriten separarlos.
+3. **`POST /users/me/change-password`, endpoint separado** — no se mezcla
+   con el `PATCH` de arriba porque es una acción de seguridad con semántica
+   distinta: exige `currentPassword` (verificado con `verifyPassword()`,
+   ya existente en `password.util.ts`) antes de aceptar `newPassword`.
+   Reutiliza la única regla de validación de contraseña que el proyecto ya
+   tiene (`@MinLength(8)`, sin regla de complejidad adicional — mismo
+   criterio que `RegisterGuardianDto`/`RegisterInstitutionDto`, no se
+   inventa una política nueva solo para este endpoint).
+4. **`email` no es editable por ningún endpoint de este ADR.** Cambiar de
+   correo implicaría su propio flujo de re-verificación (mismo mecanismo
+   que `specs/features/007-verificacion-correo.md`), fuera de alcance —
+   se deja como campo de solo lectura en `GET /users/me`.
+5. **Sin revocación de sesiones existentes al cambiar contraseña** —
+   limitación aceptada, no resuelta aquí: el proyecto usa JWT sin lista de
+   revocación, así que un `accessToken`/`refreshToken` ya emitido sigue
+   siendo válido hasta su expiración natural, incluso después de cambiar la
+   contraseña. Si en el futuro se necesita cerrar sesión en otros
+   dispositivos al cambiar contraseña, es una decisión aparte (requeriría
+   una lista de revocación o tokens con estado, cambio de arquitectura no
+   trivial).
+6. **Autenticación biométrica confirmada fuera de alcance del backend**
+   (ya lo decía `specs/entities/user.md`) — este ADR no la introduce ni la
+   contradice, la pantalla que se construya sobre este contrato
+   simplemente no incluye esa sección.
+
+## Referencias
+
+- `specs/entities/user.md` (campos editables; biometría fuera de alcance
+  del backend, ya confirmado).
+- `apps/api/src/common/password.util.ts` (`hashPassword`/`verifyPassword`,
+  reutilizados).
+- `apps/api/src/auth/dto/register-guardian.dto.ts` (regla de contraseña
+  reutilizada, `@MinLength(8)`).
+- `specs/features/007-verificacion-correo.md` (mecanismo que tendría que
+  reutilizarse si en el futuro se habilita cambio de correo).
+- `docs/design-brief.md` (sección "Perfil" del tutor).
