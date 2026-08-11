@@ -78,9 +78,8 @@ export const STUDENTS_PATH = '/students';
 
 /**
  * Alta de alumno (specs/features/004-alta-alumno.md), linked from the
- * "Agregar alumno" button on "Mis hijos". Route reserved here; the screen
- * itself is a following tutor slice, same incremental pattern STUDENTS_PATH
- * followed under ADR-056 point 7.
+ * "Agregar alumno" button on "Mis hijos". No photo field — deliberate,
+ * ADR-058.
  */
 export const NEW_STUDENT_PATH = '/students/new';
 

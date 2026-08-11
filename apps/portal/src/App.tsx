@@ -11,6 +11,7 @@ import {
   HOME_PATH,
   INSTITUTION_PROFILE_PATH,
   LOGIN_PATH,
+  NEW_STUDENT_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
   STUDENTS_PATH,
@@ -22,6 +23,7 @@ import { GlobalMetrics } from './screens/GlobalMetrics';
 import { InstitutionApproval } from './screens/InstitutionApproval';
 import { InstitutionProfile } from './screens/InstitutionProfile';
 import { Login } from './screens/Login';
+import { NewStudent } from './screens/NewStudent';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Students } from './screens/Students';
@@ -45,6 +47,7 @@ export function App() {
               <Route path={PERSONNEL_PATH} element={<Personnel />} />
             </Route>
             <Route path={STUDENTS_PATH} element={<Students />} />
+            <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}

@@ -3579,3 +3579,35 @@ spec pide sin inventar un endpoint nuevo solo para esto.
   enriquecida).
 - ADR-037 (mismos tres campos, precedente de propósito distinto — no se
   reutiliza el endpoint, se reutiliza la forma de los campos).
+
+## ADR-058 — Foto de alumno omitida en Alta de alumno: sin infraestructura de subida, y consideración de privacidad de menores diferida a propósito
+
+**Contexto.** `docs/design-brief.md` pide "formulario con foto" para el
+alta de alumno (feature 004). `POST /students` acepta `photoUrl` como
+string opcional, pero es solo una URL de texto — no hay ningún mecanismo
+de subida de archivos en el proyecto (sin proveedor de almacenamiento tipo
+S3/Cloudinary decidido en ningún ADR ni spec).
+
+**Decisión.**
+1. **La pantalla de alta de alumno omite el campo de foto por completo en
+   esta fase** — no se construye ni un input de URL simple ni una subida
+   real. `photoUrl` queda `null` para todo alumno creado desde esta
+   pantalla.
+2. **La razón no es solo falta de infraestructura — es una decisión
+   deliberada de privacidad.** Almacenar y servir fotografías de menores
+   introduce consideraciones de seguridad/privacidad de datos (quién puede
+   verlas, dónde se alojan, cuánto tiempo se conservan, qué pasa si se
+   filtran) que el proyecto no ha abordado y que no deben resolverse de
+   pasada como parte de construir un formulario. Cuando se aborde, merece
+   su propio ADR con esa consideración explícita — no solo "elegir un
+   proveedor de almacenamiento".
+3. **`photoUrl` sigue existiendo en el modelo y en el contrato de API**
+   (ya era opcional, `specs/entities/student.md`) — este ADR no cambia el
+   esquema, solo el alcance de esta pantalla.
+
+## Referencias
+
+- `docs/design-brief.md` (formulario de alta de alumno, "con foto").
+- `specs/features/004-alta-alumno.md`, `specs/api-contracts/students.md`
+  (`photoUrl` ya opcional, sin cambios).
+- `specs/entities/student.md`.
