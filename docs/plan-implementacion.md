@@ -326,9 +326,11 @@ obsoleto en migración 401) corregido.
       implementar `GET /institutions?search=...`, que estaba especificado
       desde ADR-037 pero nunca construido), tutores autorizados (Capa 3l),
       mis vehículos (Capa 3m)
-  - [ ] Resto de "Perfil" de tutor (datos personales, preferencias de
-        notificación, cambio de contraseña) — sin contrato de API, ver
-        Backlog técnico
+- [x] Resto de "Perfil" de tutor (datos personales, preferencias de
+      notificación, cambio de contraseña — Capa 3n, ADR-059,
+      `specs/features/026-perfil-tutor.md`). Biometría confirmada fuera de
+      alcance del backend, sin pendiente. **Con esto, el checklist completo
+      de vistas de tutor queda cerrado.**
 
 ## Fase 8 — Frontend: `apps/parent` (PWA)
 
@@ -374,7 +376,6 @@ obsoleto en migración 401) corregido.
 
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
-| "Perfil" de tutor (`docs/design-brief.md`) solo tiene su pieza de vehículos especificada — datos personales editables, preferencias de notificación (los 4 booleanos de `specs/entities/user.md`) y cambio de contraseña no tienen contrato de API ni spec de feature | Detectado al construir Capa 3m (vehículos) — ninguna de las tres piezas restantes existía en `specs/api-contracts/` | Especificar como su propia ronda: `PATCH /users/me` (datos personales + preferencias) y un endpoint de cambio de contraseña (decidir si exige la contraseña actual, política de complejidad). La huella dactilar queda fuera del backend por diseño (`specs/entities/user.md`) — no es parte de este pendiente |
 | Foto de alumno (`photoUrl`) omitida en Alta de alumno — sin infraestructura de subida de archivos en el proyecto, y deliberadamente diferida por consideración de privacidad de menores, no solo por falta de tooling | ADR-058 (Capa 3j) | Antes de implementar, resolver explícitamente: proveedor de almacenamiento, control de acceso a las imágenes, retención/borrado, y quién puede verlas — no solo "agregar un input de subida" |
 | `<input type="time">` en la pantalla de Horarios se renderiza en 12h (AM/PM) en navegadores con esa configuración regional (Chrome ignora `lang="es-ES"` para esto) — el valor guardado y mostrado en las filas del listado sí es 24h correcto, solo el widget de captura varía | ADR-053 (Capa 3f) — un time-picker propio en 24h consistente requeriría sumar un componente nuevo a `@casillego/ui`, decisión de design system (ADR-036/ADR-049), no de esta pantalla | Evaluar un componente de hora propio en `@casillego/ui` si se confirma que es fricción real para el personal de instituciones, no solo una inconsistencia teórica — no construir sin esa señal |
 | `resend-verification-throttle.spec.ts` es intermitente bajo carga paralela (falla ~1 de cada 2-3 corridas junto a otros tests, pasa siempre en aislado) — test de rate limit con temporizadores reales, ya era así antes del slice de super-admin, no relacionado a ningún cambio reciente | Detectado durante la verificación de `npm run check` al implementar `SuperAdminGuard`/`admin/` (no lo causó ese cambio) | Estabilizar con timers simulados (`vi.useFakeTimers()` o equivalente) en vez de temporizadores reales, o aislar este archivo de la ejecución paralela del test runner |

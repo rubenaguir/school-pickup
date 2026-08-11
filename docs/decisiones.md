@@ -3669,3 +3669,71 @@ de construir la pantalla.
 - `specs/features/007-verificacion-correo.md` (mecanismo que tendría que
   reutilizarse si en el futuro se habilita cambio de correo).
 - `docs/design-brief.md` (sección "Perfil" del tutor).
+
+## ADR-060 — Reportes de institución: definiciones exactas de las cuatro métricas, resolución de "puntualidad"
+
+**Contexto.** "Reportes" (`docs/design-brief.md`, rol administrador de
+institución) es la última pantalla del checklist original de Fase 7 sin
+spec. A diferencia de las métricas globales de super-admin (ADR-038,
+alcance de plataforma), este reporte es **por institución** — mismo
+patrón de autorización que el resto de pantallas de configuración
+(`role = admin`, ADR-022 punto 1), no un endpoint nuevo de super-admin.
+
+**Decisión.**
+1. **Periodo del reporte: selector de rangos predefinidos**, no fechas
+   libres — `today` (hoy), `last7Days`, `last30Days` (default, confirmado
+   con el humano), `thisMonth`, `lastMonth`. El backend valida contra este
+   enum cerrado, no acepta fechas arbitrarias en esta fase.
+2. **`averagePickupDurationSeconds`** — misma definición que ADR-038 punto
+   6 (promedio de `completed_at - started_at` sobre `pickup_requests` con
+   `status = delivered`), pero acotado a esta institución y al periodo
+   elegido, no al mes calendario fijo de la vista de super-admin.
+3. **`activeStudentsCount`** — alumnos con `enrollment.status = approved`
+   en esta institución **hoy** (padrón actual/censo, confirmado con el
+   humano). **No depende del periodo del reporte** — es una fotografía del
+   presente, a diferencia de las otras tres métricas, que sí son sobre el
+   rango elegido. Documentarlo así explícitamente evita que se lea como
+   inconsistencia.
+4. **`punctualityRate`** — definición confirmada con el humano: un
+   `pickup_request` con `status = delivered` cuenta como puntual si
+   `completed_at` cae dentro de `institutions.arrival_tolerance_minutes`
+   después del fin de la ventana de salida que le correspondía. Algoritmo
+   de resolución de "la ventana que le correspondía":
+   - Tomar la fecha calendario de `completed_at` y el `grade_or_group` del
+     `enrollment` asociado.
+   - Buscar primero una `dismissal_exceptions` para esa institución, esa
+     fecha exacta, y ese `level` (o `level IS NULL`, "todos los niveles" —
+     mismo criterio de colisión que ya usa ADR-018 punto 10). Si existe,
+     su `time` es el fin de la ventana esperada.
+   - Si no hay excepción, buscar la `dismissal_windows` recurrente que
+     coincida en `weekday` (derivado de la fecha) y `level` (o `level IS
+     NULL`), con `status = active`. Su `end_time` es el fin de la ventana
+     esperada.
+   - **Si no se encuentra ninguna ventana ni excepción aplicable, ese
+     `pickup_request` se excluye del cálculo** — no cuenta como puntual ni
+     como impuntual, porque no hay una expectativa contra la cual
+     medirlo. El denominador de `punctualityRate` es "entregas con ventana
+     resoluble", no "todas las entregas".
+   - `punctualityRate` se expresa como porcentaje (`onTimeCount /
+     resolvableCount * 100`, o `null` si `resolvableCount = 0` — sin
+     datos suficientes, no `0%`).
+5. **`deliveriesByDay`** — conteo de `pickup_requests` con `status =
+   delivered` agrupado por fecha calendario de `completed_at`, dentro del
+   periodo elegido. Forma de lista/serie simple (`[{date, count}]`), la
+   pantalla decide si lo presenta como tabla o gráfico.
+6. **Autorización: `InstitutionMembershipGuard` + `role = admin`**, mismo
+   patrón que perfil/puntos de entrega/horarios/personal — no
+   `SuperAdminGuard`, este reporte es de una institución, no de la
+   plataforma.
+
+## Referencias
+
+- ADR-038 (definición base de tiempo promedio de recogida, adaptada aquí
+  a alcance de institución).
+- ADR-018 (punto 10: criterio de colisión `level = NULL` vs. específico,
+  reutilizado para resolver la ventana aplicable).
+- ADR-022 (punto 1: `role = admin` para pantallas de configuración de
+  institución).
+- `specs/entities/institution.md` (`arrival_tolerance_minutes`),
+  `specs/entities/dismissal_window.md`, `specs/entities/dismissal_exception.md`.
+- `docs/design-brief.md` (pantalla "Reportes").
