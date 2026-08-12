@@ -1,15 +1,21 @@
-import { MQTT_TOPIC_ROOT } from '@casillego/shared';
+import { BrowserRouter, Route, Routes } from 'react-router';
+import { AuthProvider } from './auth/AuthContext';
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { HOME_PATH, LOGIN_PATH } from './routes/paths';
+import { Home } from './screens/Home';
+import { Login } from './screens/Login';
 
 export function App() {
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
-      <h1>CasiLlego — Voy en camino</h1>
-      <p>
-        Esqueleto de la PWA del padre (Camino A: primer plano + Wake Lock + watchPosition). La
-        captura de ubicación se implementará tras un
-        <code> LocationProvider</code>.
-      </p>
-      <small>MQTT topic root: {MQTT_TOPIC_ROOT}</small>
-    </main>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path={LOGIN_PATH} element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path={HOME_PATH} element={<Home />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
