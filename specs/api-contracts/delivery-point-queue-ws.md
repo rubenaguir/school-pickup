@@ -112,7 +112,8 @@ almacenan ni se reenvían.
 
 ## Preguntas abiertas
 
-Ninguna en este slice. El mismo puente cubrirá, sin cambios de arquitectura, el
-feed del tablero (`apps/board`) y el tracking del padre (`apps/parent`) cuando se
-aborden esas fases; cada uno agregará su topic y su regla de autorización, no un
-mecanismo nuevo.
+Ninguna en este slice. El feed del tablero (`apps/board`) sigue pendiente
+de su propia fase. El tracking del padre ya se resolvió — ver
+`specs/api-contracts/pickup-request-tracking-ws.md` (ADR-064): mismo
+puente, topic de tablero reutilizado, autorización por propiedad del
+tutor en vez de membresía de institución.

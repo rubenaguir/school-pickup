@@ -3948,3 +3948,79 @@ por pérdida de foco.
 - `packages/ui/src/tokens/colors.css` (`--brand`, color real del
   manifest).
 - `packages/ui/src/assets/pin-mark.svg` (origen de los íconos de la PWA).
+
+## ADR-064 — Pantalla de seguimiento: puente WebSocket para un solo `pickup_request` (perspectiva tutor), throttling de envío de ubicación en el cliente
+
+**Contexto.** La pantalla de seguimiento (feature 018-022, hero ★ de
+`apps/parent`) necesita ETA/estado en vivo mientras el tutor va en camino.
+El puente WebSocket ya construido (ADR-050,
+`delivery-point-queue.gateway.ts`) es del lado institución (cola de un
+punto de entrega, autorización por membresía) — no sirve para esto: el
+tutor no es `institution_members` de nada, necesita ver **un solo**
+`pickup_request`, el suyo, autorizado por ser su `guardian_user_id`
+dueño. El `worker` ya publica al topic de tablero
+(`school-pickup/institution/{institutionId}/board`) en cada transición de
+estado **y** en cada recálculo de ETA tras una actualización de ubicación
+(`location-ingestion.service.ts`, confirmado) — ese payload
+(`PickupRequestBoardPayload`) ya trae `status`/`estimatedArrivalAt`/
+`etaSeconds`, todo lo que la pantalla necesita en vivo.
+
+**Decisión.**
+1. **Gateway WS nuevo en `apps/api`**, mismo patrón exacto que
+   `delivery-point-queue.gateway.ts` (ADR-050): navegador nunca toca el
+   broker directo, el `api` se suscribe una sola vez (wildcard) y reenvía
+   filtrado por conexión autorizada.
+   - Endpoint: `wss://{host}/ws/pickup-request-tracking?accessToken={jwt}&pickupRequestId={uuid}`
+     (mismo criterio de query param para el token que ADR-050 punto 3 — no
+     hay forma de fijar headers en el handshake nativo de `WebSocket`).
+   - Suscripción del servidor: wildcard `school-pickup/institution/+/board`
+     (reutiliza el topic de tablero ya existente, no crea uno nuevo — el
+     mismo mensaje que ya recibe el tablero de institución sirve aquí,
+     solo cambia quién puede verlo y con qué filtro).
+   - Autorización al conectar: el `pickup_request` indicado debe existir y
+     su `guardian_user_id` debe ser el usuario autenticado — mismo criterio
+     que `assertOwner` ya usa `PickupsService` para
+     `arrived`/`cancel`/`sendLocation`, no una regla nueva. **Sin el lado
+     institución del OR** que sí tienen los endpoints REST de lectura —
+     este canal es exclusivamente para el tutor dueño.
+   - Reenvío: al llegar un mensaje del broker, compara `pickupRequestId`
+     contra el que pidió esta conexión — si coincide, reenvía tal cual
+     (`PickupRequestBoardPayload`, sin transformar).
+2. **Snapshot inicial: REST**, mismo patrón ya establecido en todo el
+   proyecto — `GET /pickup-requests/:id` al montar la pantalla (trae
+   además `deliveryCode`, que el payload de tablero deliberadamente no
+   incluye, ADR-051 — no hace falta en los deltas porque no cambia durante
+   la vida del `pickup_request`, se muestra una vez que `status = arrived`
+   con el valor ya obtenido del snapshot).
+3. **Throttling de envío de ubicación: responsabilidad del cliente**
+   (`apps/parent`, ya establecido en ADR-062 punto 5 — el `api` no
+   throttlea). Se fija aquí la política concreta: el cliente llama
+   `POST /pickup-requests/:id/location` **como máximo una vez cada 15
+   segundos**, sin importar la frecuencia real de `watchPosition` del
+   navegador (que puede disparar mucho más seguido). Ligeramente más
+   frecuente que el umbral de recálculo del `worker` (20s, ADR-024 punto
+   2) para que casi siempre haya una lectura fresca disponible cuando el
+   `worker` decide recalcular, sin desperdiciar batería enviando cada
+   evento crudo de GPS.
+4. **El envío de ubicación se detiene** cuando el `pickup_request` deja de
+   estar en `en_route`/`arriving` (llega a `arrived`, `delivered`, o
+   `cancelled`) — seguir enviando ubicación de un trayecto ya resuelto no
+   tiene propósito.
+5. **Acciones de la pantalla** (`PATCH .../arrived`, `PATCH .../cancel`)
+   reutilizan los endpoints ya existentes y completamente especificados
+   (feature 021/022) — sin decisiones nuevas ahí, solo conectar la UI.
+
+## Referencias
+
+- ADR-050 (patrón del puente WebSocket, replicado aquí con autorización
+  distinta).
+- ADR-051 (`deliveryCode` fuera del payload de tablero, por qué no hace
+  falta en los deltas de esta pantalla).
+- ADR-062 (throttling de envío es responsabilidad del cliente — este ADR
+  fija la política concreta).
+- ADR-024 (punto 2: umbral de recálculo de ETA en el `worker`, 20s/150m).
+- `apps/worker/src/location-ingestion/location-ingestion.service.ts`
+  (confirmado: publica al tablero en cada recálculo, no solo en
+  transiciones de estado).
+- `specs/api-contracts/delivery-point-queue-ws.md` (formato de referencia
+  para el contrato nuevo, `pickup-request-tracking-ws.md`).
