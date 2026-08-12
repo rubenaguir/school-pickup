@@ -3874,3 +3874,77 @@ verificar contra quién lo envió.
   entrante, mismo topic, origen del mensaje corregido).
 - `apps/api/src/pickups/pickups.service.ts` (`assertOwner`, reutilizado
   para este endpoint nuevo).
+
+## ADR-063 — Plomería de `apps/parent`: PWA instalable, `LocationProvider` intercambiable, Wake Lock con degradación, sesión simplificada
+
+**Contexto.** `apps/parent` es hoy un esqueleto (`App.tsx`/`main.tsx`, un
+`manifest.webmanifest` placeholder con `theme_color` genérico e `icons: []`
+vacío). Antes de construir las pantallas reales (feature 018 en adelante)
+hace falta esta capa base, análoga a ADR-042 (`apps/portal`) pero con
+requisitos que ningún otro frontend tuvo: instalación como PWA,
+geolocalización del navegador, mantener la pantalla encendida, y pausa
+por pérdida de foco.
+
+**Decisión.**
+1. **`vite-plugin-pwa`** (generación de service worker vía Workbox,
+   estándar de facto para PWA con Vite) — **estrategia de caché mínima**:
+   solo el app shell estático (JS/CSS/HTML de la build), **nunca**
+   respuestas de API. Este es un tracker en tiempo real — servir un ETA
+   cacheado y obsoleto es peor que no tener conexión. Todo `fetch` a la
+   API va siempre a red, sin `runtime caching` para esos requests.
+2. **Manifest corregido**: `theme_color`/`background_color` alineados a
+   los tokens reales (`--brand: #fb6a45`, no el azul genérico actual),
+   íconos generados desde `packages/ui/src/assets/pin-mark.svg` (ya
+   existente, el isotipo de la marca) en los tamaños estándar que exige
+   instalación en Android/iOS (192×192 y 512×512 como mínimo).
+3. **`LocationProvider` como interfaz propia**, en
+   `apps/parent/src/location/` (no en `packages/shared` — hoy solo lo
+   consume esta app; se promueve si un segundo consumidor real aparece,
+   mismo criterio de "no abstraer antes de tiempo" ya usado en todo el
+   proyecto). Implementación inicial: `PwaLocationProvider`, sobre
+   `navigator.geolocation.watchPosition`. Diseñada para que una futura
+   migración a Capacitor (ya documentada como camino a futuro) solo
+   implique escribir una segunda implementación de la misma interfaz, sin
+   tocar las pantallas que la consumen.
+4. **Wake Lock con degradación explícita, sin polyfill.** Soporte nativo ya
+   amplio (Safari 16.4+, Chrome, Firefox 126+, >94% global a mayo 2026) —
+   no se agrega `NoSleep.js` ni ningún truco de video en loop. Se detecta
+   la característica (`'wakeLock' in navigator`) y, si no está disponible
+   o la solicitud es rechazada (batería baja, modo ahorro), se muestra un
+   mensaje claro invitando a no bloquear la pantalla manualmente — nunca
+   falla en silencio. Re-solicita el lock al recuperar visibilidad
+   (`visibilitychange`), ya que el sistema operativo libera el lock al
+   perder foco.
+5. **Estado "pausado" vía Page Visibility API** (`document.visibilityState`)
+   — cuando la app pierde el foco, la pantalla de seguimiento debe
+   mostrarlo explícitamente ("seguimiento en pausa, vuelve a abrir"), no
+   fingir datos frescos. Estándar, sin decisión adicional que tomar.
+6. **Sesión: `AuthContext` propio, no compartido con `apps/portal`.**
+   Mismo cliente de API (`packages/shared/src/api-client/`, ya
+   multi-frontend por diseño, ADR-042 punto 2), pero el `AuthContext` en sí
+   se duplica en vez de extraerse a un paquete compartido — este frontend
+   es de un solo rol (tutor), sin la complejidad de
+   `InstitutionContext`/`SuperAdminRoute`/switcher que sí necesita
+   `portal`. Duplicar ~50 líneas de contexto es más barato hoy que
+   diseñar una abstracción cross-app prematura. Se reconsidera si
+   `apps/board` termina necesitando el mismo patrón exacto y la
+   duplicación empieza a doler de verdad.
+7. **Routing simple**: sin split institución/tutor/super-admin — un único
+   árbol protegido (sesión sí/no) más `/login` pública, mismo patrón base
+   de `ProtectedRoute` pero sin nada de lo que le sobra a un frontend de un
+   solo rol.
+8. **`packages/ui` como dependencia**, mismo patrón exacto que
+   `apps/portal` (ADR-042 punto 4) — import de `@casillego/ui/styles.css`
+   en `main.tsx`, sin duplicar tokens ni componentes.
+
+## Referencias
+
+- ADR-042 (plomería equivalente de `apps/portal`, referencia de patrón).
+- ADR-036 (`packages/ui`, multi-frontend por diseño).
+- ADR-062 (`POST /pickup-requests/:id/location`, lo que `LocationProvider`
+  termina llamando).
+- `docs/design-brief.md` (app del padre: PWA, foreground-only,
+  `watchPosition` + Wake Lock + Page Visibility).
+- `packages/ui/src/tokens/colors.css` (`--brand`, color real del
+  manifest).
+- `packages/ui/src/assets/pin-mark.svg` (origen de los íconos de la PWA).
