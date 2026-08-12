@@ -16,6 +16,7 @@ import {
 import { PickupsController } from './pickups.controller';
 import { PickupDeliveryController } from './pickup-delivery.controller';
 import { PickupsService } from './pickups.service';
+import { PickupRequestAccessService } from './pickup-request-access.service';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PickupsService } from './pickups.service';
     DeliveryPointsModule,
   ],
   controllers: [PickupsController, PickupDeliveryController],
-  providers: [PickupsService],
+  providers: [PickupsService, PickupRequestAccessService],
+  exports: [PickupRequestAccessService],
 })
 export class PickupsModule {}

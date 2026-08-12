@@ -3,6 +3,7 @@ import {
   MQTT_TOPIC_ROOT,
   boardTopic,
   deliveryPointQueueTopic,
+  parseBoardTopic,
   parseDeliveryPointQueueTopic,
   parseLocationTopic,
   pickupLocationTopic,
@@ -112,5 +113,36 @@ describe('parseDeliveryPointQueueTopic', () => {
 
   it('returns null for an empty string', () => {
     expect(parseDeliveryPointQueueTopic('')).toBeNull();
+  });
+});
+
+describe('parseBoardTopic', () => {
+  it('extracts institutionId from a matching topic', () => {
+    expect(parseBoardTopic('school-pickup/institution/inst-1/board')).toEqual({
+      institutionId: 'inst-1',
+    });
+  });
+
+  it('is the exact inverse of boardTopic', () => {
+    const topic = boardTopic('inst-42');
+    expect(parseBoardTopic(topic)).toEqual({ institutionId: 'inst-42' });
+  });
+
+  // The api's pickup-request tracking bridge subscribes to a shared broker: a
+  // message on any other CasiLlego topic must be discarded, not mistaken for
+  // a board update.
+  it('returns null for a topic of a different type', () => {
+    expect(parseBoardTopic(deliveryPointQueueTopic('inst-1', 'dp-1'))).toBeNull();
+    expect(parseBoardTopic(pickupLocationTopic('inst-1', 'pickup-1'))).toBeNull();
+  });
+
+  it('returns null for a malformed topic', () => {
+    expect(parseBoardTopic('school-pickup/institution/board')).toBeNull();
+    expect(parseBoardTopic('school-pickup/institution/inst-1/board/extra')).toBeNull();
+    expect(parseBoardTopic('not-even-close')).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(parseBoardTopic('')).toBeNull();
   });
 });

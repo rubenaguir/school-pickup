@@ -118,3 +118,17 @@ export function parseDeliveryPointQueueTopic(
   if (!match) return null;
   return { institutionId: match[1], deliveryPointId: match[2] };
 }
+
+/**
+ * Inverse of `boardTopic`, symmetric to `parseDeliveryPointQueueTopic`:
+ * recovers `institutionId` from a topic matched by the pickup-request
+ * tracking bridge's wildcard subscription
+ * (`school-pickup/institution/+/board`, ADR-064), since the board payload
+ * itself carries no institution id. Same contract as its siblings: returns
+ * `null`, never throws, for anything that isn't that exact shape.
+ */
+export function parseBoardTopic(topic: string): { institutionId: string } | null {
+  const match = /^school-pickup\/institution\/([^/]+)\/board$/.exec(topic);
+  if (!match) return null;
+  return { institutionId: match[1] };
+}

@@ -14,6 +14,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { PickupsModule } from './pickups/pickups.module';
 import { DeliveryPointQueueModule } from './delivery-point-queue/delivery-point-queue.module';
+import { PickupRequestTrackingModule } from './pickup-request-tracking/pickup-request-tracking.module';
 import { AdminModule } from './admin/admin.module';
 import { UsersModule } from './users/users.module';
 import { InstitutionReportsModule } from './institution-reports/institution-reports.module';
@@ -22,8 +23,8 @@ import { InstitutionReportsModule } from './institution-reports/institution-repo
  * Root module. Domain modules beyond auth/institutions/delivery-points/
  * dismissal-windows/dismissal-exceptions/students/student-guardians/
  * invitations/institution-members/vehicles/enrollments/pickups/
- * delivery-point-queue/admin/users/institution-reports are added in later
- * phases.
+ * delivery-point-queue/pickup-request-tracking/admin/users/
+ * institution-reports are added in later phases.
  */
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { InstitutionReportsModule } from './institution-reports/institution-repo
     EnrollmentsModule,
     PickupsModule,
     DeliveryPointQueueModule,
+    PickupRequestTrackingModule,
     AdminModule,
     UsersModule,
     InstitutionReportsModule,
