@@ -4132,11 +4132,19 @@ aparezca una necesidad concreta de cada uno por separado.
    usado para el correo de aprobación de institución
    (`EnrollmentsService.approve`): un fallo de envío push no revierte la
    entrega ya persistida, se registra (log) y sigue.
-5. **Contenido del mensaje**: genérico, sin nombrar quién recogió (ej.
-   "{nombre del alumno} ya fue recogido") — no añade la complejidad de
-   resolver el nombre/relación de quien ejecutó la recogida para un primer
-   slice. Al tocar la notificación, abre/enfoca la app en la pantalla de
-   Mis hijos.
+5. **Contenido del mensaje: incluye quién recogió** (confirmado con el
+   humano — corrige la primera versión de este ADR, que proponía un
+   mensaje genérico). Ej. "{nombre del alumno} fue recogido por {nombre
+   completo del guardián que recogió}". Se resuelve leyendo
+   `pickup_requests.guardian.fullName` (ya disponible vía la relación
+   `guardian` que `PickupsService` ya carga — no hace falta una consulta
+   nueva). **Fallback defensivo**: si por algún motivo ese `fullName`
+   fuera `null` (no debería ocurrir en la práctica — quien ejecuta una
+   recogida ya está `active`, y `active` exige `full_name` no nulo, ADR-030
+   — pero el código no debe asumir la invariante ciegamente), usa el
+   `relationship` del guardián como respaldo ("fue recogido por su
+   madre/padre/etc."), nunca un mensaje roto o vacío. Al tocar la
+   notificación, abre/enfoca la app en la pantalla de Mis hijos.
 6. **`apps/parent` cambia de estrategia de PWA: `generateSW` →
    `injectManifest`** (`vite-plugin-pwa`) — la estrategia actual no
    admite un manejador de evento `push` personalizado. Se agrega un

@@ -34,8 +34,10 @@ abuela, chofer). Ver ADR-066 para el razonamiento completo de alcance
   `pickup_requests`, excluyendo a su `guardian_user_id` dueño.
 - De esos, se filtra a quienes tengan `notify_delivery_confirmed = true`.
 - A cada uno, se envía una notificación push a **todas** sus
-  `push_subscriptions` registradas — contenido genérico, sin nombrar quién
-  recogió (ADR-066 punto 5).
+  `push_subscriptions` registradas — el mensaje incluye el nombre de quien
+  recogió (`pickup_requests.guardian.fullName`, ya disponible vía la
+  relación ya cargada; respaldo con `relationship` si `fullName` fuera
+  `null`, caso defensivo — ADR-066 punto 5).
 - Un fallo de envío (suscripción expirada, error de red) no revierte la
   entrega ni bloquea el resto — se registra y continúa con las demás
   suscripciones/destinatarios.
@@ -56,7 +58,7 @@ Given un student con dos student_guardians activos (A y B)
   And B tiene notify_delivery_confirmed = true y una push_subscription
       registrada
 When A confirma la entrega de un pickup_request de ese student
-Then B recibe una notificación push genérica
+Then B recibe una notificación push que incluye el nombre de A
   And A no recibe ninguna (ADR-066 punto 3 — ya lo sabía)
 ```
 
