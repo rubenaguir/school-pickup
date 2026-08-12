@@ -368,6 +368,16 @@ function GuardianRow({
  */
 export function StudentGuardians() {
   const { studentId } = useParams<{ studentId: string }>();
+  if (!studentId) return null;
+  // Keyed by studentId so navigating here for a different student (without
+  // unmounting the route, since the path pattern is the same) resets every
+  // local selection instead of carrying over the previous student's — the
+  // invite form draft, a pending revoke confirmation — same pattern as
+  // apps/parent's SelectInstitution.
+  return <StudentGuardiansForStudent key={studentId} studentId={studentId} />;
+}
+
+function StudentGuardiansForStudent({ studentId }: { studentId: string }) {
   const navigate = useNavigate();
   const { session } = useAuth();
   const tutor = useTutor();
@@ -388,7 +398,7 @@ export function StudentGuardians() {
     reassignPrimary,
     busyId,
     rowError,
-  } = useStudentGuardians(studentId ?? null);
+  } = useStudentGuardians(studentId);
 
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
