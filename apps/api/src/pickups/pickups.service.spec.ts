@@ -33,7 +33,7 @@ function buildPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
   return {
     id: 'pr-1',
     enrollment: { id: 'enr-1' },
-    institution: { id: 'inst-1' },
+    institution: { id: 'inst-1', location: { type: 'Point', coordinates: [-99.1332, 19.4326] } },
     institutionId: 'inst-1',
     guardian: { id: 'user-1' },
     deliveryPoint: null,
@@ -107,7 +107,10 @@ function buildOwnedPickupRequest(overrides?: Partial<PickupRequest>): PickupRequ
       gradeOrGroup: '3°B',
       student: { id: 'stu-1', fullName: 'Ana Pérez' },
     } as Enrollment,
-    institution: { id: 'inst-1' } as Institution,
+    institution: {
+      id: 'inst-1',
+      location: { type: 'Point', coordinates: [-99.1332, 19.4326] },
+    } as Institution,
     deliveryPoint: null,
     ...overrides,
   });
@@ -643,6 +646,7 @@ describe('PickupsService', () => {
         id: 'pr-1',
         enrollmentId: 'enr-1',
         institutionId: 'inst-1',
+        institutionLocation: { lat: 19.4326, lng: -99.1332 },
         guardianUserId: 'user-1',
         deliveryPointId: null,
         status: 'arriving',

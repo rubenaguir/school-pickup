@@ -6,6 +6,8 @@ interface ImportMetaEnv {
    * the app directory (apps/parent), not from the monorepo root.
    */
   readonly VITE_API_BASE_URL?: string;
+  /** Public Mapbox token for the tracking screen's map (ADR-048 point 3). */
+  readonly VITE_MAPBOX_TOKEN?: string;
 }
 
 interface ImportMeta {

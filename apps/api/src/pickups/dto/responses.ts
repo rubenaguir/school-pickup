@@ -1,4 +1,5 @@
 import type { ArrivalMode, PickupRequestStatus } from '@casillego/shared';
+import type { LatLng } from '../../institutions/geo-point.mapper';
 
 export interface PickupRequestResponse {
   id: string;
@@ -35,6 +36,8 @@ export interface PickupRequestDetailResponse {
   id: string;
   enrollmentId: string;
   institutionId: string;
+  /** ADR-065 — lets the tutor's tracking screen draw its map without GET /institutions/:id, which InstitutionMembershipGuard blocks for a non-member tutor. */
+  institutionLocation: LatLng;
   guardianUserId: string;
   deliveryPointId: string | null;
   status: PickupRequestStatus;

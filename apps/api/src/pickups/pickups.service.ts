@@ -27,6 +27,7 @@ import {
 } from '@casillego/shared/pickup-request-transition';
 import { isUniqueViolation } from '../common/db-errors.util';
 import { DeliveryPointAccessService } from '../delivery-points/delivery-point-access.service';
+import { geoPointToLatLng } from '../institutions/geo-point.mapper';
 import {
   AuditLog,
   DeliveryPoint,
@@ -621,6 +622,7 @@ export class PickupsService {
       id: pickupRequest.id,
       enrollmentId: pickupRequest.enrollment.id,
       institutionId: pickupRequest.institution.id,
+      institutionLocation: geoPointToLatLng(pickupRequest.institution.location),
       guardianUserId: pickupRequest.guardian.id,
       deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
       status: pickupRequest.status,

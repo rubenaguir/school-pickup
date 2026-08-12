@@ -161,6 +161,7 @@ Devuelve el estado actual de una recogida. Ver features 018–022.
   "id": "uuid",
   "enrollmentId": "uuid",
   "institutionId": "uuid",
+  "institutionLocation": { "lat": "number", "lng": "number" },
   "guardianUserId": "uuid",
   "deliveryPointId": "uuid | null",
   "status": "en_route | arriving | arrived | delivered | cancelled",
@@ -174,6 +175,15 @@ Devuelve el estado actual de una recogida. Ver features 018–022.
   "completedAt": "string (timestamptz) | null"
 }
 ```
+
+`institutionLocation` (ADR-065): la ubicación de la institución
+(`institutions.location`, misma forma `{ lat, lng }` que
+`GET /institutions/:id`), para que la pantalla de seguimiento del tutor
+pueda dibujar el mapa sin depender de `GET /institutions/:id` (bloqueado
+para él por `InstitutionMembershipGuard`). No cambia durante la vida del
+`pickup_requests`, así que no viaja en los deltas del canal WS de
+seguimiento (`specs/api-contracts/pickup-request-tracking-ws.md`,
+ADR-064) — solo en este snapshot.
 
 `deliveryCode` se incluye para el `guardian_user_id` dueño (lo muestra en su app)
 **y** para cualquier `institution_members` de la institución del `pickup_requests`
@@ -459,6 +469,8 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   puerta — solo estados activos, autorización solo por `institution_member`).
 - ADR-051 (punto 3: `PickupRequestQueueSummary`, forma propia del modo
   `deliveryPointId`, espejo del payload de tiempo real, con `deliveryCode`).
+- ADR-065 (`institutionLocation` en `GET /pickup-requests/:id`, sin
+  restricción de `InstitutionMembershipGuard`).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
   continúan ese snapshot).
 - `docs/arquitectura.md` (§`InstitutionMembershipGuard`: los tres patrones de

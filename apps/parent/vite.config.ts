@@ -17,6 +17,10 @@ export default defineConfig({
         // the API must reach the network, so no `runtimeCaching` entries are
         // added for it — precache covers only the static build output.
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Default cap is 2 MiB; the tracking screen's map (mapbox-gl, ADR-048)
+        // pushes the main bundle past it. Raised, not code-split, to keep the
+        // app-shell precache covering the whole build in one pass (ADR-063 pt.1).
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

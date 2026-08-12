@@ -4024,3 +4024,62 @@ estado **y** en cada recálculo de ETA tras una actualización de ubicación
   transiciones de estado).
 - `specs/api-contracts/delivery-point-queue-ws.md` (formato de referencia
   para el contrato nuevo, `pickup-request-tracking-ws.md`).
+
+## ADR-065 — `GET /pickup-requests/:id` se enriquece con `institutionLocation`, sin restricción de `InstitutionMembershipGuard`
+
+**Contexto.** La pantalla de seguimiento (Capa 4d, hero ★ de `apps/parent`,
+`docs/design-brief.md`) necesita un mapa con "la ruta hacia la
+institución" — dos marcadores, tutor e institución. `GET
+/pickup-requests/:id` (el snapshot inicial que precede al canal WS de
+ADR-064) no trae la ubicación de la institución, y `GET /institutions/:id`
+exige `InstitutionMembershipGuard` (el tutor no es `institution_members`
+de ninguna institución de sus hijos, y no tiene por qué serlo). Sin este
+cambio, la pantalla hero del brief no puede mostrar lo que pide sin
+inventar un endpoint nuevo solo para esto — mismo vacío que ya resolvió
+ADR-057 para "Mis hijos", aquí con un campo geográfico en vez de texto.
+
+**Decisión.**
+1. **`GET /pickup-requests/:id` se enriquece con `institutionLocation`**
+   (`{ lat, lng }`, misma forma que ya expone `GET /institutions/:id` vía
+   `geoPointToLatLng`) — vía el `institution` ya cargado por
+   `findPickupRequestOrFail` (sin `JOIN` nuevo, la relación ya se resuelve
+   para `institutionId`).
+2. **Sin restricción adicional por `status` de la institución ni por
+   membresía** — mismo criterio que ADR-057 punto 3: el tutor con un
+   `pickup_requests` real ya tiene una relación activa con esa
+   institución (su hijo está en un trayecto hacia ella en este momento);
+   ocultarle dónde queda no protege nada y le rompe la pantalla hero.
+3. **No se agrega a `PickupRequestBoardPayload`** (el canal WS de
+   ADR-064): la ubicación de la institución no cambia durante la vida del
+   `pickup_requests`, así que no hace falta repetirla en cada delta —
+   mismo razonamiento que ya excluye `deliveryCode` de ese payload
+   (ADR-051) y que hace que el snapshot REST, no el canal de deltas, sea
+   la fuente de los campos estables. Al reconectar el WS (ADR-064,
+   "Reconexión"), el cliente ya vuelve a pedir el snapshot REST completo,
+   así que `institutionLocation` nunca queda desactualizado.
+4. **No se agrega a `PickupRequestResponse`** (`POST /pickup-requests`,
+   la respuesta de creación) ni a `PickupRequestSummary`/
+   `PickupRequestQueueSummary` — ningún otro consumidor de esos contratos
+   necesita este dato; se acota al único endpoint que la pantalla de
+   seguimiento realmente llama.
+
+**Consecuencias.** `institutions.location` pasa a ser legible por
+cualquier tutor con un `pickup_requests` (histórico o activo) hacia esa
+institución, no solo por su personal — una ampliación deliberada y
+acotada de la superficie de lectura de `institutions`, documentada aquí
+para que quede explícita y no se confunda con un descuido del guard.
+
+## Referencias
+
+- ADR-064 (el snapshot REST que este ADR enriquece precede al canal WS de
+  tracking).
+- ADR-057 (mismo patrón: enriquecer un endpoint de lectura del tutor con
+  un dato de la institución que ningún otro camino expone).
+- ADR-051 (mismo razonamiento — campos estables fuera del payload de
+  deltas — aplicado aquí a `institutionLocation` en vez de `deliveryCode`).
+- ADR-048 (`GeoPoint`/`geoPointToLatLng`, mismo mapper y misma forma
+  `{ lat, lng }` ya usados por `GET /institutions/:id`).
+- `docs/design-brief.md` (pantalla de seguimiento: "mapa con la ruta hacia
+  la institución").
+- `specs/api-contracts/pickup-requests.md` (`GET /pickup-requests/:id`,
+  forma enriquecida).
