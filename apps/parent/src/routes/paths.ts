@@ -18,3 +18,15 @@ export const SELECT_INSTITUTION_PATH = '/students/:studentId/select-institution'
 export function selectInstitutionPath(studentId: string): string {
   return `/students/${studentId}/select-institution`;
 }
+
+/**
+ * Pantalla de seguimiento (docs/design-brief.md, "App del padre"), a la que
+ * se navega tras crear una recogida en `SELECT_INSTITUTION_PATH`. Placeholder
+ * route only — el contenido real (mapa, ETA, Wake Lock, "Ya llegué"/Cancelar)
+ * lands in a future session.
+ */
+export const TRACKING_PATH = '/pickup-requests/:pickupRequestId/tracking';
+
+export function trackingPath(pickupRequestId: string): string {
+  return `/pickup-requests/${pickupRequestId}/tracking`;
+}
