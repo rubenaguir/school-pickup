@@ -368,6 +368,12 @@ El tutor confirma "ya llegué". Ver feature 021. Transición a `arrived`.
 El staff confirma la entrega verificando el `delivery_code`. Ver feature 021.
 Transición a `delivered`.
 
+**Efecto secundario best-effort (ADR-066, feature 028):** notifica por Web
+Push a los demás `student_guardians` activos del alumno (excluyendo al
+dueño del `pickup_requests`) con `notify_delivery_confirmed = true` — ver
+`specs/api-contracts/push-subscriptions.md`. Nunca afecta la respuesta de
+este endpoint, ni siquiera si el envío falla por completo.
+
 Único endpoint del contrato protegido por **`InstitutionMembershipGuard`** (modo
 ruta por recurso: el guard resuelve el `pickup_requests` por su `:id` y compara
 la membresía contra su `institution_id` denormalizado, ADR-018 punto 4). El guard

@@ -4083,3 +4083,87 @@ para que quede explícita y no se confunda con un descuido del guard.
   la institución").
 - `specs/api-contracts/pickup-requests.md` (`GET /pickup-requests/:id`,
   forma enriquecida).
+
+## ADR-066 — Notificaciones push, alcance mínimo: solo confirmación de entrega a los demás tutores autorizados
+
+**Contexto.** De los cuatro tipos de notificación ya modelados como
+preferencia (`users.notify_*`, ADR-059) pero nunca conectados a ningún
+mecanismo de envío real, se decide implementar **solo uno**:
+`notify_delivery_confirmed`, y con un alcance más preciso que su nombre
+sugiere — no es "avisarle al tutor que recogió que ya recogió" (esa
+persona vio la transición en tiempo real en su propia pantalla de
+seguimiento, ADR-064), es **avisarle a los demás tutores autorizados del
+mismo alumno que no participaron en esta recogida** que ya se resolvió.
+Es el caso de uso real: coordinación entre varios tutores (madre, padre,
+abuela, chofer) cuando uno de ellos recoge y los demás no tienen forma de
+saberlo sin abrir la app.
+
+Los otros tres tipos (`notify_enrollment_approved`,
+`notify_dismissal_reminder`, `notify_product_news`) **no se implementan**
+en este slice — el primero y el segundo requerirían mecanismos que no
+existen (el segundo, en particular, una tarea programada tipo `cron`
+contra `dismissal_windows`/`dismissal_exceptions`, que el proyecto no
+tiene todavía — el único job periódico existente es la purga de
+`location_updates` en el `worker`), y el tercero no tiene ningún evento de
+dominio que lo dispare. Quedan en backlog, sin implementar, hasta que
+aparezca una necesidad concreta de cada uno por separado.
+
+**Decisión.**
+1. **Web Push API estándar** (VAPID) — protocolo abierto, sin dependencia
+   de un servicio propietario de terceros. Backend: librería `web-push`
+   (Node, la implementación de referencia del protocolo). Par de llaves
+   VAPID generado una vez, variables de entorno del `.env` raíz (mismo
+   mecanismo de carga que `MAPBOX_ACCESS_TOKEN`, ADR-061 — `apps/api`
+   carga desde la raíz, no desde un `.env` propio de `apps/parent`).
+2. **Entidad nueva `push_subscriptions`**: `id`, `user_id` (FK a `users`,
+   `ON DELETE CASCADE`), `endpoint`, `p256dh_key`, `auth_key`,
+   `created_at`. Un `users` puede tener varias — cada dispositivo/navegador
+   donde acepte notificaciones genera su propia suscripción.
+3. **Destinatarios de la notificación de entrega**: todos los
+   `student_guardians` con `status = active` del `student` del
+   `pickup_requests` recién entregado, **excluyendo** al
+   `guardian_user_id` dueño de ese `pickup_requests` (ADR-066, confirmado
+   con el humano — quien recogió ya lo sabe). De esos, solo a quienes
+   tengan `notify_delivery_confirmed = true` (se respeta la preferencia ya
+   existente, ADR-059) y tengan al menos una `push_subscriptions`
+   registrada.
+4. **Disparo: en `PickupsService.deliver()`, tras la transición exitosa,
+   fuera de la transacción principal, best-effort** — mismo patrón ya
+   usado para el correo de aprobación de institución
+   (`EnrollmentsService.approve`): un fallo de envío push no revierte la
+   entrega ya persistida, se registra (log) y sigue.
+5. **Contenido del mensaje**: genérico, sin nombrar quién recogió (ej.
+   "{nombre del alumno} ya fue recogido") — no añade la complejidad de
+   resolver el nombre/relación de quien ejecutó la recogida para un primer
+   slice. Al tocar la notificación, abre/enfoca la app en la pantalla de
+   Mis hijos.
+6. **`apps/parent` cambia de estrategia de PWA: `generateSW` →
+   `injectManifest`** (`vite-plugin-pwa`) — la estrategia actual no
+   admite un manejador de evento `push` personalizado. Se agrega un
+   archivo de service worker propio (`push`/`notificationclick`), con el
+   manifiesto de precaché inyectado igual que antes (ADR-063 punto 1 no
+   cambia: sigue sin cachear respuestas de API).
+7. **Suscripción del navegador**: se solicita el permiso de notificación
+   de forma no intrusiva (no en cada sesión si ya se rechazó una vez;
+   revisa `Notification.permission` antes de volver a pedir) — el momento
+   exacto de la UI (pantalla de Mis hijos vs. perfil) queda a criterio de
+   implementación, pero debe poder descartarse sin bloquear el uso normal
+   de la app.
+8. **Nuevo endpoint**: `POST /push-subscriptions` (registra una
+   suscripción del usuario autenticado) y `DELETE
+   /push-subscriptions/:id` (o equivalente para desuscribirse) — ver
+   contrato nuevo.
+
+## Referencias
+
+- ADR-059 (`notify_delivery_confirmed`, preferencia ya existente,
+  reutilizada aquí sin cambios).
+- ADR-064 (por qué quien recogió no necesita la notificación — ya lo supo
+  en tiempo real).
+- ADR-061 (`.env` raíz para `apps/api`/`apps/worker`, mismo criterio para
+  las llaves VAPID).
+- ADR-063 (punto 1: sin cachear respuestas de API — sin cambios).
+- `apps/api/src/enrollments/enrollments.service.ts` (`approve()`, patrón
+  de envío best-effort fuera de transacción, reutilizado).
+- `specs/features/028-notificacion-push-entrega.md`,
+  `specs/api-contracts/push-subscriptions.md` (nuevos).
