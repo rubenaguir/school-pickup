@@ -20,6 +20,9 @@ import {
   pickupLocationTopic,
   type PickupRequestRealtimeSnapshot,
   type PickupRequestStatus,
+  PUSH_PROVIDER,
+  type PushProvider,
+  type StudentGuardianRelationship,
 } from '@casillego/shared';
 import {
   applyPickupRequestTransition,
@@ -36,6 +39,7 @@ import {
   InstitutionMember,
   PickupRequest,
   PickupRequestStatusHistory,
+  PushSubscription,
   StudentGuardian,
   type User,
   Vehicle,
@@ -110,6 +114,18 @@ const MAX_DELIVERY_CODE_ATTEMPTS = 10;
 
 const ACTIVE_STATUSES = ['en_route', 'arriving', 'arrived'] as const;
 
+// Defensive fallback for the delivery-confirmed push notification (ADR-066
+// pt.5): used only if pickup_request.guardian.fullName is somehow null,
+// which should not happen in practice (an active guardian always has a
+// full_name, ADR-030) but the code must not assume that invariant blindly.
+const RELATIONSHIP_FALLBACK_LABELS: Record<StudentGuardianRelationship, string> = {
+  mother: 'su madre',
+  father: 'su padre',
+  grandparent: 'su abuelo/a',
+  driver: 'su chofer',
+  other: 'un tutor autorizado',
+};
+
 interface VehicleSnapshot {
   vehicle: Vehicle | null;
   vehicleDescription: string | null;
@@ -135,8 +151,11 @@ export class PickupsService {
     private readonly deliveryPointsRepository: Repository<DeliveryPoint>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
+    @InjectRepository(PushSubscription)
+    private readonly pushSubscriptionsRepository: Repository<PushSubscription>,
     private readonly dataSource: DataSource,
     @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
+    @Inject(PUSH_PROVIDER) private readonly pushProvider: PushProvider,
     private readonly deliveryPointAccess: DeliveryPointAccessService,
   ) {}
 
@@ -346,6 +365,12 @@ export class PickupsService {
     pickupRequest.completedAt = new Date();
     const updated = await this.transitionAndPublish(pickupRequest, 'delivered', userId);
 
+    // Best-effort, outside the transaction that already committed the
+    // delivered transition — same policy as EnrollmentsService.approve()'s
+    // email send (ADR-066 pt.4): a notification failure must never revert or
+    // affect the response of an already-successful delivery.
+    await this.notifyOtherGuardiansOfDelivery(updated);
+
     return {
       id: updated.id,
       status: updated.status,
@@ -424,6 +449,65 @@ export class PickupsService {
     );
 
     return updated;
+  }
+
+  // ADR-066: notifies the OTHER active guardians of the student that the
+  // pickup was completed — not the guardian who performed it, who already
+  // saw the transition in real time on their own tracking screen (ADR-064).
+  // Best-effort: a subscription/send failure for one recipient is logged and
+  // must not stop the rest, nor ever surface to the deliver() caller.
+  private async notifyOtherGuardiansOfDelivery(pickupRequest: PickupRequest): Promise<void> {
+    const guardianLinks = await this.studentGuardiansRepository.find({
+      where: { student: { id: pickupRequest.enrollment.student.id } },
+      relations: { guardian: true },
+    });
+
+    const recipients = guardianLinks
+      .filter(
+        (link) =>
+          link.status === 'active' &&
+          link.guardian.id !== pickupRequest.guardian.id &&
+          link.guardian.notifyDeliveryConfirmed,
+      )
+      .map((link) => link.guardian);
+    if (recipients.length === 0) {
+      return;
+    }
+
+    const subscriptions = await this.pushSubscriptionsRepository.find({
+      where: { user: { id: In(recipients.map((guardian) => guardian.id)) } },
+    });
+    if (subscriptions.length === 0) {
+      return;
+    }
+
+    const ownerLink = guardianLinks.find((link) => link.guardian.id === pickupRequest.guardian.id);
+    const guardianLabel =
+      pickupRequest.guardian.fullName ??
+      RELATIONSHIP_FALLBACK_LABELS[ownerLink?.relationship ?? 'other'];
+    const payload = {
+      title: 'Entrega confirmada',
+      body: `${pickupRequest.enrollment.student.fullName} fue recogido por ${guardianLabel}.`,
+    };
+
+    await Promise.all(
+      subscriptions.map(async (subscription) => {
+        try {
+          await this.pushProvider.send(
+            {
+              endpoint: subscription.endpoint,
+              keys: { p256dh: subscription.p256dhKey, auth: subscription.authKey },
+            },
+            payload,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to send delivery-confirmed push notification for pickup_request ${pickupRequest.id} to push_subscription ${subscription.id}`,
+            error as Error,
+          );
+        }
+      }),
+    );
   }
 
   private async findEnrollmentOrFail(enrollmentId: string): Promise<Enrollment> {

@@ -18,13 +18,14 @@ import { PickupRequestTrackingModule } from './pickup-request-tracking/pickup-re
 import { AdminModule } from './admin/admin.module';
 import { UsersModule } from './users/users.module';
 import { InstitutionReportsModule } from './institution-reports/institution-reports.module';
+import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions.module';
 
 /**
  * Root module. Domain modules beyond auth/institutions/delivery-points/
  * dismissal-windows/dismissal-exceptions/students/student-guardians/
  * invitations/institution-members/vehicles/enrollments/pickups/
  * delivery-point-queue/pickup-request-tracking/admin/users/
- * institution-reports are added in later phases.
+ * institution-reports/push-subscriptions are added in later phases.
  */
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { InstitutionReportsModule } from './institution-reports/institution-repo
     AdminModule,
     UsersModule,
     InstitutionReportsModule,
+    PushSubscriptionsModule,
   ],
   controllers: [HealthController],
   providers: [],

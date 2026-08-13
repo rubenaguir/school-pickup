@@ -12,3 +12,4 @@ export * from './location-update.entity';
 export * from './dismissal-window.entity';
 export * from './dismissal-exception.entity';
 export * from './audit-log.entity';
+export * from './push-subscription.entity';

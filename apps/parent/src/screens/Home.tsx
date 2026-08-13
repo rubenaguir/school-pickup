@@ -3,6 +3,7 @@ import { Avatar, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casi
 import { useAuth } from '../auth/AuthContext';
 import { useMyStudents, type MyStudent } from '../students/useMyStudents';
 import { selectInstitutionPath } from '../routes/paths';
+import { PushSubscriptionPrompt } from '../push/PushSubscriptionPrompt';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -122,6 +123,8 @@ export function Home() {
             Cerrar sesión
           </Button>
         </div>
+
+        <PushSubscriptionPrompt />
 
         {students.status === 'loading' && (
           <Card padding={0}>

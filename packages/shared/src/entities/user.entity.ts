@@ -16,6 +16,7 @@ import { PickupRequest } from './pickup-request.entity';
 import { PickupRequestStatusHistory } from './pickup-request-status-history.entity';
 import { DeliveryPoint } from './delivery-point.entity';
 import { AuditLog } from './audit-log.entity';
+import { PushSubscription } from './push-subscription.entity';
 
 const USER_STATUS_VALUES: readonly UserStatus[] = ['active', 'invited', 'suspended'];
 
@@ -92,4 +93,7 @@ export class User {
 
   @OneToMany(() => AuditLog, (auditLog) => auditLog.actor)
   auditLogEntries!: AuditLog[];
+
+  @OneToMany(() => PushSubscription, (pushSubscription) => pushSubscription.user)
+  pushSubscriptions!: PushSubscription[];
 }

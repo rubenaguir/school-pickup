@@ -121,10 +121,12 @@ function buildService(overrides?: {
     Record<'exists' | 'create' | 'save' | 'findOne' | 'findAndCount', unknown>
   >;
   enrollments?: Partial<Record<'findOne', unknown>>;
-  studentGuardians?: Partial<Record<'findOne' | 'exists', unknown>>;
+  studentGuardians?: Partial<Record<'findOne' | 'exists' | 'find', unknown>>;
   institutionMembers?: Partial<Record<'exists', unknown>>;
   vehicles?: Partial<Record<'findOne', unknown>>;
   auditLog?: Partial<Record<'create' | 'save', unknown>>;
+  pushSubscriptions?: Partial<Record<'find', unknown>>;
+  pushProvider?: Partial<Record<'send', unknown>>;
   dataSource?: Partial<Record<'transaction', unknown>>;
   mqttClient?: Partial<Record<'publish', unknown>>;
   deliveryPoints?: FakeDeliveryPoint[];
@@ -145,6 +147,7 @@ function buildService(overrides?: {
   const studentGuardiansRepo = {
     findOne: vi.fn().mockResolvedValue({ status: 'active' }),
     exists: vi.fn().mockResolvedValue(true),
+    find: vi.fn().mockResolvedValue([]),
     ...overrides?.studentGuardians,
   };
   const institutionMembersRepo = {
@@ -160,6 +163,14 @@ function buildService(overrides?: {
     create: vi.fn((partial: object) => partial),
     save: vi.fn((entity: object) => Promise.resolve({ id: '1', ...entity })),
     ...overrides?.auditLog,
+  };
+  const pushSubscriptionsRepo = {
+    find: vi.fn().mockResolvedValue([]),
+    ...overrides?.pushSubscriptions,
+  };
+  const pushProvider = {
+    send: vi.fn().mockResolvedValue(undefined),
+    ...overrides?.pushProvider,
   };
   const statusHistoryRepo = {
     create: vi.fn((partial: object) => partial),
@@ -193,8 +204,10 @@ function buildService(overrides?: {
     vehiclesRepo as never,
     deliveryPointsRepo as never,
     auditLogRepo as never,
+    pushSubscriptionsRepo as never,
     dataSource as never,
     mqttClient as never,
+    pushProvider as never,
     deliveryPointAccess as never,
   );
   return {
@@ -207,6 +220,8 @@ function buildService(overrides?: {
     deliveryPointsRepo,
     auditLogRepo,
     statusHistoryRepo,
+    pushSubscriptionsRepo,
+    pushProvider,
     dataSource,
     mqttClient,
     deliveryPointAccess,
@@ -1449,6 +1464,254 @@ describe('PickupsService', () => {
       });
 
       expect(auditLogRepo.save).toHaveBeenCalledTimes(2);
+    });
+
+    describe('delivery-confirmed push notification (ADR-066, feature 028)', () => {
+      function buildGuardianLink(overrides?: {
+        guardianId?: string;
+        status?: 'active' | 'invited' | 'revoked';
+        relationship?: 'mother' | 'father' | 'grandparent' | 'driver' | 'other';
+        fullName?: string | null;
+        notifyDeliveryConfirmed?: boolean;
+      }) {
+        return {
+          student: { id: 'stu-1' },
+          status: overrides?.status ?? 'active',
+          relationship: overrides?.relationship ?? 'mother',
+          guardian: {
+            id: overrides?.guardianId ?? 'user-2',
+            fullName: overrides?.fullName === undefined ? 'Luis Pérez' : overrides.fullName,
+            notifyDeliveryConfirmed: overrides?.notifyDeliveryConfirmed ?? true,
+          },
+        };
+      }
+
+      function buildSubscription(overrides?: { id?: string; userId?: string }) {
+        return {
+          id: overrides?.id ?? 'sub-1',
+          endpoint: 'https://push.example/endpoint-1',
+          p256dhKey: 'p256dh-key',
+          authKey: 'auth-key',
+          user: { id: overrides?.userId ?? 'user-2' },
+        };
+      }
+
+      it('notifies the other active guardian with the preference enabled, including who picked up, and never the one who picked up', async () => {
+        const { service, pushProvider, pushSubscriptionsRepo } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(
+              buildOwnedPickupRequest({
+                status: 'arrived',
+                deliveryCode: '1234',
+                guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
+              }),
+            ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1', fullName: 'Sofía Ramírez' }),
+                buildGuardianLink({ guardianId: 'user-2', fullName: 'Luis Pérez' }),
+              ]),
+          },
+          pushSubscriptions: {
+            find: vi.fn().mockResolvedValue([buildSubscription({ userId: 'user-2' })]),
+          },
+        });
+
+        await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(pushSubscriptionsRepo.find).toHaveBeenCalledWith({
+          where: { user: { id: In(['user-2']) } },
+        });
+        expect(pushProvider.send).toHaveBeenCalledTimes(1);
+        expect(pushProvider.send).toHaveBeenCalledWith(
+          {
+            endpoint: 'https://push.example/endpoint-1',
+            keys: { p256dh: 'p256dh-key', auth: 'auth-key' },
+          },
+          { title: 'Entrega confirmada', body: 'Ana Pérez fue recogido por Sofía Ramírez.' },
+        );
+      });
+
+      it('does not notify a guardian with notify_delivery_confirmed = false, even with a subscription registered', async () => {
+        const { service, pushProvider } = buildService({
+          pickupRequests: {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                buildOwnedPickupRequest({ status: 'arrived', deliveryCode: '1234' }),
+              ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1' }),
+                buildGuardianLink({ guardianId: 'user-2', notifyDeliveryConfirmed: false }),
+              ]),
+          },
+          pushSubscriptions: {
+            find: vi.fn().mockResolvedValue([buildSubscription({ userId: 'user-2' })]),
+          },
+        });
+
+        await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(pushProvider.send).not.toHaveBeenCalled();
+      });
+
+      it('does not send anything, and does not error, when the eligible guardian has no push_subscription registered', async () => {
+        const { service, pushProvider, pushSubscriptionsRepo } = buildService({
+          pickupRequests: {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                buildOwnedPickupRequest({ status: 'arrived', deliveryCode: '1234' }),
+              ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1' }),
+                buildGuardianLink({ guardianId: 'user-2' }),
+              ]),
+          },
+          pushSubscriptions: { find: vi.fn().mockResolvedValue([]) },
+        });
+
+        const result = await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(result.status).toBe('delivered');
+        expect(pushSubscriptionsRepo.find).toHaveBeenCalled();
+        expect(pushProvider.send).not.toHaveBeenCalled();
+      });
+
+      it('does not notify anyone, without error, when the student has a single (the picking-up) guardian', async () => {
+        const { service, pushProvider } = buildService({
+          pickupRequests: {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                buildOwnedPickupRequest({ status: 'arrived', deliveryCode: '1234' }),
+              ),
+          },
+          studentGuardians: {
+            find: vi.fn().mockResolvedValue([buildGuardianLink({ guardianId: 'user-1' })]),
+          },
+        });
+
+        const result = await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(result.status).toBe('delivered');
+        expect(pushProvider.send).not.toHaveBeenCalled();
+      });
+
+      it('sends to every registered push_subscription of an eligible guardian, not just the first', async () => {
+        const { service, pushProvider } = buildService({
+          pickupRequests: {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                buildOwnedPickupRequest({ status: 'arrived', deliveryCode: '1234' }),
+              ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1' }),
+                buildGuardianLink({ guardianId: 'user-2' }),
+              ]),
+          },
+          pushSubscriptions: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildSubscription({ id: 'sub-1', userId: 'user-2' }),
+                buildSubscription({ id: 'sub-2', userId: 'user-2' }),
+              ]),
+          },
+        });
+
+        await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(pushProvider.send).toHaveBeenCalledTimes(2);
+      });
+
+      it('falls back to the relationship label when the picking-up guardian has no full_name (defensive, ADR-066 pt.5)', async () => {
+        const { service, pushProvider } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(
+              buildOwnedPickupRequest({
+                status: 'arrived',
+                deliveryCode: '1234',
+                guardian: { id: 'user-1', fullName: null },
+              }),
+            ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1', relationship: 'father', fullName: null }),
+                buildGuardianLink({ guardianId: 'user-2' }),
+              ]),
+          },
+          pushSubscriptions: {
+            find: vi.fn().mockResolvedValue([buildSubscription({ userId: 'user-2' })]),
+          },
+        });
+
+        await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(pushProvider.send).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ body: 'Ana Pérez fue recogido por su padre.' }),
+        );
+      });
+
+      it('a push send failure for one subscription is logged and does not stop the others, nor affect the response', async () => {
+        const { service, pushProvider } = buildService({
+          pickupRequests: {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                buildOwnedPickupRequest({ status: 'arrived', deliveryCode: '1234' }),
+              ),
+          },
+          studentGuardians: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildGuardianLink({ guardianId: 'user-1' }),
+                buildGuardianLink({ guardianId: 'user-2' }),
+                buildGuardianLink({ guardianId: 'user-3' }),
+              ]),
+          },
+          pushSubscriptions: {
+            find: vi
+              .fn()
+              .mockResolvedValue([
+                buildSubscription({ id: 'sub-2', userId: 'user-2' }),
+                buildSubscription({ id: 'sub-3', userId: 'user-3' }),
+              ]),
+          },
+          pushProvider: {
+            send: vi
+              .fn()
+              .mockRejectedValueOnce(new Error('expired subscription'))
+              .mockResolvedValueOnce(undefined),
+          },
+        });
+
+        const result = await service.deliver('staff-1', 'pr-1', '1234');
+
+        expect(result.status).toBe('delivered');
+        expect(pushProvider.send).toHaveBeenCalledTimes(2);
+      });
     });
   });
 });

@@ -40,6 +40,22 @@ export default tseslint.config(
     },
   },
 
+  // Service worker de apps/parent (ADR-066 pt.6): fuera de apps/parent/src,
+  // así que no colisiona con el bloque type-aware de arriba (que usa la lib
+  // DOM de tsconfig.json) — necesita su propio tsconfig con lib "webworker",
+  // que no puede convivir con "DOM" en el mismo programa TS.
+  {
+    files: ['apps/parent/sw-src/**/*.ts'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        project: ['apps/parent/tsconfig.sw.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      globals: { ...globals.serviceworker },
+    },
+  },
+
   // Backend / Node source: globals de Node.
   {
     files: ['apps/api/**/*.ts', 'apps/worker/**/*.ts', 'packages/shared/**/*.ts'],

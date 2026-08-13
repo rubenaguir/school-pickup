@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   /** Public Mapbox token for the tracking screen's map (ADR-048 point 3). */
   readonly VITE_MAPBOX_TOKEN?: string;
+  /** Public VAPID key for Web Push subscription (ADR-066). */
+  readonly VITE_VAPID_PUBLIC_KEY?: string;
 }
 
 interface ImportMeta {

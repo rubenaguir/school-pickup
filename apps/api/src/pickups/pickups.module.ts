@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryPointsModule } from '../delivery-points/delivery-points.module';
 import { MqttModule } from '../mqtt/mqtt.module';
+import { PushModule } from '../push-subscriptions/push.module';
 import {
   AuditLog,
   DeliveryPoint,
@@ -10,6 +11,7 @@ import {
   InstitutionMember,
   PickupRequest,
   PickupRequestStatusHistory,
+  PushSubscription,
   StudentGuardian,
   Vehicle,
 } from '@casillego/shared/entities';
@@ -29,9 +31,11 @@ import { PickupRequestAccessService } from './pickup-request-access.service';
       Vehicle,
       DeliveryPoint,
       AuditLog,
+      PushSubscription,
     ]),
     AuthModule,
     MqttModule,
+    PushModule,
     DeliveryPointsModule,
   ],
   controllers: [PickupsController, PickupDeliveryController],
