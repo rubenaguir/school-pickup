@@ -366,10 +366,20 @@ original de `docs/design-brief.md` para este frontend.
 
 ## Fase 9 — Frontend: `apps/board` (kiosko)
 
-- [ ] Listado tipo "llegadas de aeropuerto" (★ hero)
-- [ ] Suscripción MQTT al feed agregado de institución
-- [ ] Voceo automático (TTS, Web Speech API)
-- [ ] Estado vacío/inactivo
+- [x] Plomería base: sesión (`institution_member` reutilizada, sin
+      mecanismo nuevo), `InstitutionContext` (primera membresía, sin
+      switcher), routing, manifest, `packages/ui` como dependencia
+      (ADR-068, commit `c659658`)
+- [ ] Listado tipo "llegadas de aeropuerto" (★ hero): snapshot REST
+      (`GET /pickup-requests?institutionId=...`, página de 200) + canal WS
+      del feed completo (`board.gateway.ts`, ya construido del lado `api`),
+      orden por ETA, fusión de deltas con voceo/animación solo en cambio de
+      `status` (ADR-069)
+- [ ] Voceo automático (TTS, Web Speech API) — solo transiciones a
+      `arriving`/`arrived` (ADR-069 punto 5)
+- [ ] Filtro por punto de entrega en cliente (pastillas por `id`, catálogo
+      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8)
+- [ ] Estado vacío/inactivo (`EmptyState` de `packages/ui`)
 
 ## Fase 10 — Pulido y defensa de tesis
 
@@ -412,3 +422,4 @@ original de `docs/design-brief.md` para este frontend.
 | Sin `eslint-plugin-react` en `packages/ui/src` ni en los 3 frontends — solo hay reglas de `eslint-hooks` (ADR-036). Pérdida real de cobertura, no cosmética: sin `react/jsx-key` no se detecta `key` faltante en listas (`SegmentedTabs` ya mapea un array), sin `react/no-unescaped-entities`/`react/jsx-no-duplicate-props`/etc. no se detecta JSX mal formado | ADR-036 — última versión publicada de `eslint-plugin-react` (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 | Revisar en cada fase nueva de frontend (Fase 7 pantallas, Fase 8, Fase 9) si ya hay versión compatible con ESLint 10; si no, evaluar `@eslint-react/eslint-plugin` (peer `eslint: '*'`, ya confirmado disponible en el registro) como alternativa nativa de flat config |
 | ~~`npm run dev:api` falla con `Cannot find module .../dist/main`~~ — `incremental: true` + `deleteOutDir: true` dejaban un `.tsbuildinfo` obsoleto **fuera** de `dist/` (la ruta por defecto colapsa a `dist/../tsconfig.build.tsbuildinfo` porque `rootDir` es `./src`); `tsc` lo leía, creía que todo estaba al día y emitía 0 archivos saliendo con código 0 | Reincidente: se "resolvió" una primera vez borrando el `.tsbuildinfo` a mano, sin dejar registro, y volvió a aparecer | ✅ Resuelto — ADR-046, `incremental` retirado de `apps/api` y `apps/worker` (+ comentario de advertencia en ambos `tsconfig.json`). **Precedente a no repetir:** un síntoma de build que se arregla borrando un archivo a mano no está arreglado; si vuelve a aparecer un `dist/` vacío o incompleto, revisar la interacción caché/`deleteOutDir` antes de borrar nada |
 | Tests de integración contra Postgres real (`*.integration.spec.ts`, `npm run test:integration`) quedan **fuera de `npm run check`** a propósito (el gate principal no debe exigir una base de datos disponible) — nada obliga a correrlos antes de cerrar una fase | ADR-044 — primera categoría de test de este tipo en el proyecto, introducida al diagnosticar y corregir el defecto de `institution_id` en `NULL` | Correr `npm run test:integration` explícitamente antes de cerrar cualquier fase que toque escritura de entidades con relaciones (no solo confiar en `npm run check`); evaluar más adelante si conviene integrarlo a CI si el proyecto adopta CI |
+| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **tres veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069) | ADR-069 punto 6 — decisión consciente de no extraer todavía, no descuido | Evaluar un hook/factory genérico en `packages/shared` cuando se retome Fase 10 (pulido); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |

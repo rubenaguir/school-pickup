@@ -4303,3 +4303,137 @@ agregado completo).
 - ADR-067 (rotación de `refreshToken`, la pieza que hace viable la sesión
   indefinida del kiosco sin mecanismo nuevo).
 - `docs/design-brief.md` (sección "3. Tablero de institución").
+
+## ADR-069 — Tablero de institución: decisiones de la pantalla en vivo
+
+**Contexto.** Al construir la pantalla real de `apps/board` (Fase 9, hero
+único) sobre la plomería ya decidida (ADR-068: sesión, snapshot REST
+`GET /pickup-requests?institutionId=...`, canal WS de feed completo)
+aparecen las mismas categorías de decisión que ADR-052 resolvió para la
+Consola de puerta — tamaño de página, orden, fusión de deltas, reconexión —
+más un problema nuevo, propio de este tablero: **el `worker` republica el
+payload de tablero en cada ingesta de ubicación** (throttled a 20s, Fase 6),
+no solo en transiciones de estado, así que una fusión ingenua dispararía el
+voceo (ADR-068 punto 6) y la animación (`design-brief.md`, sección 3) cada
+20 segundos por cada recogida activa — ruido constante en una pantalla que
+debe ser "ultra-glanceable", exactamente lo opuesto a su propósito.
+
+**Decisión.**
+1. **Tamaño de página del snapshot: 200**, por encima del default de la API
+   (20, ADR-024 punto 9) y también del que usa la consola de puerta (100,
+   ADR-052 punto 2) — la consola opera un solo punto de entrega a la vez, el
+   tablero muestra **toda la institución**, potencialmente varios puntos de
+   entrega simultáneos en hora de salida. Sin paginador, mismo criterio que
+   ADR-052: un tablero no se hojea.
+2. **Orden: ETA ascendente, fila sin ETA al final, desempate por nombre del
+   alumno** — mismo criterio exacto que la cola de la consola (ADR-052
+   punto 2), reimplementado localmente en `apps/board` (no en
+   `packages/shared`; ver punto 6). `design-brief.md` pide "ordenadas por
+   cercanía/ETA", que es esta misma regla.
+3. **Fusión de deltas: un delta en estado terminal (`delivered`/`cancelled`)
+   saca la fila; uno con `updatedAt` anterior al ya mostrado se descarta**
+   — mismo criterio que ADR-052 punto 3, coherente con que el snapshot REST
+   de este ADR-068 también devuelve solo estados activos.
+4. **Voceo (TTS) y animación disparan solo cuando el `status` de la fila
+   cambia respecto al que ya estaba en pantalla, nunca en un delta que solo
+   trae un `etaSeconds`/`estimatedArrivalAt` actualizado.** Este es el punto
+   central de este ADR: sin él, cada recálculo de ETA del `worker` (cada 20s
+   mientras el tutor está en camino) dispararía voceo y animación de forma
+   idéntica a una transición real. `mergeBoardDelta` (función pura,
+   `apps/board/src/board/board-rows.ts`, mismo patrón que `mergeQueueDelta`)
+   devuelve, junto con las filas fusionadas, el conjunto de
+   `pickupRequestId` cuyo `status` cambió en esta fusión — la pantalla usa
+   ese conjunto, no una comparación implícita en el render, para decidir a
+   quién animar/anunciar.
+5. **Qué se anuncia por voz: solo transiciones a `arriving` y `arrived`**
+   ("Llegando" y "En puerta"). No `en_route` (demasiado temprano, sin
+   utilidad operativa para el personal — es el evento más frecuente y
+   volvería el voceo constante), no `delivered`/`cancelled` (la fila ya
+   salió de la pantalla en el mismo instante, ADR-052 punto 3 replicado
+   aquí — anunciar una fila que ya no se ve es más confuso que útil). Texto
+   fijo: *"{nombre del alumno} llegando"* / *"{nombre del alumno} en
+   puerta"* — sin URL/ID, un locutor no lee identificadores. Usa
+   `SpeechSynthesisUtterance` (`Web Speech API`, ADR-068 punto 6) con
+   `lang = 'es-MX'`; el navegador ya serializa utterances en cola, sin lógica
+   propia de cola.
+6. **`mergeBoardDelta`/`sortBoardRows`/`parseBoardDelta` son app-local**
+   (`apps/board/src/board/board-rows.ts`), no una extracción a
+   `packages/shared` — mismo criterio que ADR-033/ADR-036 (sin mover código
+   a un paquete compartido sin un segundo consumidor real que lo justifique
+   *dentro de ese paquete*). Esto es, sin embargo, la **tercera**
+   reimplementación del mismo patrón completo (fusión de deltas + orden +
+   parseo defensivo + reconexión con backoff) tras `gate-console` (ADR-052)
+   y el seguimiento del tutor (ADR-064) — ver Backlog técnico en
+   `docs/plan-implementacion.md`, ítem nuevo: evaluar extraer un hook
+   genérico de "canal WS con snapshot REST + deltas" a `packages/shared`
+   cuando se retome Fase 10, no en este slice.
+7. **Reconexión: mismo patrón exacto que ADR-052 punto 5** (socket antes que
+   snapshot, deltas en vuelo bufferizados durante el fetch, backoff
+   1s→2s→5s→10s, los 4 códigos de cierre de aplicación no se reintentan). El
+   tablero vive encendido indefinidamente (a diferencia de la consola, que
+   se usa durante una ventana de salida) — no cambia el backoff: seguir
+   reintentando cada 10s el resto del día es aceptable y simple, no justifica
+   un techo mayor.
+8. **Filtro por punto de entrega: pastillas locales por `id`, no
+   `SegmentedTabs`.** `SegmentedTabs` (`packages/ui`) representa cada opción
+   como un `string` que es a la vez valor y etiqueta — nada impide en el
+   modelo dos `delivery_points` con el mismo `name` en la misma institución
+   (`specs/entities/delivery_point.md` no lo prohíbe), lo que colisionaría
+   el filtro. En vez de tocar un componente del design system para un caso
+   de uso, `apps/board` arma una fila de pastillas propia, con los mismos
+   tokens visuales (`--surface-muted`, `--ink-900`, `--radius-lg` etc., ya
+   usados por `SegmentedTabs`) pero indexada por `deliveryPointId`. Las
+   etiquetas salen de `GET /institutions/:institutionId/delivery-points`
+   (ya existe, Capa 3d) — llamada una sola vez al montar, sin tiempo real
+   propio (los puntos de entrega no cambian a media ventana de salida). Una
+   fila con `deliveryPointId = null` (captura libre sin punto resuelto)
+   solo aparece bajo "Todos", nunca bajo una pastilla concreta.
+9. **Encabezado: reloj con `setInterval` de 1s, formato `HH:mm` 24h,
+   `es-MX`** — sin dependencia de servidor, mismo criterio que cualquier
+   reloj de pantalla ambiente.
+10. **Animación de fila: CSS puro (`@keyframes`), sin librería nueva.** El
+    proyecto no tiene ninguna dependencia de animación en ningún frontend
+    (mismo criterio de "sin dependencia sin necesidad clara" que ADR-036);
+    un pulso de fondo de ~1.8s sobre la fila cuyo `pickupRequestId` está en
+    el conjunto "cambió de estado" (punto 4) es suficiente para el
+    requisito de `design-brief.md` ("animación sutil al cambiar de
+    estado").
+11. **Estado vacío: `EmptyState` de `packages/ui`**, mismo componente que
+    `apps/portal`/`apps/board`'s `InstitutionGate` ya usan — sin
+    recogidas activas es un estado normal y frecuente (fuera de horario de
+    salida), nunca un error.
+
+**Consecuencias.** El patrón de canal WS (snapshot-then-deltas, backoff,
+merge puro y testeado) queda usado tres veces sin abstraer — decisión
+consciente, no descuido (punto 6), con su propio ítem de backlog para no
+perderse. `apps/board` queda como el tercer y último frontend construido
+sobre el mismo puente WebSocket de ADR-050, cerrando su ciclo de
+consumidores previstos.
+
+## Referencias
+
+- ADR-024 (punto 9: paginación por defecto de 20, el patrón que este ADR y
+  ADR-052 elevan por la misma razón).
+- ADR-033/ADR-036 (criterio de no extraer a `packages/shared` sin un
+  segundo consumidor real dentro del paquete; sin dependencias nuevas sin
+  necesidad clara).
+- ADR-050 (patrón original del puente WebSocket, tercer y último
+  consumidor).
+- ADR-051 (`deliveryCode` fuera del payload de tablero — por eso
+  `board-rows.ts` no lo maneja, a diferencia de `queue-rows.ts`).
+- ADR-052 (precedente completo: mismas cinco categorías de decisión para la
+  Consola de puerta — tamaño de página, orden, fusión de deltas,
+  reconexión, y el propio precedente de "ADR de decisiones de pantalla en
+  vivo").
+- ADR-064 (segundo consumidor del mismo patrón de canal WS, del lado de
+  `apps/parent`).
+- ADR-068 (plomería completa de esta pantalla: sesión, snapshot REST,
+  gateway WS, filtro en cliente, TTS sin arquitectura propia).
+- `docs/design-brief.md` (sección "3. Tablero de institución": listado
+  hero, animación, voceo, estado vacío, filtro por punto de entrega).
+- `specs/entities/delivery_point.md` (sin unicidad de `name` — la razón del
+  punto 8).
+- `apps/portal/src/gate-console/queue-rows.ts`,
+  `apps/portal/src/gate-console/queue-socket.ts`,
+  `apps/portal/src/gate-console/useDeliveryPointQueue.ts` (el patrón que
+  este ADR replica por tercera vez, ver punto 6).
