@@ -4175,3 +4175,53 @@ aparezca una necesidad concreta de cada uno por separado.
   de envío best-effort fuera de transacción, reutilizado).
 - `specs/features/028-notificacion-push-entrega.md`,
   `specs/api-contracts/push-subscriptions.md` (nuevos).
+
+## ADR-067 — Rotación de `refreshToken` en `POST /auth/refresh`, sin lista de revocación
+
+**Contexto.** `apps/board` corre en pantallas kiosco sin usuario presente
+para volver a iniciar sesión — necesita mantenerse autenticado
+indefinidamente mientras esté en uso activo. El `refreshToken` actual
+tiene TTL fijo de 30 días **sin rotación** (`POST /auth/refresh` solo
+devuelve `accessToken` nuevo, confirmado en `auth.module.ts` y en la nota
+técnica de Capa 3a) — un kiosco se desloguearía a los 30 días exactos sin
+importar cuánto tráfico genere, rompiendo su propósito de pantalla
+desatendida. El mismo límite aplica hoy a `apps/portal`/`apps/parent`,
+aunque ahí sea menos crítico (hay un humano presente para volver a
+iniciar sesión).
+
+**Decisión.**
+1. **`POST /auth/refresh` emite un `refreshToken` nuevo en cada llamada**,
+   con TTL fresco de 30 días desde ese momento — no solo `accessToken`.
+   Mientras el cliente siga generando tráfico que dispare refreshes con
+   regularidad (cualquier uso activo normal), la sesión se extiende
+   indefinidamente sin intervención humana.
+2. **Sin lista de revocación — sigue siendo completamente stateless**,
+   mismo criterio que el resto del sistema (ADR-059 punto 5, ya aceptado
+   como limitación). Esto es una honestidad importante: la rotación **no
+   es un endurecimiento de seguridad contra un token robado** — un
+   atacante con un `refreshToken` válido puede seguir refrescándolo
+   indefinidamente igual que hoy, sin que el original quede invalidado del
+   lado del servidor. El propósito real de este ADR es **longevidad de
+   sesión para uso legítimo continuo** (el caso del kiosco), no detección
+   de robo/reuso. Si en el futuro se necesita eso, es una decisión aparte
+   (requeriría persistencia de qué `refreshToken` es el vigente por
+   sesión, para detectar el reuso de uno ya rotado como señal de
+   compromiso — infraestructura con estado que hoy el sistema
+   deliberadamente no tiene).
+3. **El cliente de API compartido** (`packages/shared/src/api-client/`)
+   debe guardar el `refreshToken` nuevo de cada respuesta de refresh, no
+   solo el `accessToken` — afecta a los tres frontends por igual
+   (`portal`/`parent`/`board`), todos se benefician de la sesión más
+   duradera, no solo el kiosco.
+4. **`specs/api-contracts/auth.md` se actualiza**: `POST /auth/refresh`
+   ahora devuelve `{ accessToken, refreshToken }`, no solo `accessToken`.
+
+## Referencias
+
+- ADR-042 (cliente de API compartido, manejo original de refresh sin
+  rotación).
+- ADR-059 (punto 5: limitación ya aceptada de stateless sin revocación,
+  mismo criterio aplicado aquí).
+- `specs/api-contracts/auth.md` (`POST /auth/refresh`, forma actualizada).
+- `apps/api/src/auth/auth.module.ts` (`JWT_REFRESH_TTL`, 30 días — sin
+  cambios, solo deja de ser un límite absoluto para sesiones activas).

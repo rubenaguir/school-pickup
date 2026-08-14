@@ -159,8 +159,17 @@ justificación en `specs/features/003-login.md`).
 
 **Response 200**
 ```json
-{ "accessToken": "string (JWT)" }
+{ "accessToken": "string (JWT)", "refreshToken": "string (JWT)" }
 ```
+
+**Rotación (ADR-067):** cada llamada exitosa emite un `refreshToken`
+**nuevo**, con TTL fresco de 30 días desde ese momento — el cliente debe
+descartar el que usó para pedir el refresh y guardar el nuevo. Es
+longevidad de sesión para uso activo continuo, no un endurecimiento de
+seguridad: sigue sin existir lista de revocación (stateless, mismo
+criterio que el resto del sistema), así que un `refreshToken` robado sigue
+siendo utilizable hasta su propio TTL sin que el original quede invalidado
+del lado del servidor.
 
 **Errores**
 | Código | `code` | Caso |
