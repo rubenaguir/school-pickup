@@ -4497,3 +4497,198 @@ condición de reapertura, no como trabajo diferido a corto plazo.
 - ADR-058 (precedente de estructura: una omisión deliberada con su propia
   razón explícita, no una casilla sin marcar).
 - `docs/plan-implementacion.md` — Fase 8, Backlog técnico.
+
+## ADR-071 — Tablero de institución: rediseño con los 3 modos reales del kit (Andén/Sereno/Carril) tras el handoff correcto del design system, enmienda de ADR-069
+
+**Contexto.** ADR-069 se escribió a partir de la descripción en prosa de
+`docs/design-brief.md` y una sola captura de pantalla, sin haber hecho
+nunca el *handoff* real desde el proyecto de Claude Design — el export
+completo del design system (`design/casillego-design-system/`, agregado en
+esta misma sesión) no existía todavía en el repo. Al auditar el mockup
+real (`ui_kits/tablero-institucion/index.html`) contra lo construido en
+Fase 9 aparecieron tres discrepancias, confirmadas con el humano:
+
+1. La captura que motivó esta auditoría no es *el* diseño del tablero — es
+   uno de **tres modos de visualización** que el kit define, elegibles con
+   un selector de pastillas (esquina inferior derecha): **A · Andén**
+   (pantalla grande pública, oscuro), **B · Sereno** (kiosco público,
+   claro, tarjetas), **C · Carril** (vista de staff, densa, con datos de
+   tutor/vehículo). Lo que se implementó en Fase 9 no corresponde a
+   ninguno de los tres con fidelidad — es una aproximación clara pero
+   ligera del modo Andén, en tema claro (heredado sin querer de los
+   tokens de `packages/ui` que ya existían para el portal).
+2. Las letras A/B/C del selector de modo **no son** la "etiqueta de punto
+   de entrega A/B/C" que menciona `docs/design-brief.md` — son dos ideas
+   distintas que coinciden en el alfabeto por casualidad. El filtro por
+   punto de entrega (ADR-069 punto 8) se mantiene, confirmado con el
+   humano: el diseño original nunca contempló instituciones con varios
+   puntos de entrega simultáneos, así que el kit no lo modela, pero sigue
+   siendo un requisito real de `design-brief.md` — es una pieza
+   independiente del selector de modo, no un reemplazo de este.
+3. El orden de filas de Andén en el kit real no es "ETA ascendente" como
+   fijó ADR-069 punto 2 — es **prioridad de estado primero**
+   (`arrived` → `arriving` → `en_route`), **ETA como desempate dentro de
+   cada estado**. En la práctica ambos órdenes casi siempre coinciden
+   (`arrived`/`arriving` ya tienen ETA bajo por definición), pero no son
+   la misma regla, y con suficientes filas activas simultáneas pueden
+   discrepar.
+
+**Decisión.**
+
+### 1. Los 3 modos se construyen, con las audiencias confirmadas por el humano
+
+- **Andén y Sereno son públicos**, para el kiosco físico de la
+  institución — sin datos de tutor/vehículo/placa, mismo criterio de
+  privacidad que ADR-051 ya estableció para el tablero.
+- **Carril es una vista de staff autenticado** — no necesariamente el
+  kiosco: aplica tanto a alguien monitoreando desde su oficina como al
+  caso en que no hay pantalla grande con buena visibilidad y el único
+  dispositivo disponible es una computadora o tablet operado por
+  personal. Esto **no es un rol nuevo** — cualquier `institution_member`
+  que ya tiene sesión en `apps/board` puede cambiar a este modo (mismo
+  criterio "sin restricción de `role`" de ADR-011/ADR-068), la diferencia
+  es de **datos expuestos**, no de quién puede verlos.
+
+### 2. Carril necesita su propio canal — no reutiliza el feed de Andén/Sereno
+
+**El hallazgo de seguridad que motiva este punto:** `apps/board` mantiene
+una sola conexión WS por sesión (ADR-068). Si el payload de Carril
+(tutor, parentesco, vehículo, placa) viajara por el mismo canal que ya
+consumen Andén/Sereno, **cualquier kiosco físico público recibiría esos
+datos por la red aunque la interfaz nunca los pinte** — alcanzables por
+cualquiera con acceso físico al dispositivo (DevTools, inspección de
+red). Rompería exactamente el principio que ADR-051 ya protege para
+`deliveryCode`, aplicado ahora a datos todavía más sensibles (identifica
+a un adulto y su vehículo, no solo un código de un solo uso).
+
+Confirmado con el humano: **se separa**. Mismo criterio arquitectónico que
+ya distingue la cola de la consola de puerta del feed del tablero
+(ADR-050/051) — consumidor distinto, payload distinto, canal distinto.
+
+1. **Tipo nuevo `PickupRequestBoardMonitorPayload`**
+   (`packages/shared/src/pickup-request-payloads.ts`), junto a
+   `PickupRequestBoardPayload`/`PickupRequestQueuePayload` existentes —
+   mismos campos que `PickupRequestBoardPayload` más:
+   `guardianFullName: string`, `guardianRelationship:
+   StudentGuardianRelationship`, `vehicleDescription: string | null`,
+   `vehiclePlate: string | null`. **Sin `deliveryCode`** — Carril tampoco
+   lo muestra en el mockup real, ADR-051 no cambia para ningún modo del
+   tablero, solo para la consola de puerta.
+2. **Resuelto en `PickupsService`/`LocationIngestionService` con una
+   consulta adicional a `student_guardians`**, mismo patrón ya usado en
+   `notifyOtherGuardiansOfDelivery` (ADR-066 punto 5) para resolver el
+   vínculo tutor-alumno — no una relación nueva, un lookup ya precedente.
+   `vehicleDescription`/`vehiclePlate` ya se resuelven hoy para
+   `buildQueuePayload`, se reutilizan sin cambios.
+3. **Topic nuevo**: `boardMonitorTopic(institutionId)` →
+   `school-pickup/institution/{institutionId}/board-monitor`
+   (`packages/shared/src/index.ts`, junto a `boardTopic`/
+   `deliveryPointQueueTopic`, con su `parseBoardMonitorTopic` inverso,
+   mismo contrato defensivo — nunca lanza, `null` si no matchea). Se
+   publica en los **mismos dos puntos** que ya publican `boardTopic`
+   (`PickupsService.publishRealtimeUpdate`,
+   `LocationIngestionService.publishRealtimeUpdate`) — mismo throttle de
+   20s del `worker`, sin mecanismo nuevo de frecuencia.
+4. **`BoardMonitorGateway` nuevo** (`apps/api/src/board/`), calco
+   estructural de `BoardGateway` — mismo patrón de autorización
+   (membresía de institución, sin restricción de `role`), mismos 4
+   códigos de cierre, `path: '/ws/board-monitor'`. Se suscribe a
+   `school-pickup/institution/+/board-monitor`.
+5. **Snapshot REST**: nuevo query param `view` en
+   `GET /pickup-requests?institutionId=...&view=monitor` (default
+   `view=board` si se omite, sin romper el modo actual) — misma ruta,
+   misma autorización, proyección de respuesta distinta
+   (`ListPickupRequestsBoardMonitorResponse`). No es un filtro
+   ortogonal a `institutionId`/`deliveryPointId`/`enrollmentId`
+   (ADR-024/ADR-068) — es un modificador de *forma* de un request que ya
+   está acotado por `institutionId`, no introduce una cuarta rama
+   mutuamente excluyente.
+6. **`apps/board` abre/cierra la suscripción de Carril según el modo
+   activo** — no una conexión permanente de más: al entrar a Carril abre
+   `useInstitutionBoardMonitor` (mismo esqueleto que
+   `useInstitutionBoard`, snapshot-then-deltas, backoff idéntico); al
+   salir de Carril, cierra el socket. Andén/Sereno nunca la abren.
+
+### 3. Etiqueta de parentesco: se promueve a `packages/shared`
+
+`apps/portal/src/students/student-labels.ts` ya tiene
+`relationshipLabel()` (Madre/Padre/Abuelo-a/Chofer/Otro) — con Carril,
+`apps/board` es un segundo consumidor real, así que **se mueve a
+`packages/shared`** (mismo criterio de extracción que ADR-069 punto 6
+exige: no se mueve nada sin un segundo consumidor real, y aquí ya existe
+uno). `apps/portal` pasa a importarla en vez de mantener su copia local.
+
+### 4. Barra de progreso de Carril: aproximada con `advance_notice_minutes`, sin cambio de esquema
+
+Confirmado con el humano. `institutions.advance_notice_minutes` (ya
+existe, configurable en Perfil de institución, expuesto por
+`GET /institutions/:id`) se usa como el ETA "típico" de referencia:
+
+```
+progreso% = clamp(100 - (etaSeconds / (advanceNoticeMinutes * 60)) * 100, 0, 100)
+```
+
+Es una aproximación deliberada, no una medición real del trayecto — no
+hay dato de ETA inicial guardado (`pickup_requests` solo tiene
+`eta_calculated_at`, el momento del último cálculo, nunca el primero). Si
+en el futuro se decide medir el progreso real, hace falta un campo nuevo
+que capture el ETA al crear el `pickup_request` — no es parte de esta
+decisión. `apps/board` resuelve `advanceNoticeMinutes` con una sola
+llamada a `GET /institutions/:id` al montar (mismo patrón "una sola carga"
+que `useDeliveryPoints`, ADR-069).
+
+### 5. Orden de Andén corregido: prioridad de estado, ETA como desempate
+
+`sortBoardRows` (`apps/board/src/board/board-rows.ts`) cambia de "ETA
+ascendente puro" a la regla real del kit:
+`arrived` (0) → `arriving` (1) → `en_route` (2), y dentro de cada grupo,
+ETA ascendente (sin ETA al final), empate final por nombre. Sereno usa la
+misma función — ya filtra `delivered`/`cancelled` aparte, así que el
+cambio de orden no le afecta en la práctica pero mantiene una sola fuente
+de verdad para las dos vistas públicas. Carril no reordena — el kit lo
+muestra en el orden que llega, sin repriorizar (`sorted` completo, no un
+`.slice`).
+
+### 6. Selector de modo: persistido por dispositivo, no reseteado en cada carga
+
+Decisión de implementación menor, sin ADR propio por su tamaño: el modo
+activo se guarda en `localStorage` del navegador del kiosco/dispositivo.
+Un kiosco configurado en Sereno, o una tablet de oficina configurada en
+Carril, no debe volver a Andén por defecto tras una recarga o una
+reconexión — el dispositivo casi nunca cambia de rol una vez instalado.
+
+### 7. Tokens de tema oscuro: no se agregan a `packages/ui`
+
+El kit real de Andén/Carril usa colores oscuros escritos directo en la
+JSX del mockup (`#0A1622`, `rgba(255,255,255,.5)`, etc.), no variables
+CSS nombradas — el proyecto de Claude Design nunca formalizó un token
+`--dark-*`. Se replican como constantes locales en `apps/board`, mismo
+criterio de ADR-069 punto 6 (app-local, sin segundo consumidor que
+justifique extraerlas a `packages/ui`): ningún otro frontend del proyecto
+usa tema oscuro.
+
+**Consecuencias.** Enmienda ADR-069 puntos 2 (orden) y 10 (implícito: la
+pantalla completa se reconstruye visualmente, la animación de pulso se
+conserva sin cambios de mecanismo). No cambia nada de ADR-068 (sesión,
+autorización base) ni del filtro por punto de entrega (ADR-069 punto 8),
+que se mantiene intacto y se re-skinnea para los 3 temas.
+
+## Referencias
+
+- ADR-011, ADR-068 (autorización sin restricción de `role` dentro del
+  tenant — Carril no es un rol nuevo, es una proyección de datos nueva).
+- ADR-050/051 (precedente exacto: separación de canal/payload por
+  consumidor — la base de la decisión del punto 2).
+- ADR-066 punto 5 (patrón de lookup `student_guardians` ya usado,
+  reutilizado aquí sin novedad).
+- ADR-069 (decisión que este ADR enmienda en los puntos 2 y 10; puntos
+  1/3/4/6/7/8/9/11 no cambian).
+- `design/casillego-design-system/ui_kits/tablero-institucion/index.html`
+  (fuente de verdad de los 3 modos — el mockup real, no una descripción).
+- `design/casillego-design-system/tokens/colors.css` (confirmado idéntico
+  a `packages/ui/src/tokens/colors.css` — sin tokens de tema oscuro en
+  ninguno de los dos).
+- `apps/portal/src/students/student-labels.ts` (`relationshipLabel`,
+  promovida a `packages/shared` por este ADR).
+- `specs/entities/institution.md` (`advance_notice_minutes`, campo
+  reutilizado sin migración).

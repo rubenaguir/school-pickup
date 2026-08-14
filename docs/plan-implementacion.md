@@ -376,36 +376,54 @@ ventana de salida) a cambio de un beneficio no demostrado sin al menos una
 institución real usando el sistema. Ver Backlog técnico para la condición
 exacta que reabriría este ítem.
 
-## Fase 9 — Frontend: `apps/board` (kiosko) ✅ completo
+## Fase 9 — Frontend: `apps/board` (kiosko) — reabierta tras auditoría contra el design system real
 
 - [x] Plomería base: sesión (`institution_member` reutilizada, sin
       mecanismo nuevo), `InstitutionContext` (primera membresía, sin
       switcher), routing, manifest, `packages/ui` como dependencia
       (ADR-068, commit `c659658`)
-- [x] Listado tipo "llegadas de aeropuerto" (★ hero): snapshot REST
-      (`GET /pickup-requests?institutionId=...`, página de 200) + canal WS
-      del feed completo (`board.gateway.ts`), orden por ETA, fusión de
-      deltas con voceo/animación solo en cambio real de `status` — nunca en
-      un recálculo de ETA (ADR-069), verificado en vivo con un ciclo
-      completo `en_route→arriving→arrived→delivered` disparado desde la
-      API real
+- [x] Lógica de fusión de deltas con voceo/animación solo en cambio real
+      de `status` — nunca en un recálculo de ETA (ADR-069), verificada en
+      vivo; **se mantiene sin cambios**, es correcta independientemente del
+      tema visual
 - [x] Voceo automático (TTS, Web Speech API) — solo transiciones a
       `arriving`/`arrived` (ADR-069 punto 5), confirmado por audio real;
-      timbre sintético aceptado a propósito, ver enmienda a ADR-069 punto 5
+      **se mantiene sin cambios**
+- [ ] **Reabierto (ADR-071): la pantalla implementada no correspondía al
+      mockup real del design system** — nunca se hizo el handoff desde
+      Claude Design antes de Fase 9; se construyó desde la descripción en
+      prosa de `design-brief.md`. Al importar el export real
+      (`design/casillego-design-system/`) se confirmó que el tablero tiene
+      **3 modos** (Andén/Sereno/Carril, selector de pastillas), no una
+      sola pantalla — y que el orden de filas correcto es prioridad de
+      estado, no ETA puro (ADR-071 punto 5)
+- [ ] Modo **Andén** (público, oscuro, tabla simple) — reconstrucción
+      visual fiel al kit; reutiliza el feed REST/WS ya existente sin
+      cambios de payload
+- [ ] Modo **Sereno** (público, claro, tarjetas, oculta
+      entregado/cancelado) — mismo feed que Andén
+- [ ] Modo **Carril** (staff autenticado, tabla densa con tutor/vehículo/
+      placa/barra de progreso) — requiere: tipo nuevo
+      `PickupRequestBoardMonitorPayload`, topic MQTT nuevo
+      (`board-monitor`), `BoardMonitorGateway` nuevo, snapshot REST con
+      `view=monitor`, `relationshipLabel` promovida de `apps/portal` a
+      `packages/shared` (ADR-071 puntos 2-3)
+- [ ] Barra de progreso de Carril, aproximada con `advance_notice_minutes`
+      de la institución (ADR-071 punto 4, sin migración)
+- [ ] Selector de modo persistido en `localStorage` por dispositivo
+      (ADR-071 punto 6)
 - [x] Filtro por punto de entrega en cliente (pastillas por `id`, catálogo
-      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8),
-      verificado en vivo
-- [x] Estado vacío/inactivo (`EmptyState` de `packages/ui`), verificado en
-      vivo
+      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8) — la
+      **lógica** se mantiene, pendiente re-skinnear contra los 3 temas
+      nuevos
+- [ ] Estado vacío/inactivo (`EmptyState` de `packages/ui`) — pendiente
+      adaptar visualmente a cada tema; hoy solo existe en el tema claro
+      heredado de Fase 9 original
 
-**Fase 9 completa.** `npm run check` en verde (864 tests). Único punto sin
-verificar contra una caída real del socket (para no interrumpir el `api`
-compartido): la reconexión con backoff, cubierta solo por los tests
-unitarios de `board-socket.ts` — no bloquea el cierre de la fase, queda
-como nota para una verificación oportunista futura si se presenta la
-ocasión sin riesgo (no es un ítem de Backlog técnico: es exactamente el
-mismo trade-off ya aceptado para `gate-console`/`apps/parent`, nunca
-verificado en vivo tampoco por la misma razón).
+**No completa.** El trabajo de Fase 9 original (voceo, fusión de deltas,
+filtro por punto de entrega) era funcionalmente correcto y se conserva —
+lo que se rehace es la capa visual completa más el canal nuevo de Carril.
+Ver ADR-071 para la especificación completa.
 
 ## Fase 10 — Pulido y defensa de tesis
 
@@ -448,4 +466,4 @@ verificado en vivo tampoco por la misma razón).
 | Sin `eslint-plugin-react` en `packages/ui/src` ni en los 3 frontends — solo hay reglas de `eslint-hooks` (ADR-036). Pérdida real de cobertura, no cosmética: sin `react/jsx-key` no se detecta `key` faltante en listas (`SegmentedTabs` ya mapea un array), sin `react/no-unescaped-entities`/`react/jsx-no-duplicate-props`/etc. no se detecta JSX mal formado | ADR-036 — última versión publicada de `eslint-plugin-react` (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 | Revisar en cada fase nueva de frontend (Fase 7 pantallas, Fase 8, Fase 9) si ya hay versión compatible con ESLint 10; si no, evaluar `@eslint-react/eslint-plugin` (peer `eslint: '*'`, ya confirmado disponible en el registro) como alternativa nativa de flat config |
 | ~~`npm run dev:api` falla con `Cannot find module .../dist/main`~~ — `incremental: true` + `deleteOutDir: true` dejaban un `.tsbuildinfo` obsoleto **fuera** de `dist/` (la ruta por defecto colapsa a `dist/../tsconfig.build.tsbuildinfo` porque `rootDir` es `./src`); `tsc` lo leía, creía que todo estaba al día y emitía 0 archivos saliendo con código 0 | Reincidente: se "resolvió" una primera vez borrando el `.tsbuildinfo` a mano, sin dejar registro, y volvió a aparecer | ✅ Resuelto — ADR-046, `incremental` retirado de `apps/api` y `apps/worker` (+ comentario de advertencia en ambos `tsconfig.json`). **Precedente a no repetir:** un síntoma de build que se arregla borrando un archivo a mano no está arreglado; si vuelve a aparecer un `dist/` vacío o incompleto, revisar la interacción caché/`deleteOutDir` antes de borrar nada |
 | Tests de integración contra Postgres real (`*.integration.spec.ts`, `npm run test:integration`) quedan **fuera de `npm run check`** a propósito (el gate principal no debe exigir una base de datos disponible) — nada obliga a correrlos antes de cerrar una fase | ADR-044 — primera categoría de test de este tipo en el proyecto, introducida al diagnosticar y corregir el defecto de `institution_id` en `NULL` | Correr `npm run test:integration` explícitamente antes de cerrar cualquier fase que toque escritura de entidades con relaciones (no solo confiar en `npm run check`); evaluar más adelante si conviene integrarlo a CI si el proyecto adopta CI |
-| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **tres veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069) | ADR-069 punto 6 — decisión consciente de no extraer todavía, no descuido | Evaluar un hook/factory genérico en `packages/shared` cuando se retome Fase 10 (pulido); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |
+| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **cuatro veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069), y `apps/board/src/board` de nuevo para el canal de Carril (ADR-071 punto 2) | ADR-069 punto 6, confirmado de nuevo en ADR-071 — decisión consciente de no extraer todavía, no descuido | Evaluar un hook/factory genérico en `packages/shared` cuando se retome Fase 10 (pulido); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |
