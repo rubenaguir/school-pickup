@@ -4356,6 +4356,16 @@ debe ser "ultra-glanceable", exactamente lo opuesto a su propósito.
    `SpeechSynthesisUtterance` (`Web Speech API`, ADR-068 punto 6) con
    `lang = 'es-MX'`; el navegador ya serializa utterances en cola, sin lógica
    propia de cola.
+   **Enmienda a ADR-069 punto 5 (verificación en vivo, post-implementación).**
+   El timbre robótico de `SpeechSynthesisUtterance` local (sin voz
+   descargada ni servicio externo, ADR-068 punto 6) se escuchó en vivo
+   contra las dos transiciones reales y **se acepta a propósito, no como
+   limitación temporal**: en el ambiente ruidoso de una salida escolar,
+   que la voz suene inequívocamente sintética ayuda a que el personal la
+   identifique de inmediato como el tablero automatizado hablando, no como
+   una persona. No se evalúa un proveedor de TTS externo por ahora — no es
+   un ítem de backlog, es una decisión cerrada.
+
 6. **`mergeBoardDelta`/`sortBoardRows`/`parseBoardDelta` son app-local**
    (`apps/board/src/board/board-rows.ts`), no una extracción a
    `packages/shared` — mismo criterio que ADR-033/ADR-036 (sin mover código

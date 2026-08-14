@@ -364,22 +364,36 @@ original de `docs/design-brief.md` para este frontend.
       (ADR-059, qué se notifica), esto sería la entrega real vía Push API
       del navegador
 
-## Fase 9 — Frontend: `apps/board` (kiosko)
+## Fase 9 — Frontend: `apps/board` (kiosko) ✅ completo
 
 - [x] Plomería base: sesión (`institution_member` reutilizada, sin
       mecanismo nuevo), `InstitutionContext` (primera membresía, sin
       switcher), routing, manifest, `packages/ui` como dependencia
       (ADR-068, commit `c659658`)
-- [ ] Listado tipo "llegadas de aeropuerto" (★ hero): snapshot REST
+- [x] Listado tipo "llegadas de aeropuerto" (★ hero): snapshot REST
       (`GET /pickup-requests?institutionId=...`, página de 200) + canal WS
-      del feed completo (`board.gateway.ts`, ya construido del lado `api`),
-      orden por ETA, fusión de deltas con voceo/animación solo en cambio de
-      `status` (ADR-069)
-- [ ] Voceo automático (TTS, Web Speech API) — solo transiciones a
-      `arriving`/`arrived` (ADR-069 punto 5)
-- [ ] Filtro por punto de entrega en cliente (pastillas por `id`, catálogo
-      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8)
-- [ ] Estado vacío/inactivo (`EmptyState` de `packages/ui`)
+      del feed completo (`board.gateway.ts`), orden por ETA, fusión de
+      deltas con voceo/animación solo en cambio real de `status` — nunca en
+      un recálculo de ETA (ADR-069), verificado en vivo con un ciclo
+      completo `en_route→arriving→arrived→delivered` disparado desde la
+      API real
+- [x] Voceo automático (TTS, Web Speech API) — solo transiciones a
+      `arriving`/`arrived` (ADR-069 punto 5), confirmado por audio real;
+      timbre sintético aceptado a propósito, ver enmienda a ADR-069 punto 5
+- [x] Filtro por punto de entrega en cliente (pastillas por `id`, catálogo
+      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8),
+      verificado en vivo
+- [x] Estado vacío/inactivo (`EmptyState` de `packages/ui`), verificado en
+      vivo
+
+**Fase 9 completa.** `npm run check` en verde (864 tests). Único punto sin
+verificar contra una caída real del socket (para no interrumpir el `api`
+compartido): la reconexión con backoff, cubierta solo por los tests
+unitarios de `board-socket.ts` — no bloquea el cierre de la fase, queda
+como nota para una verificación oportunista futura si se presenta la
+ocasión sin riesgo (no es un ítem de Backlog técnico: es exactamente el
+mismo trade-off ya aceptado para `gate-console`/`apps/parent`, nunca
+verificado en vivo tampoco por la misma razón).
 
 ## Fase 10 — Pulido y defensa de tesis
 
