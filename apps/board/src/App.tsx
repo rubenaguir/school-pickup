@@ -1,14 +1,21 @@
-import { MQTT_TOPIC_ROOT } from '@casillego/shared';
+import { BrowserRouter, Route, Routes } from 'react-router';
+import { AuthProvider } from './auth/AuthContext';
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { HOME_PATH, LOGIN_PATH } from './routes/paths';
+import { Home } from './screens/Home';
+import { Login } from './screens/Login';
 
 export function App() {
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
-      <h1>CasiLlego — Tablero</h1>
-      <p>
-        Esqueleto del tablero (PWA en modo kiosko). Mostrará los alumnos por recoger estilo
-        "llegadas de aeropuerto" y usará TTS para el voceo.
-      </p>
-      <small>MQTT topic root: {MQTT_TOPIC_ROOT}</small>
-    </main>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path={LOGIN_PATH} element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path={HOME_PATH} element={<Home />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
