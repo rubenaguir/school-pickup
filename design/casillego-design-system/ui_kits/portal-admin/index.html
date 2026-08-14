@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Portal admin" viewport="1500x960" -->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>*{box-sizing:border-box}html,body{margin:0;height:100%}body{background:var(--bg-canvas-alt);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+@keyframes yv-pulse{0%,100%{box-shadow:0 0 0 0 rgba(14,165,164,0)}50%{box-shadow:0 0 0 6px rgba(14,165,164,.16)}}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel-src" id="app-src">
+
+function Icon({ name, size = 20 }) {
+  const c = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8" };
+  const P = (d) => React.createElement('path', { d });
+  if (name === 'inbox') return React.createElement('svg', c, P("M3 12h4l2 3h6l2-3h4M5 12l1.4-7A2 2 0 018.35 3h7.3a2 2 0 011.95 2l1.4 7v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6z"));
+  if (name === 'building') return React.createElement('svg', c, P("M3 21h18M5 21V8l7-4 7 4v13"), P("M9 21v-5h6v5"));
+  if (name === 'users') return React.createElement('svg', c, React.createElement('circle', { cx: 9, cy: 8, r: 3.2 }), P("M3 20a6 6 0 0112 0"), P("M16 5.5a3 3 0 010 5.5M19 20a6 6 0 00-3.5-5.5"));
+  if (name === 'grid') return React.createElement('svg', c, React.createElement('rect', { x: 3, y: 3, width: 7, height: 9, rx: 1.5 }), React.createElement('rect', { x: 14, y: 3, width: 7, height: 5, rx: 1.5 }), React.createElement('rect', { x: 14, y: 12, width: 7, height: 9, rx: 1.5 }), React.createElement('rect', { x: 3, y: 16, width: 7, height: 5, rx: 1.5 }));
+  if (name === 'school') return React.createElement('svg', c, P("M3 21h18M5 21V7l8-4 7 4v13"), P("M9 9v.01M9 13v.01M9 17v.01"));
+  if (name === 'clock') return React.createElement('svg', c, React.createElement('rect', { x: 3, y: 4, width: 18, height: 18, rx: 2.5 }), P("M3 10h18M8 2v4M16 2v4"));
+  if (name === 'chart') return React.createElement('svg', c, P("M3 3v18h18"), React.createElement('rect', { x: 7, y: 11, width: 3, height: 6, rx: 1 }), React.createElement('rect', { x: 13, y: 7, width: 3, height: 10, rx: 1 }));
+  return React.createElement('svg', c, React.createElement('circle', { cx: 12, cy: 12, r: 3 }), P("M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2l-.4-2.6H8.9l-.4 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12a7 7 0 00.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2l.4 2.6h4.2l.4-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6A7 7 0 0019 12z"));
+}
+
+/* ============ ROLE: INSTITUCIÓN (Portal admin) ============ */
+const NAV = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'grid' },
+  { key: 'aprobacion', label: 'Aprobaciones', icon: 'inbox' },
+  { key: 'institucion', label: 'Institución', icon: 'school' },
+  { key: 'horarios', label: 'Horarios', icon: 'clock' },
+  { key: 'personal', label: 'Personal', icon: 'users' },
+  { key: 'reportes', label: 'Reportes', icon: 'chart' },
+];
+const REQUESTS = [
+  { id: 1, student: 'Camila Reyes Mora', grade: '3°B · Primaria', tutor: 'Laura Mora', rel: 'Mamá', school: 'Colegio Simón Bolívar', when: 'hace 12 min' },
+  { id: 2, student: 'Diego Hernández Lira', grade: '5°A · Primaria', tutor: 'Roberto Hernández', rel: 'Papá', school: 'Instituto Patria', when: 'hace 40 min' },
+  { id: 3, student: 'Ximena Flores Ávila', grade: '2°B · Primaria', tutor: 'Diana Ávila', rel: 'Mamá', school: 'Colegio del Valle Montessori', when: 'ayer' },
+];
+const DATOS_INST = [
+  { k: 'Nombre', v: 'Colegio Simón Bolívar' },
+  { k: 'Clave CCT', v: '09PPR1234X', mono: true },
+  { k: 'Dirección', v: 'Av. Universidad 1850, Coyoacán' },
+  { k: 'Niveles', v: 'Preescolar · Primaria · Secundaria' },
+  { k: 'Alumnos activos', v: '512' },
+  { k: 'Tutores vinculados', v: '438' },
+];
+const PUERTAS = [
+  { name: 'Puerta principal', detail: 'Av. Universidad · operador José Ramírez', estado: 'Activa', on: true },
+  { name: 'Puerta vehicular', detail: 'Calle lateral · operador Lucía Fernández', estado: 'Activa', on: true },
+  { name: 'Acceso preescolar', detail: 'Patio norte · solo turno matutino', estado: 'Inactiva', on: false },
+];
+const AJUSTES_INST = [
+  { k: 'Tolerancia de llegada', sub: 'antes de marcar plazo vencido', v: '10 min' },
+  { k: 'Aviso anticipado', sub: 'recordatorio al tutor', v: '15 min' },
+  { k: 'Radio de "Ya voy"', sub: 'distancia para activar', v: '3 km' },
+];
+const HORARIOS = [
+  { turno: 'Salida matutina', niveles: 'Preescolar', dias: 'Lun a Vie', ventana: '12:30 – 13:00', estado: 'Activo', color: 'var(--status-arriving)', soft: 'var(--status-arriving-bg)' },
+  { turno: 'Salida vespertina', niveles: 'Primaria · Secundaria', dias: 'Lun a Vie', ventana: '14:00 – 14:30', estado: 'Activo', color: 'var(--brand)', soft: 'var(--brand-soft)' },
+  { turno: 'Salida sabatina', niveles: 'Talleres', dias: 'Sábado', ventana: '13:00 – 13:20', estado: 'Pausado', color: 'var(--accent-teal)', soft: 'var(--accent-teal-bg)' },
+];
+const ESPECIALES = [
+  { dia: '30', mes: 'Jun', title: 'Fin de cursos', detail: 'Salida anticipada · todos los niveles', hora: '12:00' },
+  { dia: '15', mes: 'Sep', title: 'Ensayo cívico', detail: 'Salida escalonada · primaria', hora: '13:15' },
+];
+const ROL_META_INST = {
+  'Administrador': { c: 'var(--brand-strong)', s: 'var(--brand-soft)' },
+  'Operador de puerta': { c: 'var(--accent-teal-fg)', s: 'var(--accent-teal-bg)' },
+  'Coordinador': { c: 'var(--status-arriving-fg)', s: 'var(--status-arriving-bg)' },
+  'Docente': { c: 'var(--ink-600)', s: 'var(--surface-muted)' },
+};
+const PERSONAL = [
+  { name: 'Rocío Martínez', initials: 'RM', rol: 'Administrador', email: 'rocio.martinez@csb.mx', last: 'hace 5 min', estado: 'Activo' },
+  { name: 'José Ramírez', initials: 'JR', rol: 'Operador de puerta', email: 'jose.ramirez@csb.mx', last: 'hace 2 min', estado: 'Activo' },
+  { name: 'Lucía Fernández', initials: 'LF', rol: 'Operador de puerta', email: 'lucia.fernandez@csb.mx', last: 'hace 8 min', estado: 'Activo' },
+  { name: 'Ana Beltrán', initials: 'AB', rol: 'Coordinador', email: 'ana.beltran@csb.mx', last: 'hace 1 h', estado: 'Activo' },
+  { name: 'Pedro Soto', initials: 'PS', rol: 'Docente', email: 'pedro.soto@csb.mx', last: 'ayer', estado: 'Activo' },
+  { name: 'Carla Méndez', initials: 'CM', rol: 'Operador de puerta', email: 'carla.mendez@csb.mx', last: '—', estado: 'Invitado' },
+];
+const REP_KPIS = [
+  { label: 'Salidas registradas', value: '21', delta: 'ciclo en curso', warn: false, neutral: true },
+  { label: 'Alumnos / día', value: '84', delta: '▲ 6% vs mes previo', warn: false },
+  { label: 'Puntualidad', value: '94%', delta: '▲ 2 pts', warn: false },
+  { label: 'Tiempo en puerta', value: '2:10', delta: '▼ 18 s', warn: false },
+];
+const REP_CHART = [
+  { d: 'Lun', v: 78 }, { d: 'Mar', v: 81 }, { d: 'Mié', v: 76 }, { d: 'Jue', v: 88 },
+  { d: 'Vie', v: 84 }, { d: 'Lun', v: 80 }, { d: 'Hoy', v: 41 },
+];
+const REP_PUNT = [
+  { label: 'Preescolar', pct: 97 },
+  { label: 'Primaria', pct: 93 },
+  { label: 'Secundaria', pct: 91 },
+];
+
+const DASH_ROSTER = [
+  { name: 'Valentina Cruz Peña',  grupo: 'K2',  initials: 'VC', statusKey: 'arrived',   etaMin: 0,  pName: 'Marisol Peña',      pRel: 'Mamá',   vehiculo: 'Nissan Kicks rojo', placa: 'PCM-90-12' },
+  { name: 'Sebastián Ortiz Luna', grupo: '6°B', initials: 'SO', statusKey: 'arrived',   etaMin: 0,  pName: 'Pablo Ortiz',       pRel: 'Papá',   vehiculo: 'Mazda 3 azul',      placa: 'SMT-08-45' },
+  { name: 'Regina Campos Téllez', grupo: '3°A', initials: 'RC', statusKey: 'arrived',   etaMin: 0,  pName: 'Hugo Campos',       pRel: 'Papá',   vehiculo: 'Ford Escape',       placa: 'WQR-02-77' },
+  { name: 'Diego Hernández Lira', grupo: '5°A', initials: 'DH', statusKey: 'arriving',  etaMin: 2,  pName: 'Roberto Hernández', pRel: 'Papá',   vehiculo: 'VW Jetta blanco',   placa: 'NLT-44-21' },
+  { name: 'Renata Salas Vega',    grupo: '4°A', initials: 'RS', statusKey: 'arriving',  etaMin: 3,  pName: 'Carmen Vega',       pRel: 'Abuela', vehiculo: 'Honda CR-V plata',  placa: 'RFG-31-88' },
+  { name: 'Camila Reyes Mora',    grupo: '3°B', initials: 'CR', statusKey: 'en_route',  etaMin: 6,  pName: 'Laura Mora',        pRel: 'Mamá',   vehiculo: 'Mazda CX-5 gris',   placa: 'ABC-12-34' },
+  { name: 'Mateo Domínguez Ríos', grupo: '1°C', initials: 'MD', statusKey: 'en_route',  etaMin: 9,  pName: 'José Luna',         pRel: 'Chofer', vehiculo: 'Toyota Hiace',      placa: 'UEV-77-03' },
+  { name: 'Ximena Flores Ávila',  grupo: '2°B', initials: 'XF', statusKey: 'en_route',  etaMin: 11, pName: 'Diana Ávila',       pRel: 'Mamá',   vehiculo: 'Kia Sportage',      placa: 'TZX-19-60' },
+  { name: 'Emiliano Navarro Gil', grupo: 'K3',  initials: 'EN', statusKey: 'delivered', etaMin: 0,  pName: 'Sofía Gil',         pRel: 'Mamá',   vehiculo: 'Chevrolet Aveo',    placa: 'VBN-55-12' },
+];
+const DASH_S = {
+  arrived:   { label: 'En puerta', color: 'var(--status-arrived)',  soft: 'var(--status-arrived-bg)' },
+  arriving:  { label: 'Llegando',  color: 'var(--status-arriving)', soft: 'var(--status-arriving-bg)' },
+  en_route:  { label: 'En camino', color: 'var(--status-en-route)', soft: 'var(--status-en-route-bg)' },
+  delivered: { label: 'Entregado', color: 'var(--status-delivered)', soft: 'var(--status-delivered-bg)' },
+};
+const DASH_ALERTS = [
+  { name: 'Regina Campos Téllez', detail: '+12 min en puerta sin completar la entrega', icon: '!', color: 'var(--danger)', iconBg: 'rgba(220,38,38,.12)', bg: '#FEF4F4', border: 'rgba(220,38,38,.18)' },
+  { name: 'Mateo Domínguez Ríos', detail: 'Recoge chofer autorizado — verificar identidad en puerta', icon: '?', color: 'var(--status-arriving-fg)', iconBg: 'var(--status-arriving-bg)', bg: '#FFFBEB', border: 'rgba(245,158,11,.22)' },
+  { name: 'Santiago Bravo Mena', detail: 'Recogida cancelada por el tutor · pasa a contraturno', icon: '×', color: 'var(--accent-slate-fg)', iconBg: 'var(--accent-slate-bg)', bg: '#F6F8FA', border: 'rgba(100,116,139,.16)' },
+];
+const DASH_NIVELES = [
+  { label: 'Preescolar', done: 12, total: 18 },
+  { label: 'Primaria', done: 22, total: 48 },
+  { label: 'Secundaria', done: 7, total: 20 },
+];
+const DASH_FILTER_MAP = { 'Todos': null, 'En puerta': ['arrived'], 'En camino': ['arriving', 'en_route'], 'Entregados': ['delivered'] };
+
+function DashboardEnVivo() {
+  const [filter, setFilter] = React.useState('Todos');
+  const esperados = 86, entregados = 41, enPuerta = 5, enCamino = 14;
+  const pendiente = esperados - entregados - enPuerta - enCamino;
+  const pct = Math.round((entregados / esperados) * 100);
+  const prio = { arrived: 0, arriving: 1, en_route: 2, delivered: 3 };
+  const rows = DASH_ROSTER
+    .filter((r) => !DASH_FILTER_MAP[filter] || DASH_FILTER_MAP[filter].includes(r.statusKey))
+    .sort((a, b) => (prio[a.statusKey] - prio[b.statusKey]) || (a.etaMin - b.etaMin))
+    .map((r) => {
+      const m = DASH_S[r.statusKey];
+      const etaText = r.statusKey === 'arrived' ? 'Puerta' : r.statusKey === 'delivered' ? 'Listo' : r.etaMin + ' min';
+      return { ...r, m, etaText };
+    });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Salida vespertina</h1>
+          <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>Ventana 14:00–14:30</div>
+        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, background: 'var(--ink-900)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 10px rgba(14,31,48,.18)' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>Abrir tablero
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 18 }}>
+        {[
+          { label: 'Esperados', value: esperados, sub: 'alumnos en esta salida', dot: null },
+          { label: 'En camino', value: enCamino, sub: 'tutores en ruta', dot: 'var(--status-en-route)' },
+          { label: 'En puerta', value: enPuerta, sub: 'esperando entrega', dot: 'var(--status-arrived)', color: 'var(--status-arrived-fg)', glow: true },
+          { label: 'Entregados', value: entregados, sub: pct + '% completado', dot: 'var(--status-delivered)', color: 'var(--status-delivered-fg)' },
+        ].map((k) => (
+          <div key={k.label} style={{ background: '#fff', border: `1px solid ${k.glow ? 'rgba(14,165,164,.45)' : 'var(--border)'}`, borderRadius: 14, padding: '18px 20px', boxShadow: 'var(--shadow-xs)', animation: k.glow ? 'yv-pulse 2.6s ease-in-out infinite' : 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{k.dot && <span style={{ width: 9, height: 9, borderRadius: '50%', background: k.dot }} />}<span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>{k.label}</span></div>
+            <div style={{ fontSize: 34, fontWeight: 800, color: k.color || 'var(--ink-900)', letterSpacing: '-.02em', lineHeight: 1.1, marginTop: 8 }}>{k.value}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, marginTop: 3 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 18 }}>
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>Avance de la salida</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, marginTop: 2 }}>{entregados} de {esperados} alumnos entregados</div>
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--status-delivered-fg)', letterSpacing: '-.02em', lineHeight: 1 }}>{pct}%</div>
+          </div>
+          <div style={{ height: 12, borderRadius: 7, background: 'var(--surface-muted)', overflow: 'hidden', margin: '18px 0 22px' }}>
+            <span style={{ display: 'block', height: '100%', width: pct + '%', background: 'var(--status-delivered)', borderRadius: 7 }} />
+          </div>
+          <div style={{ display: 'flex', height: 18, borderRadius: 6, overflow: 'hidden', gap: 2 }}>
+            <span style={{ width: (entregados / esperados * 100) + '%', background: 'var(--status-delivered)' }} />
+            <span style={{ width: (enPuerta / esperados * 100) + '%', background: 'var(--status-arrived)' }} />
+            <span style={{ width: (enCamino / esperados * 100) + '%', background: 'var(--status-en-route)' }} />
+            <span style={{ width: (pendiente / esperados * 100) + '%', background: 'var(--border-strong)' }} />
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginTop: 14 }}>
+            {[['Entregados', 'var(--status-delivered)', entregados], ['En puerta', 'var(--status-arrived)', enPuerta], ['En camino', 'var(--status-en-route)', enCamino], ['Sin avisar', 'var(--border-strong)', pendiente]].map(([l, c, v]) => (
+              <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-700)', fontWeight: 600 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: c }} />{l} <b style={{ color: 'var(--ink-900)' }}>{v}</b></span>
+            ))}
+          </div>
+          <div style={{ height: 1, background: 'var(--border-hairline)', margin: '22px 0 18px' }} />
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 14 }}>Por nivel</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {DASH_NIVELES.map((n) => (
+              <div key={n.label} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ width: 96, flexShrink: 0, fontSize: 14, fontWeight: 700, color: 'var(--ink-700)' }}>{n.label}</span>
+                <span style={{ flex: 1, height: 9, borderRadius: 5, background: 'var(--surface-muted)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: Math.round(n.done / n.total * 100) + '%', background: 'var(--status-delivered)', borderRadius: 5 }} /></span>
+                <span style={{ width: 74, flexShrink: 0, textAlign: 'right', fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', fontVariantNumeric: 'tabular-nums' }}>{n.done} / {n.total}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>Requiere atención</span>
+            <span style={{ background: '#FEF2F2', color: 'var(--danger)', fontSize: 13, fontWeight: 800, minWidth: 24, height: 24, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px' }}>{DASH_ALERTS.length}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {DASH_ALERTS.map((a) => (
+              <div key={a.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 14px', borderRadius: 12, background: a.bg, border: `1px solid ${a.border}` }}>
+                <span style={{ width: 32, height: 32, borderRadius: 9, background: a.iconBg, color: a.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800 }}>{a.icon}</span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>{a.name}</span>
+                  <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, lineHeight: 1.35 }}>{a.detail}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-xs)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', flexWrap: 'wrap', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>Actividad en vivo</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--accent-teal-fg)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent-teal)' }} />en tiempo real</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {Object.keys(DASH_FILTER_MAP).map((label) => {
+              const active = filter === label;
+              return <span key={label} onClick={() => setFilter(label)} style={{ padding: '7px 15px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: active ? 'var(--ink-900)' : '#fff', color: active ? '#fff' : 'var(--ink-700)', border: `1px solid ${active ? 'var(--ink-900)' : 'var(--border-strong)'}` }}>{label}</span>;
+            })}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .7fr 1.3fr 1.2fr 1.2fr .9fr', gap: 14, padding: '10px 24px', background: 'var(--surface-muted)', borderTop: '1px solid var(--border-hairline)', borderBottom: '1px solid var(--border-hairline)', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>
+          <span>Alumno</span><span>Grupo</span><span>Recoge</span><span>Vehículo</span><span>Estado</span><span style={{ textAlign: 'right' }}>ETA</span>
+        </div>
+        {rows.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', fontSize: 14, color: 'var(--ink-200)', fontWeight: 600 }}>Sin alumnos en este estado</div>
+        ) : rows.map((r) => (
+          <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '1.6fr .7fr 1.3fr 1.2fr 1.2fr .9fr', gap: 14, alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid var(--surface-muted)', opacity: r.statusKey === 'delivered' ? 0.55 : 1 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <span style={{ width: 36, height: 36, borderRadius: 10, background: r.m.soft, color: r.m.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{r.initials}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+            </span>
+            <span><span style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, color: 'var(--ink-700)', background: 'var(--surface-muted)', padding: '3px 10px', borderRadius: 6 }}>{r.grupo}</span></span>
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-700)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.pName}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>{r.pRel}</span>
+            </span>
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: 13, color: 'var(--ink-700)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.vehiculo}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-200)', fontFamily: 'var(--font-mono)', letterSpacing: '.04em' }}>{r.placa}</span>
+            </span>
+            <span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: r.m.color, background: r.m.soft, padding: '5px 12px', borderRadius: 999 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: r.m.color }} />{r.m.label}</span></span>
+            <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', fontVariantNumeric: 'tabular-nums' }}>{r.etaText}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InstitutionRole() {
+  const [view, setView] = React.useState('dashboard');
+  const [reqs, setReqs] = React.useState(REQUESTS.map((r) => ({ ...r, resolved: null })));
+  const resolve = (id, verdict) => setReqs((rs) => rs.map((r) => (r.id === id ? { ...r, resolved: verdict } : r)));
+  const pending = reqs.filter((r) => !r.resolved).length;
+
+  return (
+    <div style={{ width: 1440, height: 900, display: 'flex', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-frame)', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ width: 250, background: 'var(--ink-900)', color: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '24px 22px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <img src="../../assets/pin-mark.svg" width="28" height="32" alt="" />
+          <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>Casi<span style={{ color: 'var(--brand)' }}>Llego</span></span>
+        </div>
+        <div style={{ padding: '0 22px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.4)' }}>Institución</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,.85)', marginTop: 3 }}>Colegio Simón Bolívar</div>
+        </div>
+        <div style={{ flex: 1, padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {NAV.map((n) => {
+            const active = view === n.key;
+            return (
+              <span key={n.key} onClick={() => !n.linksOut && setView(n.key)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 11, fontSize: 15, cursor: n.linksOut ? 'default' : 'pointer', background: active ? 'rgba(251,106,69,.20)' : 'transparent', color: active ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: active ? 700 : 600 }}>
+                <Icon name={n.icon} />{n.label}
+                {n.key === 'aprobacion' && pending > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'var(--status-arriving)', color: '#1a1205', fontSize: 12, fontWeight: 800, minWidth: 22, height: 22, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{pending}</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+        <div style={{ padding: '16px 18px', borderTop: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>RM</span>
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Rocío Martínez</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Administrador</span>
+          </span>
+        </div>
+      </div>
+      <div style={{ flex: 1, background: 'var(--surface-sunken)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ height: 68, flexShrink: 0, background: '#fff', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px' }}>
+          <span style={{ fontSize: 14, color: 'var(--ink-200)', fontWeight: 500 }}>Institución <span style={{ color: 'var(--ink-50)' }}>/</span> <span style={{ color: 'var(--ink-900)', fontWeight: 700 }}>{NAV.find((n) => n.key === view).label}</span></span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 14px', width: 240, color: 'var(--ink-200)', fontSize: 14 }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>Buscar
+          </span>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: '26px 28px' }}>
+          {view === 'aprobacion' && (
+            <div>
+              <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Bandeja de aprobación</h1>
+              <div style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 500, marginBottom: 20 }}>Solicitudes de asociación alumno–tutor pendientes de revisión</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {reqs.map((r) => (
+                  <div key={r.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20, boxShadow: 'var(--shadow-xs)' }}>
+                    <span style={{ width: 48, height: 48, borderRadius: 13, background: 'var(--accent-teal-bg)', color: 'var(--accent-teal-fg)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                      {r.student.split(' ').slice(0, 2).map((w) => w[0]).join('')}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)' }}>{r.student}</div>
+                      <div style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{r.grade} · {r.school}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-600)' }}>{r.tutor} · {r.rel}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 600 }}>{r.when}</div>
+                    </div>
+                    {!r.resolved ? (
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <span onClick={() => resolve(r.id, 'rejected')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 11, border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Rechazar</span>
+                        <span onClick={() => resolve(r.id, 'approved')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, background: 'var(--success)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Aprobar</span>
+                      </div>
+                    ) : (
+                      <span style={{ padding: '11px 18px', borderRadius: 11, fontSize: 14, fontWeight: 700, flexShrink: 0, background: r.resolved === 'approved' ? 'var(--status-delivered-bg)' : 'var(--status-cancelled-bg)', color: r.resolved === 'approved' ? 'var(--status-delivered-fg)' : 'var(--status-cancelled-fg)' }}>{r.resolved === 'approved' ? 'Aprobada' : 'Rechazada'}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {view === 'institucion' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Institución</h1>
+                  <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>Datos y configuración del plantel</div>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, border: '1px solid var(--border-strong)', color: 'var(--ink-600)', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: '#fff' }}>Editar</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 16 }}>Datos generales</div>
+                    {DATOS_INST.map((d) => (
+                      <div key={d.k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--surface-muted)' }}>
+                        <span style={{ fontSize: 14, color: 'var(--ink-200)', fontWeight: 600 }}>{d.k}</span>
+                        <span style={{ fontSize: 15, color: 'var(--ink-900)', fontWeight: 700, fontFamily: d.mono ? 'var(--font-mono)' : 'inherit' }}>{d.v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>Puntos de entrega</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)', cursor: 'pointer' }}>+ Agregar</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {PUERTAS.map((p) => (
+                        <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 15px', border: '1px solid var(--border-hairline-2)', borderRadius: 12 }}>
+                          <span style={{ width: 38, height: 38, borderRadius: 10, background: p.on ? 'var(--accent-teal-bg)' : 'var(--accent-slate-bg)', color: p.on ? 'var(--accent-teal-fg)' : 'var(--accent-slate-fg)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                          </span>
+                          <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>{p.name}</span>
+                            <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{p.detail}</span>
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: p.on ? 'var(--accent-teal-fg)' : 'var(--accent-slate-fg)', background: p.on ? 'var(--accent-teal-bg)' : 'var(--accent-slate-bg)', padding: '5px 11px', borderRadius: 999, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: p.on ? 'var(--accent-teal)' : 'var(--accent-slate)' }} />{p.estado}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 14 }}>Tolerancia y avisos</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {AJUSTES_INST.map((a) => (
+                        <div key={a.k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>{a.k}</span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 500 }}>{a.sub}</span>
+                          </span>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--accent-teal-fg)', flexShrink: 0 }}>{a.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ background: 'var(--ink-900)', borderRadius: 14, padding: '22px 24px', color: '#fff' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)', marginBottom: 14 }}>Coordinación de salida</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+                      <span style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,.14)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800 }}>AB</span>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 16, fontWeight: 700 }}>Ana Beltrán</span>
+                        <span style={{ fontSize: 13, color: 'rgba(255,255,255,.6)' }}>Coordinadora · 55 1290 8845</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'horarios' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Horarios</h1>
+                  <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>Ventanas de salida por turno</div>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 10px var(--brand-shadow)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>Nuevo horario
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {HORARIOS.map((h) => (
+                  <div key={h.turno} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '20px 24px', boxShadow: 'var(--shadow-xs)', display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 1fr auto', gap: 20, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+                      <span style={{ width: 46, height: 46, borderRadius: 13, background: h.soft, color: h.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="clock" size={22} />
+                      </span>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>{h.turno}</span>
+                        <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{h.niveles}</span>
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>Días</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-700)' }}>{h.dias}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>Ventana</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', fontVariantNumeric: 'tabular-nums' }}>{h.ventana}</span>
+                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: h.estado === 'Activo' ? 'var(--status-delivered-fg)' : 'var(--accent-slate-fg)', background: h.estado === 'Activo' ? 'var(--status-delivered-bg)' : 'var(--accent-slate-bg)', padding: '6px 13px', borderRadius: 999, justifySelf: 'end' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: h.estado === 'Activo' ? 'var(--status-delivered)' : 'var(--accent-slate)' }} />{h.estado}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '20px 24px', boxShadow: 'var(--shadow-xs)', marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 14 }}>Días especiales</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  {ESPECIALES.map((e) => (
+                    <div key={e.title} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ width: 54, flexShrink: 0, textAlign: 'center', background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '6px 0', display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)' }}>{e.dia}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-200)', textTransform: 'uppercase', marginTop: 2 }}>{e.mes}</span>
+                      </span>
+                      <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>{e.title}</span>
+                        <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{e.detail}</span>
+                      </span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--status-arriving-fg)', background: 'var(--status-arriving-bg)', padding: '5px 12px', borderRadius: 999 }}>{e.hora}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'personal' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Personal</h1>
+                  <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>{PERSONAL.length} personas con acceso</div>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 10px var(--brand-shadow)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" /></svg>Invitar
+                </span>
+              </div>
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-xs)', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 1.4fr 1fr auto', gap: 16, padding: '13px 24px', background: 'var(--surface-muted)', borderBottom: '1px solid var(--border-hairline)' }}>
+                  {['Nombre', 'Rol', 'Correo', 'Último acceso'].map((h) => <span key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>{h}</span>)}
+                  <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>Estado</span>
+                </div>
+                {PERSONAL.map((u) => {
+                  const rm = ROL_META_INST[u.rol];
+                  const inv = u.estado === 'Invitado';
+                  return (
+                    <div key={u.name} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 1.4fr 1fr auto', gap: 16, alignItems: 'center', padding: '13px 24px', borderBottom: '1px solid var(--surface-muted)', opacity: inv ? 0.7 : 1 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                        <span style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand-strong)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{u.initials}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.name}</span>
+                      </span>
+                      <span><span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 13, fontWeight: 700, color: rm.c, background: rm.s, padding: '5px 12px', borderRadius: 999 }}>{u.rol}</span></span>
+                      <span style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email}</span>
+                      <span style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 600 }}>{u.last}</span>
+                      <span style={{ justifySelf: 'end' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: inv ? 'var(--status-arriving-fg)' : 'var(--status-delivered-fg)', background: inv ? 'var(--status-arriving-bg)' : 'var(--status-delivered-bg)', padding: '5px 12px', borderRadius: 999 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: inv ? 'var(--status-arriving)' : 'var(--status-delivered)' }} />{u.estado}</span></span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {view === 'reportes' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Reportes</h1>
+                  <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>Resumen operativo · Últimos 7 días</div>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, border: '1px solid var(--border-strong)', color: 'var(--ink-600)', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: '#fff' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>Exportar
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 18 }}>
+                {REP_KPIS.map((k) => (
+                  <div key={k.label} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', boxShadow: 'var(--shadow-xs)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>{k.label}</div>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em', lineHeight: 1.1, marginTop: 8 }}>{k.value}</div>
+                    <div style={{ fontSize: 13, color: k.neutral ? 'var(--ink-200)' : 'var(--status-delivered-fg)', fontWeight: 700, marginTop: 3 }}>{k.delta}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16 }}>
+                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>Entregas por día</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, marginTop: 2 }}>Alumnos entregados · últimos 7 días lectivos</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, height: 200, marginTop: 24, paddingBottom: 4 }}>
+                    {REP_CHART.map((c, i) => (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, height: '100%', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-600)', fontVariantNumeric: 'tabular-nums' }}>{c.v}</span>
+                        <span style={{ width: '100%', maxWidth: 42, height: Math.round((c.v / 90) * 100) + '%', background: i === REP_CHART.length - 1 ? 'var(--accent-teal)' : 'var(--brand)', borderRadius: '7px 7px 3px 3px' }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-200)' }}>{c.d}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.01em', marginBottom: 18 }}>Puntualidad por nivel</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    {REP_PUNT.map((p) => (
+                      <div key={p.label} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-700)' }}>{p.label}</span>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink-900)', fontVariantNumeric: 'tabular-nums' }}>{p.pct}%</span>
+                        </div>
+                        <span style={{ height: 9, borderRadius: 5, background: 'var(--surface-muted)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: p.pct + '%', background: 'var(--status-delivered)', borderRadius: 5 }} /></span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ height: 1, background: 'var(--border-hairline)', margin: '22px 0 16px' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 600 }}>Tiempo prom. en puerta</span>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-teal-fg)', fontVariantNumeric: 'tabular-nums' }}>2:10 min</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'dashboard' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14, marginBottom: 4 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(14,165,164,.12)', color: 'var(--accent-teal-fg)', border: '1px solid rgba(14,165,164,.28)', borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 700 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-teal)' }} />Salida en curso
+                </span>
+              </div>
+              <DashboardEnVivo />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ ROLE: OPERADOR (Super-admin / OPS) ============ */
+const OPS_NAV = [
+  { key: 'resumen', label: 'Resumen', icon: 'grid' },
+  { key: 'instituciones', label: 'Instituciones', icon: 'building' },
+  { key: 'usuarios', label: 'Usuarios', icon: 'users' },
+  { key: 'configuracion', label: 'Configuración', icon: 'gear' },
+];
+const INSTITUTIONS = [
+  { id: 'i1', name: 'Colegio del Valle Montessori', type: 'Escuela · Preescolar', kind: 'Escuela', zona: 'Benito Juárez, CDMX', rfc: 'CDV120304AB1', responsable: 'Adriana Beltrán', correo: 'admin@cdvm.mx', when: 'hace 3 h' },
+  { id: 'i2', name: 'Instituto Patria', type: 'Escuela · Secundaria', kind: 'Escuela', zona: 'San Jerónimo, CDMX', rfc: 'IPA980512QX4', responsable: 'Marcos Téllez', correo: 'direccion@patria.edu.mx', when: 'hace 1 día' },
+  { id: 'i3', name: 'Aqua Coyoacán', type: 'Actividad · Natación', kind: 'Actividad', zona: 'Del Valle, CDMX', rfc: 'AQC210809LM2', responsable: 'Pamela Ríos', correo: 'hola@aquacoyoacan.mx', when: 'hace 1 día' },
+  { id: 'i4', name: 'TechKids Robótica', type: 'Actividad · Robótica', kind: 'Actividad', zona: 'Roma Norte, CDMX', rfc: 'TKR220114RB7', responsable: 'Iván Soto', correo: 'contacto@techkids.mx', when: 'hace 2 días' },
+  { id: 'i5', name: 'Colegio Williams', type: 'Escuela · Primaria', kind: 'Escuela', zona: 'Mixcoac, CDMX', rfc: 'CWI760228PR9', responsable: 'Lucía Hernández', correo: 'admin@williams.edu.mx', when: 'hace 2 días' },
+];
+const USERS_RAW = [
+  { id: 'u1', name: 'Daniel Quiroz', email: 'daniel@casillego.mx', role: 'Operador', status: 'Activo', lastAccess: 'hace 5 min' },
+  { id: 'u2', name: 'Sofía Mendoza', email: 'sofia@casillego.mx', role: 'Soporte', status: 'Activo', lastAccess: 'hace 2 h' },
+  { id: 'u3', name: 'Ricardo Núñez', email: 'ricardo@casillego.mx', role: 'Finanzas', status: 'Activo', lastAccess: 'ayer' },
+  { id: 'u4', name: 'Mariana Ortiz', email: 'mariana@casillego.mx', role: 'Soporte', status: 'Invitación pendiente', lastAccess: '—' },
+  { id: 'u5', name: 'Carlos Vega', email: 'carlos.vega@casillego.mx', role: 'Solo lectura', status: 'Activo', lastAccess: 'hace 3 días' },
+  { id: 'u6', name: 'Elena Bravo', email: 'elena@casillego.mx', role: 'Soporte', status: 'Suspendido', lastAccess: 'hace 2 sem' },
+];
+const ROLE_META = {
+  'Operador': { bg: 'var(--brand-soft)', col: 'var(--brand-strong)', dot: 'var(--brand)' },
+  'Soporte': { bg: 'var(--accent-teal-bg)', col: 'var(--accent-teal-fg)', dot: 'var(--accent-teal)' },
+  'Finanzas': { bg: 'var(--accent-violet-bg)', col: 'var(--accent-violet-fg)', dot: 'var(--accent-violet)' },
+  'Solo lectura': { bg: 'var(--accent-slate-bg)', col: 'var(--accent-slate-fg)', dot: 'var(--accent-slate)' },
+};
+const STATUS_META = {
+  'Activo': { bg: 'var(--status-delivered-bg)', col: 'var(--status-delivered-fg)' },
+  'Invitación pendiente': { bg: 'var(--status-arriving-bg)', col: 'var(--status-arriving-fg)' },
+  'Suspendido': { bg: 'var(--accent-slate-bg)', col: 'var(--accent-slate-fg)' },
+};
+const initialsOf = (n) => n.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const BAR_VALS = [620, 710, 680, 840, 790, 910, 560, 880, 940, 1020, 870, 960, 1080, 1140];
+
+function OpsRole() {
+  const [view, setView] = React.useState('resumen');
+  const [filter, setFilter] = React.useState('Todas');
+  const [resolutions, setResolutions] = React.useState({});
+  const [roleFilter, setRoleFilter] = React.useState('Todos');
+  const [toggles, setToggles] = React.useState({ push: true, sms: true, correo: true, dosFA: true, auditoria: true, sesion: false });
+
+  const pendingCount = INSTITUTIONS.filter((r) => !resolutions[r.id]).length;
+  const kindOf = { Escuelas: 'Escuela', Actividades: 'Actividad' };
+  const rows = INSTITUTIONS.filter((r) => filter === 'Todas' || r.kind === kindOf[filter]);
+  const users = USERS_RAW.filter((u) => roleFilter === 'Todos' || u.role === roleFilter);
+  const labels = { resumen: 'Resumen', instituciones: 'Instituciones', usuarios: 'Usuarios', configuracion: 'Configuración' };
+  const toggle = (key) => setToggles((s) => ({ ...s, [key]: !s[key] }));
+
+  const stats = [
+    { label: 'Instituciones activas', value: '48', chipText: '▲ 6 este mes' },
+    { label: 'Solicitudes pendientes', value: String(pendingCount), chipText: 'Por validar', warn: true },
+    { label: 'Tutores registrados', value: '3,214', chipText: '▲ 218 este mes' },
+    { label: 'Recogidas en junio', value: '18,902', chipText: '▲ 12% vs mayo' },
+  ];
+
+  return (
+    <div style={{ width: 1440, height: 900, display: 'flex', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-frame)', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ width: 250, background: 'var(--ink-900)', color: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '24px 22px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <img src="../../assets/pin-mark.svg" width="28" height="32" alt="" />
+          <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>Casi<span style={{ color: 'var(--brand)' }}>Llego</span></span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: 'var(--brand)', background: 'rgba(251,106,69,.16)', padding: '3px 7px', borderRadius: 6 }}>OPS</span>
+        </div>
+        <div style={{ padding: '0 22px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.4)' }}>Operador</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,.85)', marginTop: 3 }}>Consola global</div>
+        </div>
+        <div style={{ flex: 1, padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {OPS_NAV.map((n) => {
+            const active = view === n.key;
+            return (
+              <span key={n.key} onClick={() => setView(n.key)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 11, fontSize: 15, cursor: 'pointer', background: active ? 'rgba(251,106,69,.20)' : 'transparent', color: active ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: active ? 700 : 600 }}>
+                <Icon name={n.icon} />{n.label}
+                {n.key === 'instituciones' && pendingCount > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'var(--status-arriving)', color: '#1a1205', fontSize: 12, fontWeight: 800, minWidth: 22, height: 22, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 7px' }}>{pendingCount}</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+        <div style={{ padding: '16px 18px', borderTop: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--brand)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>DQ</span>
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Daniel Quiroz</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Operador CasiLlego</span>
+          </span>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--surface-sunken)', minWidth: 0 }}>
+        <div style={{ height: 68, flexShrink: 0, background: '#fff', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px' }}>
+          <div style={{ fontSize: 14, color: 'var(--ink-200)', fontWeight: 500 }}>Operador <span style={{ color: 'var(--ink-50)' }}>/</span> <span style={{ color: 'var(--ink-900)', fontWeight: 700 }}>{labels[view]}</span></div>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 14px', width: 260, color: 'var(--ink-200)', fontSize: 14 }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>Buscar institución
+          </span>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '26px 28px' }}>
+          {view === 'resumen' && (
+            <div>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Resumen</h1>
+              <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, margin: '4px 0 20px' }}>Junio 2026 · vs Mayo</div>
+              <div style={{ display: 'flex', gap: 14, marginBottom: 18 }}>
+                {stats.map((s) => (
+                  <div key={s.label} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', gap: 9, boxShadow: 'var(--shadow-xs)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-200)' }}>{s.label}</span>
+                    <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em', lineHeight: 1 }}>{s.value}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: s.warn ? 'var(--status-arriving-fg)' : 'var(--status-delivered-fg)', background: s.warn ? 'var(--status-arriving-bg)' : 'var(--status-delivered-bg)', padding: '4px 10px', borderRadius: 999, width: 'max-content' }}>{s.chipText}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                <div style={{ flex: 2, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)' }}>Recogidas por día</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 600 }}>Últimos 14 días</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 188 }}>
+                    {BAR_VALS.map((v, i) => (
+                      <span key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+                        <span style={{ width: '100%', height: Math.round((v / 1200) * 100) + '%', background: i === BAR_VALS.length - 1 ? 'var(--status-arrived)' : 'var(--status-en-route)', borderRadius: '6px 6px 0 0' }} />
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12, color: 'var(--ink-100)', fontWeight: 500 }}>
+                    <span>14 jun</span><span>21 jun</span><span>Hoy</span>
+                  </div>
+                </div>
+                <div style={{ flex: 1, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', display: 'block', marginBottom: 18 }}>Instituciones por estado</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {[{ label: 'Activas', count: '48', color: 'var(--status-delivered)' }, { label: 'Pendientes', count: String(pendingCount), color: 'var(--status-arriving)' }, { label: 'Suspendidas', count: '2', color: 'var(--accent-slate)' }].map((d) => (
+                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ width: 11, height: 11, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                        <span style={{ flex: 1, fontSize: 14, color: 'var(--ink-600)', fontWeight: 500 }}>{d.label}</span>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)' }}>{d.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ height: 1, background: 'var(--border-hairline)', margin: '18px 0' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 600 }}>Tiempo medio de recogida</span>
+                    <span style={{ fontSize: 26, fontWeight: 800, color: 'var(--status-arrived)', letterSpacing: '-.02em' }}>4 min 12 s</span>
+                    <span style={{ fontSize: 13, color: 'var(--status-delivered-fg)', fontWeight: 700 }}>▲ 38 s más rápido que en mayo</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '22px 24px', boxShadow: 'var(--shadow-xs)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)' }}>Top instituciones por uso</span>
+                  <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 600 }}>Recogidas en junio</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+                  {[{ name: 'Colegio Simón Bolívar', count: 1284 }, { name: 'Instituto Anáhuac del Sur', count: 1102 }, { name: 'Colegio Madrid', count: 980 }, { name: 'Liceo Mexicano Japonés', count: 870 }, { name: 'Colegio Williams', count: 760 }].map((t, i) => (
+                    <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ width: 22, fontSize: 13, fontWeight: 700, color: 'var(--ink-100)', flexShrink: 0 }}>#{i + 1}</span>
+                      <span style={{ width: 230, fontSize: 15, fontWeight: 600, color: 'var(--ink-900)', flexShrink: 0 }}>{t.name}</span>
+                      <span style={{ flex: 1, height: 9, background: 'var(--surface-muted)', borderRadius: 5, overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: Math.round((t.count / 1284) * 100) + '%', background: 'var(--brand)', borderRadius: 5 }} /></span>
+                      <span style={{ width: 64, textAlign: 'right', fontSize: 15, fontWeight: 700, color: 'var(--ink-700)', fontVariantNumeric: 'tabular-nums' }}>{t.count.toLocaleString('es-MX')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'instituciones' && (
+            <div>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Instituciones</h1>
+              <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, margin: '4px 0 20px' }}>{pendingCount} instituciones pendientes de validación</div>
+              <div style={{ display: 'flex', gap: 9, marginBottom: 16 }}>
+                {['Todas', 'Escuelas', 'Actividades'].map((label) => {
+                  const active = filter === label;
+                  return <span key={label} onClick={() => setFilter(label)} style={{ padding: '8px 16px', borderRadius: 999, fontSize: 14, fontWeight: 600, cursor: 'pointer', background: active ? 'var(--ink-900)' : '#fff', color: active ? '#fff' : 'var(--ink-600)', border: `1px solid ${active ? 'var(--ink-900)' : 'var(--border-strong)'}` }}>{label}</span>;
+                })}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {rows.map((r) => {
+                  const st = resolutions[r.id]; const resolved = !!st;
+                  return (
+                    <div key={r.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 22px', display: 'grid', gridTemplateColumns: '1.5fr 1.3fr auto', gap: 24, alignItems: 'center', boxShadow: 'var(--shadow-xs)', opacity: resolved ? 0.6 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <span style={{ width: 48, height: 48, borderRadius: 13, background: r.kind === 'Escuela' ? 'var(--brand-soft)' : 'var(--accent-teal-bg)', color: r.kind === 'Escuela' ? 'var(--brand-strong)' : 'var(--accent-teal-fg)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 21h18M5 21V8l7-4 7 4v13" /><path d="M9 21v-5h6v5" /></svg>
+                        </span>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                          <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>{r.name}</span>
+                          <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{r.type} · {r.zona}</span>
+                          <span style={{ fontSize: 12, color: 'var(--ink-200)', fontFamily: 'var(--font-mono)', letterSpacing: '.03em', marginTop: 2 }}>RFC {r.rfc}</span>
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderLeft: '1px solid var(--border-hairline-2)', paddingLeft: 24 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>Responsable</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-700)' }}>{r.responsable}</span>
+                        <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{r.correo}</span>
+                        <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>Solicitó {r.when}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
+                        {!resolved ? (
+                          <>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 14px', borderRadius: 11, border: '1px solid var(--border-strong)', color: 'var(--ink-300)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Ver expediente</span>
+                            <span onClick={() => setResolutions((s) => ({ ...s, [r.id]: 'rejected' }))} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 11, border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Rechazar</span>
+                            <span onClick={() => setResolutions((s) => ({ ...s, [r.id]: 'approved' }))} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, background: 'var(--success)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Validar</span>
+                          </>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 11, background: st === 'approved' ? 'var(--status-delivered-bg)' : 'var(--accent-slate-bg)', color: st === 'approved' ? 'var(--status-delivered-fg)' : 'var(--accent-slate-fg)', fontSize: 14, fontWeight: 700 }}>{st === 'approved' ? '✓ Validada' : 'Rechazada'}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {view === 'usuarios' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Usuarios</h1>
+                  <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 4 }}>Equipo del operador · {USERS_RAW.length} miembros · {USERS_RAW.filter(u => u.status === 'Activo').length} activos</div>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 11, background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px var(--brand-shadow)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>Invitar usuario
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 9, marginBottom: 16 }}>
+                {['Todos', 'Operador', 'Soporte', 'Finanzas', 'Solo lectura'].map((label) => {
+                  const active = roleFilter === label;
+                  return <span key={label} onClick={() => setRoleFilter(label)} style={{ padding: '8px 16px', borderRadius: 999, fontSize: 14, fontWeight: 600, cursor: 'pointer', background: active ? 'var(--ink-900)' : '#fff', color: active ? '#fff' : 'var(--ink-600)', border: `1px solid ${active ? 'var(--ink-900)' : 'var(--border-strong)'}` }}>{label}</span>;
+                })}
+              </div>
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-xs)', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.3fr 1.1fr 1fr auto', gap: 18, padding: '14px 24px', borderBottom: '1px solid var(--border-hairline)', background: 'var(--surface-muted)' }}>
+                  {['Usuario', 'Rol', 'Estado', 'Último acceso'].map((h) => <span key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--ink-200)' }}>{h}</span>)}
+                  <span style={{ width: 32 }} />
+                </div>
+                {users.map((u) => {
+                  const rm = ROLE_META[u.role], sm = STATUS_META[u.status];
+                  return (
+                    <div key={u.id} style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.3fr 1.1fr 1fr auto', gap: 18, padding: '15px 24px', alignItems: 'center', borderBottom: '1px solid var(--surface-muted)', background: u.status === 'Suspendido' ? 'var(--surface-row-alt)' : '#fff' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 13, minWidth: 0 }}>
+                        <span style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand-strong)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{initialsOf(u.name)}</span>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', letterSpacing: '-.01em' }}>{u.name}</span>
+                          <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
+                        </span>
+                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, width: 'max-content', padding: '5px 11px', borderRadius: 8, background: rm.bg, color: rm.col, fontSize: 13, fontWeight: 700 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: rm.dot }} />{u.role}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, width: 'max-content', padding: '5px 11px', borderRadius: 999, background: sm.bg, color: sm.col, fontSize: 13, fontWeight: 700 }}>{u.status}</span>
+                      <span style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{u.lastAccess}</span>
+                      <span style={{ width: 32, height: 32, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-100)', cursor: 'pointer' }}><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg></span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {view === 'configuracion' && (
+            <div style={{ maxWidth: 880 }}>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>Configuración</h1>
+              <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, margin: '4px 0 22px' }}>Parámetros globales del operador CasiLlego</div>
+
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-xs)', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 18 }}>Identidad del operador</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 24px' }}>
+                  {[{ label: 'Nombre comercial', value: 'CasiLlego Operaciones' }, { label: 'Dominio', value: 'app.casillego.mx' }, { label: 'Zona horaria', value: 'America/Mexico_City (GMT-6)' }, { label: 'Contacto de soporte', value: 'soporte@casillego.mx' }].map((f) => (
+                    <div key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-300)' }}>{f.label}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)', background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 14px' }}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-xs)', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 6 }}>Reglas de recogida</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 500, marginBottom: 18 }}>Aplican a todas las instituciones salvo excepción</div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {[{ label: 'Ventana de tolerancia', help: 'Margen tras la hora de salida programada', value: '15 min' }, { label: 'Radio de geocerca', help: 'Distancia para activar "Ya voy" del tutor', value: '300 m' }, { label: 'Código de salida', help: 'Verificación en la puerta', value: 'QR + PIN' }].map((r) => (
+                    <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '15px 0', borderTop: '1px solid var(--surface-muted)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>{r.label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 500 }}>{r.help}</span>
+                      </div>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink-700)', background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 14px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 16 }}>
+                {[
+                  { title: 'Notificaciones', items: [['push', 'Push a tutores', 'Avisos de recogida en la app'], ['sms', 'SMS de respaldo', 'Si el push no se entrega'], ['correo', 'Resumen por correo', 'Reporte diario a instituciones']] },
+                  { title: 'Seguridad', items: [['dosFA', '2FA obligatorio', 'Para todo el equipo operador'], ['auditoria', 'Registro de auditoría', 'Guarda cada acción sensible'], ['sesion', 'Cierre por inactividad', 'Sesión expira a los 30 min']] },
+                ].map((g) => (
+                  <div key={g.title} style={{ flex: 1, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-xs)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 14 }}>{g.title}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {g.items.map(([key, label, help]) => (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 0', borderTop: '1px solid var(--surface-muted)' }}>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{label}</span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 500 }}>{help}</span>
+                          </span>
+                          <span onClick={() => toggle(key)} style={{ width: 44, height: 26, borderRadius: 999, background: toggles[key] ? 'var(--brand)' : 'var(--border-strong)', flexShrink: 0, cursor: 'pointer', position: 'relative', transition: 'background .15s' }}>
+                            <span style={{ position: 'absolute', top: 3, left: toggles[key] ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(14,31,48,.3)', transition: 'left .15s' }} />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalAdmin() {
+  const [role, setRole] = React.useState('institucion');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      <div style={{ display: 'inline-flex', gap: 4, background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 11, padding: 4, fontFamily: 'var(--font-sans)' }}>
+        {[['institucion', 'Institución'], ['ops', 'Operador global (OPS)']].map(([key, label]) => (
+          <span key={key} onClick={() => setRole(key)} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: role === key ? 'var(--ink-900)' : 'transparent', color: role === key ? '#fff' : 'var(--ink-300)' }}>{label}</span>
+        ))}
+      </div>
+      {role === 'institucion' ? <InstitutionRole /> : <OpsRole />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PortalAdmin));
+</script>
+<script>
+(function () {
+  var src = document.getElementById('app-src').textContent;
+  var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+  (0, eval)(out);
+})();
+</script>
+</body></html>

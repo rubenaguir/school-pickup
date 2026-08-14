@@ -1,0 +1,56 @@
+<!-- @dsCard group="Components" viewport="700x360" name="Core" -->
+<html><head>
+<link rel="stylesheet" href="../../styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:#fff;padding:22px;box-sizing:border-box}
+.row{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+</style></head>
+<body>
+<div id="root"></div>
+<script type="text/babel-src" id="app-src">
+const { Button, Badge, Card, Avatar, Toggle, SegmentedTabs } = window.CasiLlegoDesignSystem_cd01f4;
+function Demo() {
+  const [on, setOn] = React.useState(true);
+  const [tab, setTab] = React.useState('Vacío');
+  return (
+    <div>
+      <div className="row">
+        <Button variant="primary">Invitar usuario</Button>
+        <Button variant="outline">Cancelar</Button>
+        <Button variant="destructive">Rechazar</Button>
+        <Button variant="subtle">Reintentar</Button>
+      </div>
+      <div className="row">
+        <Badge tone="en-route">En camino</Badge>
+        <Badge tone="arriving">Llegando</Badge>
+        <Badge tone="arrived">En puerta</Badge>
+        <Badge tone="delivered">Entregado</Badge>
+        <Badge tone="cancelled">Cancelado</Badge>
+      </div>
+      <div className="row">
+        <Avatar name="Sofía Mendoza" index={1} />
+        <Avatar name="Ricardo Núñez" index={2} />
+        <Toggle checked={on} onChange={setOn} />
+        <SegmentedTabs options={['Carga','Vacío','Error']} value={tab} onChange={setTab} />
+      </div>
+      <Card style={{ width: 260 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-300)' }}>Instituciones activas</div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.02em' }}>128</div>
+      </Card>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Demo));
+</script>
+<script>
+(function () {
+  var src = document.getElementById('app-src').textContent;
+  var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+  (0, eval)(out);
+})();
+</script>
+</body></html>

@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Feedback (vacío / error / carga)" -->
+<html><head>
+<link rel="stylesheet" href="../../styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:#fff;box-sizing:border-box}</style></head>
+<body>
+<div id="root"></div>
+<script type="text/babel-src" id="app-src">
+const { EmptyState, ErrorState, SkeletonRow, Button } = window.CasiLlegoDesignSystem_cd01f4;
+function Demo() {
+  const [tab, setTab] = React.useState('vacio');
+  const tabs = [['carga','Carga'],['vacio','Vacío'],['error','Error']];
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, padding: 16, borderBottom: '1px solid var(--border-hairline)' }}>
+        {tabs.map(([k,l]) => (
+          <span key={k} onClick={() => setTab(k)} style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: tab===k ? 'var(--ink-900)' : 'var(--surface-muted)', color: tab===k ? '#fff' : 'var(--ink-400)' }}>{l}</span>
+        ))}
+      </div>
+      {tab === 'carga' && <div>{Array.from({length:4}).map((_,i)=><SkeletonRow key={i}/>)}</div>}
+      {tab === 'vacio' && <EmptyState icon={<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v6l9 4 9-4V7"/></svg>} title="Sin recogidas pendientes" description="Cuando un tutor confirme la salida aparecerá aquí en tiempo real." action={<Button variant="outline">Programar recogida</Button>} />}
+      {tab === 'error' && <ErrorState title="No se pudieron cargar las recogidas" message="El servidor no respondió a tiempo." code="Error 504 · gateway_timeout" onRetry={() => setTab('carga')} />}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Demo));
+</script>
+<script>
+(function () {
+  var src = document.getElementById('app-src').textContent;
+  var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+  (0, eval)(out);
+})();
+</script>
+</body></html>

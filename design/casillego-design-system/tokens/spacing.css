@@ -1,0 +1,34 @@
+:root {
+  /* 4px-aligned but real product values (never snapped to a stricter grid) */
+  --space-1: 3px;
+  --space-2: 6px;
+  --space-3: 9px;
+  --space-4: 12px;
+  --space-5: 14px;
+  --space-6: 16px;
+  --space-7: 18px;
+  --space-8: 20px;
+  --space-9: 22px;
+  --space-10: 24px;
+
+  /* Radii */
+  --radius-sm: 8px;    /* small chips */
+  --radius-md: 10px;   /* inputs, read-only fields */
+  --radius-lg: 11px;   /* buttons, nav items, action pills */
+  --radius-xl: 14px;   /* stat cards, list rows */
+  --radius-2xl: 16px;  /* panels, sectioned cards */
+  --radius-3xl: 22px;  /* hero / marketing cards */
+  --radius-pill: 999px;
+
+  /* Shadows — dark navy tint, matches ink palette */
+  --shadow-xs: 0 1px 2px rgba(14,31,48,.04);
+  --shadow-sm: 0 1px 3px rgba(14,31,48,.3);
+  --shadow-md: 0 4px 12px rgba(251,106,69,.26);   /* brand CTA glow */
+  --shadow-lg: 0 2px 4px rgba(14,31,48,.05);
+  --shadow-frame: 0 30px 80px rgba(2,12,27,.22);   /* device/window frame */
+
+  --motion-fast: 120ms; /* @kind other */
+  --motion-base: 150ms; /* @kind other */
+  --motion-slow: 200ms; /* @kind other */
+  --ease-standard: ease; /* @kind other */
+}

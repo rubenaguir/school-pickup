@@ -1,0 +1,68 @@
+:root {
+  /* ---- Brand (coral pin) ---- */
+  --brand: #FB6A45;
+  --brand-strong: #B4472C;   /* text-on-tint */
+  --brand-soft: rgba(251,106,69,.12);
+  --brand-shadow: rgba(251,106,69,.30);
+
+  /* ---- Ink (navy) ---- */
+  --ink-900: #0E1F30;   /* headings, sidebar bg */
+  --ink-800: #12273A;   /* wordmark on light */
+  --ink-700: #243B52;
+  --ink-600: #37506A;   /* secondary buttons text */
+  --ink-500: #3B5062;
+  --ink-400: #4B5F6E;   /* body copy */
+  --ink-300: #5B7185;   /* muted labels */
+  --ink-200: #8195A6;   /* placeholder / eyebrow */
+  --ink-100: #A6B4C2;   /* icon idle */
+  --ink-50:  #C2CEDA;   /* dividers in breadcrumb */
+
+  /* ---- Surfaces ---- */
+  --bg-app: #E9EEF3;       /* canvas behind the product frame */
+  --bg-canvas-alt: #E7EBEF;
+  --surface: #FFFFFF;      /* cards, panels */
+  --surface-sunken: #F4F7FB;  /* input-like read-only fields */
+  --surface-muted: #F1F5F9;   /* search bar, table header */
+  --surface-row-alt: #F8FAFC;
+
+  --border: #E2E9F0;
+  --border-strong: #D6E0E8;
+  --border-hairline: #EDF1F6;
+  --border-hairline-2: #F1F5F9;
+
+  /* ---- Status system (shared by all 3 CasiLlego frontends — DO NOT recolor) ---- */
+  --status-en-route: #3B82F6;      /* En camino */
+  --status-en-route-bg: rgba(59,130,246,.12);
+  --status-en-route-fg: #1E4FC7;
+
+  --status-arriving: #F59E0B;      /* Llegando */
+  --status-arriving-bg: rgba(245,158,11,.15);
+  --status-arriving-fg: #B45309;
+
+  --status-arrived: #0EA5A4;       /* En puerta */
+  --status-arrived-bg: rgba(14,165,164,.14);
+  --status-arrived-fg: #0B6E69;
+
+  --status-delivered: #22C55E;     /* Entregado */
+  --status-delivered-bg: rgba(22,163,74,.12);
+  --status-delivered-fg: #15803D;
+
+  --status-cancelled: #94A3B8;     /* Cancelado */
+  --status-cancelled-bg: rgba(148,163,184,.18);
+  --status-cancelled-fg: #64748B;
+
+  /* ---- Semantic (non-status) ---- */
+  --success: #16A34A;
+  --danger: #DC2626;
+  --danger-bg: rgba(239,68,68,.1);
+  --danger-border: rgba(239,68,68,.35);
+  --warning: #F59E0B;
+
+  /* role/category accent palette (avatars, tags — rotate through) */
+  --accent-blue: #2F6BFF;   --accent-blue-bg: rgba(47,107,255,.12);   --accent-blue-fg: #1E4FC7;
+  --accent-teal: #0EA5A4;   --accent-teal-bg: rgba(14,165,164,.16);   --accent-teal-fg: #0B6E69;
+  --accent-violet: #7C3AED; --accent-violet-bg: rgba(124,58,237,.14); --accent-violet-fg: #6D28D9;
+  --accent-amber: #F59E0B;  --accent-amber-bg: rgba(245,158,11,.16);  --accent-amber-fg: #B45309;
+  --accent-pink: #EC4899;   --accent-pink-bg: rgba(236,72,153,.14);   --accent-pink-fg: #BE185D;
+  --accent-slate: #94A3B8;  --accent-slate-bg: rgba(148,163,184,.18); --accent-slate-fg: #475569;
+}

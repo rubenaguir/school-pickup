@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Tablero" viewport="1300x780" -->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink-900);display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px}
+@keyframes yv-pulse{0%,100%{box-shadow:0 0 0 0 rgba(14,165,164,0)}50%{box-shadow:0 0 0 7px rgba(14,165,164,.20)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel-src" id="app-src">
+
+const S = {
+  en_route:  { label: 'En camino', color: 'var(--status-en-route)',  soft: 'var(--status-en-route-bg)' },
+  arriving:  { label: 'Llegando',  color: 'var(--status-arriving)',  soft: 'var(--status-arriving-bg)' },
+  arrived:   { label: 'En puerta', color: 'var(--status-arrived)',   soft: 'var(--status-arrived-bg)' },
+  delivered: { label: 'Entregado', color: 'var(--status-delivered)', soft: 'var(--status-delivered-bg)' },
+  cancelled: { label: 'Cancelado', color: 'var(--accent-slate)',     soft: 'var(--accent-slate-bg)' },
+};
+
+const ROSTER = [
+  { name: 'Camila Reyes Mora',    grupo: '3°B', nivel: 'Primaria',   tutor: 'Laura Mora',        rel: 'Mamá',   vehiculo: 'Mazda CX-5 gris',   placa: 'ABC-12-34', statusKey: 'en_route', etaMin: 6,  progress: 55 },
+  { name: 'Diego Hernández Lira', grupo: '5°A', nivel: 'Primaria',   tutor: 'Roberto Hernández', rel: 'Papá',   vehiculo: 'VW Jetta blanco',   placa: 'NLT-44-21', statusKey: 'arriving', etaMin: 2,  progress: 88 },
+  { name: 'Valentina Cruz Peña',  grupo: 'K2',  nivel: 'Preescolar', tutor: 'Marisol Peña',      rel: 'Mamá',   vehiculo: 'Nissan Kicks rojo', placa: 'PCM-90-12', statusKey: 'arrived',  etaMin: 0,  progress: 100 },
+  { name: 'Renata Salas Vega',    grupo: '4°A', nivel: 'Primaria',   tutor: 'Carmen Vega',       rel: 'Abuela', vehiculo: 'Honda CR-V plata',  placa: 'RFG-31-88', statusKey: 'arriving', etaMin: 3,  progress: 80 },
+  { name: 'Sebastián Ortiz Luna', grupo: '6°B', nivel: 'Primaria',   tutor: 'Pablo Ortiz',       rel: 'Papá',   vehiculo: 'Mazda 3 azul',      placa: 'SMT-08-45', statusKey: 'arrived',  etaMin: 0,  progress: 100 },
+  { name: 'Mateo Domínguez Ríos', grupo: '1°C', nivel: 'Secundaria', tutor: 'José Luna',         rel: 'Chofer', vehiculo: 'Toyota Hiace',      placa: 'UEV-77-03', statusKey: 'en_route', etaMin: 9,  progress: 38 },
+  { name: 'Ximena Flores Ávila',  grupo: '2°B', nivel: 'Primaria',   tutor: 'Diana Ávila',       rel: 'Mamá',   vehiculo: 'Kia Sportage',      placa: 'TZX-19-60', statusKey: 'en_route', etaMin: 11, progress: 26 },
+  { name: 'Regina Campos Téllez', grupo: '3°A', nivel: 'Secundaria', tutor: 'Hugo Campos',       rel: 'Papá',   vehiculo: 'Ford Escape',       placa: 'WQR-02-77', statusKey: 'en_route', etaMin: 14, progress: 16 },
+  { name: 'Emiliano Navarro Gil', grupo: 'K3',  nivel: 'Preescolar', tutor: 'Sofía Gil',         rel: 'Mamá',   vehiculo: 'Chevrolet Aveo',    placa: 'VBN-55-12', statusKey: 'delivered', etaMin: 0, progress: 100 },
+  { name: 'Santiago Bravo Mena',  grupo: '5°C', nivel: 'Primaria',   tutor: 'Andrea Mena',       rel: 'Mamá',   vehiculo: 'Seat Ibiza',        placa: 'XCV-66-31', statusKey: 'cancelled', etaMin: 0, progress: 0 },
+];
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtTime(ts) { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+function useClock() {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return now;
+}
+
+function AndenBoard({ rows, clock, dateText, announceName, footerCount }) {
+  return (
+    <div style={{ width: 1300, height: 731, background: '#0A1622', color: '#fff', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '24px 38px 16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <img src="../../assets/pin-mark-inverse.svg" width="24" height="28" alt="" />
+            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.02em' }}>Casi<span style={{ color: 'var(--brand)' }}>Llego</span></span>
+          </span>
+          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em' }}>Colegio Simón Bolívar</div>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,.5)', fontWeight: 500 }}>Salida vespertina · 14:00–14:30</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 52, fontWeight: 800, lineHeight: .9, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em' }}>{clock}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', fontWeight: 500, marginTop: 6 }}>{dateText}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 200px 140px', gap: 16, padding: '11px 38px', borderTop: '1px solid rgba(255,255,255,.09)', borderBottom: '1px solid rgba(255,255,255,.09)', fontSize: 12, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,.4)' }}>
+        <div>Alumno</div><div>Grupo</div><div>Estado</div><div style={{ textAlign: 'right' }}>Llegada</div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 200px 140px', gap: 16, alignItems: 'center', padding: '0 38px', flex: 1, borderBottom: '1px solid rgba(255,255,255,.05)', background: r.filled ? 'rgba(14,165,164,0.06)' : 'transparent' }}>
+            <span style={{ fontSize: 24, fontWeight: 700, color: r.dim ? 'rgba(255,255,255,.4)' : '#fff' }}>{r.name}</span>
+            <span style={{ fontSize: 16, color: 'rgba(255,255,255,.55)' }}>{r.grupo}</span>
+            <span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 15px', borderRadius: 999, fontSize: 15, fontWeight: 700, background: r.filled ? r.m.color : r.m.soft, color: r.filled ? '#04201E' : r.m.color, animation: r.filled ? 'yv-pulse 2.4s ease-in-out infinite' : 'none' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.filled ? '#04201E' : r.m.color }} />{r.m.label}
+              </span>
+            </span>
+            <span style={{ textAlign: 'right', fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.dim ? 'rgba(255,255,255,.4)' : (r.filled ? r.m.color : '#fff') }}>{r.etaDisplay}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 38px', borderTop: '1px solid rgba(255,255,255,.09)', background: 'rgba(255,255,255,.025)' }}>
+        <span style={{ fontSize: 15, color: 'rgba(255,255,255,.7)', fontWeight: 500 }}>Voceando: <b style={{ color: '#fff', fontWeight: 700 }}>{announceName}</b> — En puerta</span>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,.4)', fontWeight: 500 }}>{footerCount} · se actualiza solo</span>
+      </div>
+    </div>
+  );
+}
+
+function SerenoBoard({ rows, clock, dateText }) {
+  return (
+    <div style={{ width: 1300, height: 731, background: '#EAF1F7', color: 'var(--ink-900)', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '28px 38px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <img src="../../assets/pin-mark.svg" width="24" height="28" alt="" />
+            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.02em' }}>Casi<span style={{ color: 'var(--brand)' }}>Llego</span></span>
+          </span>
+          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.02em' }}>Colegio Simón Bolívar</div>
+          <div style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 500 }}>Salida vespertina · 14:00–14:30</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 44, fontWeight: 800, lineHeight: .9, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em' }}>{clock}</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500, marginTop: 6 }}>{dateText}</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, padding: '0 38px 28px' }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 22, boxShadow: '0 8px 20px rgba(14,31,48,.06)', display: 'flex', overflow: 'hidden', flex: 1, animation: r.filled ? 'yv-pulse 2.4s ease-in-out infinite' : 'none' }}>
+            <span style={{ width: 9, background: r.m.color }} />
+            <span style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 36px' }}>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.10em', textTransform: 'uppercase', color: r.m.color, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: r.m.color }} />{r.m.label}
+                </span>
+                <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1 }}>{r.name}</span>
+                <span style={{ fontSize: 16, color: 'var(--ink-300)', fontWeight: 500 }}>{r.grupo} · {r.nivel}</span>
+              </span>
+              <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+                <span style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>{r.filled ? 'Ya en puerta' : 'Llegada estimada'}</span>
+                <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, color: r.m.color, fontVariantNumeric: 'tabular-nums' }}>{r.etaDisplay}</span>
+                <span style={{ fontSize: 15, color: 'var(--ink-200)', fontWeight: 500 }}>{r.horaText}</span>
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CarrilBoard({ rows, clock, countActive, countPuerta }) {
+  return (
+    <div style={{ width: 1300, height: 731, background: 'var(--surface-muted)', color: 'var(--ink-900)', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ background: 'var(--ink-900)', color: '#fff', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <img src="../../assets/pin-mark-inverse.svg" width="22" height="26" alt="" />
+            <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>Casi<span style={{ color: 'var(--brand)' }}>Llego</span></span>
+          </span>
+          <span style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.01em' }}>Colegio Simón Bolívar</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', fontWeight: 500 }}>Salida vespertina · 14:00–14:30</span>
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, background: 'rgba(59,130,246,.18)', color: '#93C5FD', padding: '6px 12px', borderRadius: 999 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--status-en-route)' }} />{countActive} en ruta</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, background: 'rgba(14,165,164,.18)', color: '#5EEAD4', padding: '6px 12px', borderRadius: 999 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--status-arrived)' }} />{countPuerta} en puerta</span>
+          <span style={{ fontSize: 28, fontWeight: 800, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em' }}>{clock}</span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr .7fr 1.2fr 1.1fr 1.5fr .9fr', gap: 14, padding: '11px 32px', background: 'var(--border)', fontSize: 11, fontWeight: 700, letterSpacing: '.10em', textTransform: 'uppercase', color: 'var(--ink-300)' }}>
+        <div>Alumno</div><div>Grupo</div><div>Tutor</div><div>Vehículo</div><div>Estado</div><div style={{ textAlign: 'right' }}>ETA</div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.5fr .7fr 1.2fr 1.1fr 1.5fr .9fr', gap: 14, alignItems: 'center', padding: '10px 32px', background: i % 2 ? 'rgba(14,31,48,0.025)' : '#fff', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-.01em' }}>{r.name}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 500 }}>{r.nivel}</span>
+            </span>
+            <span><span style={{ display: 'inline-block', fontSize: 13, fontWeight: 600, color: 'var(--ink-600)', background: 'var(--border-hairline)', padding: '3px 9px', borderRadius: 6 }}>{r.grupo}</span></span>
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-700)' }}>{r.tutor}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>{r.rel}</span>
+            </span>
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 13, color: 'var(--ink-600)', fontWeight: 500 }}>{r.vehiculo}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-200)', fontFamily: 'var(--font-mono)', letterSpacing: '.04em' }}>{r.placa}</span>
+            </span>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: r.m.color }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: r.m.color }} />{r.m.label}</span>
+              <span style={{ height: 5, width: 160, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: r.progress + '%', background: r.m.color, borderRadius: 3 }} /></span>
+            </span>
+            <span style={{ textAlign: 'right' }}>
+              <span style={{ display: 'block', fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{r.etaShort}</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-200)', fontWeight: 500 }}>{r.horaText}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KioskBoard() {
+  const now = useClock();
+  const [modo, setModo] = React.useState('Anden');
+  const clock = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(now));
+  let dateText = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(now));
+  dateText = dateText.charAt(0).toUpperCase() + dateText.slice(1);
+
+  const resolved = ROSTER.map((r) => {
+    const m = S[r.statusKey];
+    const dim = r.statusKey === 'delivered' || r.statusKey === 'cancelled';
+    const filled = r.statusKey === 'arrived';
+    const etaDisplay = r.statusKey === 'arrived' ? 'En puerta' : r.statusKey === 'delivered' ? 'Entregado' : r.statusKey === 'cancelled' ? 'Cancelado' : r.etaMin + ' min';
+    const etaShort = r.statusKey === 'arrived' ? 'Puerta' : r.statusKey === 'delivered' ? 'Listo' : r.statusKey === 'cancelled' ? 'Canc.' : r.etaMin + ' min';
+    let horaText = '—';
+    if (r.statusKey === 'en_route' || r.statusKey === 'arriving') horaText = fmtTime(now + r.etaMin * 60000);
+    else if (r.statusKey === 'arrived') horaText = 'ahora';
+    else if (r.statusKey === 'delivered') horaText = 'entregado';
+    return { ...r, m, dim, filled, etaDisplay, etaShort, horaText };
+  });
+  const prio = { arrived: 0, arriving: 1, en_route: 2, delivered: 3, cancelled: 4 };
+  const sorted = [...resolved].sort((a, b) => (prio[a.statusKey] - prio[b.statusKey]) || (a.etaMin - b.etaMin));
+
+  const modes = [['Anden', 'A · Andén'], ['Sereno', 'B · Sereno'], ['Carril', 'C · Carril']];
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {modo === 'Anden' && <AndenBoard rows={sorted.slice(0, 8)} clock={clock} dateText={dateText} announceName={(sorted.find(r => r.statusKey === 'arrived') || {}).name || '—'} footerCount={'Mostrando ' + Math.min(8, sorted.length) + ' de ' + ROSTER.length} />}
+      {modo === 'Sereno' && <SerenoBoard rows={sorted.filter(r => !['delivered', 'cancelled'].includes(r.statusKey)).slice(0, 4)} clock={clock} dateText={dateText} />}
+      {modo === 'Carril' && <CarrilBoard rows={sorted} clock={clock} countActive={resolved.filter(r => r.statusKey === 'en_route' || r.statusKey === 'arriving').length} countPuerta={resolved.filter(r => r.statusKey === 'arrived').length} />}
+      <div style={{ position: 'absolute', bottom: 18, right: 18, display: 'flex', gap: 4, background: 'rgba(10,22,34,.62)', borderRadius: 999, padding: 5, boxShadow: '0 8px 22px rgba(0,0,0,.30)' }}>
+        {modes.map(([key, label]) => (
+          <span key={key} onClick={() => setModo(key)} style={{ padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: modo === key ? 'var(--brand)' : 'transparent', color: modo === key ? '#fff' : 'rgba(255,255,255,.7)' }}>{label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(KioskBoard));
+</script>
+<script>
+(function () {
+  var src = document.getElementById('app-src').textContent;
+  var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+  (0, eval)(out);
+})();
+</script>
+</body></html>

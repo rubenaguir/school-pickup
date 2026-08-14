@@ -1,0 +1,24 @@
+<!-- @dsCard group="Colors" viewport="700x230" subtitle="Los 5 estados de recogida — no recolorear" name="Status system" -->
+<html><head><link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;font-family:var(--font-sans);background:#fff;padding:20px;box-sizing:border-box}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.card{border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.dot{width:26px;height:26px;border-radius:8px}
+.badge{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.b-dot{width:7px;height:7px;border-radius:50%}
+label{font-size:11px;color:var(--ink-300);font-weight:700}
+</style></head><body>
+  <div class="grid">
+    <div class="card"><div class="dot" style="background:var(--status-en-route)"></div><label>En camino</label>
+      <span class="badge" style="background:var(--status-en-route-bg);color:var(--status-en-route-fg)"><span class="b-dot" style="background:var(--status-en-route)"></span>En camino</span></div>
+    <div class="card"><div class="dot" style="background:var(--status-arriving)"></div><label>Llegando</label>
+      <span class="badge" style="background:var(--status-arriving-bg);color:var(--status-arriving-fg)"><span class="b-dot" style="background:var(--status-arriving)"></span>Llegando</span></div>
+    <div class="card"><div class="dot" style="background:var(--status-arrived)"></div><label>En puerta</label>
+      <span class="badge" style="background:var(--status-arrived-bg);color:var(--status-arrived-fg)"><span class="b-dot" style="background:var(--status-arrived)"></span>En puerta</span></div>
+    <div class="card"><div class="dot" style="background:var(--status-delivered)"></div><label>Entregado</label>
+      <span class="badge" style="background:var(--status-delivered-bg);color:var(--status-delivered-fg)"><span class="b-dot" style="background:var(--status-delivered)"></span>Entregado</span></div>
+    <div class="card"><div class="dot" style="background:var(--status-cancelled)"></div><label>Cancelado</label>
+      <span class="badge" style="background:var(--status-cancelled-bg);color:var(--status-cancelled-fg)"><span class="b-dot" style="background:var(--status-cancelled)"></span>Cancelado</span></div>
+  </div>
+</body></html>

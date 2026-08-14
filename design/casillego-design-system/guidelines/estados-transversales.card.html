@@ -1,0 +1,146 @@
+<!-- @dsCard group="Guidelines" viewport="1120x760" subtitle="Patrones de carga, vacío y error — con anatomía" name="Estados transversales" -->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../_ds_bundle.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg-canvas-alt);font-family:var(--font-sans);display:flex;align-items:center;justify-content:center}
+@keyframes yv-spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel-src" id="app-src">
+const { EmptyState, ErrorState, SkeletonRow, Button } = window.CasiLlegoDesignSystem_cd01f4;
+
+const AV_PALETTE = [['rgba(251,106,69,.14)', 'var(--brand-strong)'], ['var(--accent-teal-bg)', 'var(--accent-teal-fg)'], ['var(--accent-violet-bg)', 'var(--accent-violet-fg)'], ['var(--status-arriving-bg)', 'var(--status-arriving-fg)'], ['var(--accent-blue-bg)', 'var(--accent-blue-fg)']];
+const ST_META = {
+  'En camino': { bg: 'var(--status-en-route-bg)', col: 'var(--status-en-route-fg)', dot: 'var(--status-en-route)' },
+  'En puerta': { bg: 'var(--status-arrived-bg)', col: 'var(--status-arrived-fg)', dot: 'var(--status-arrived)' },
+  'Entregado': { bg: 'var(--status-delivered-bg)', col: 'var(--status-delivered-fg)', dot: 'var(--status-delivered)' },
+};
+const PICKUPS_RAW = [
+  { child: 'Mateo Beltrán', grade: '3º A', tutor: 'mamá', status: 'En puerta' },
+  { child: 'Valentina Ríos', grade: '1º B', tutor: 'papá', status: 'En camino' },
+  { child: 'Diego Hernández', grade: '4º A', tutor: 'abuela', status: 'Entregado' },
+  { child: 'Renata Soto', grade: '2º C', tutor: 'mamá', status: 'En camino' },
+  { child: 'Emiliano Vega', grade: '5º A', tutor: 'tío', status: 'Entregado' },
+];
+const initialsOf = (n) => n.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const PICKUPS = PICKUPS_RAW.map((p, i) => {
+  const m = ST_META[p.status], av = AV_PALETTE[i % AV_PALETTE.length];
+  return { ...p, initials: initialsOf(p.child), avBg: av[0], avCol: av[1], m };
+});
+const ANATOMY = [
+  { title: 'Carga', dot: 'var(--brand)', points: ['Skeletons con la silueta del contenido real, no spinners a pantalla completa.', 'Conserva la estructura para evitar saltos de layout.', 'Spinner sólo como pie de lista.'] },
+  { title: 'Vacío', dot: 'var(--status-delivered)', points: ['Título factual: "Sin recogidas pendientes". Nunca "¡Ups!".', 'Una frase que explica cuándo aparecerá contenido.', 'Acción opcional para empezar (secundaria).'] },
+  { title: 'Error', dot: 'var(--danger)', points: ['Muestra el mensaje del backend; fallback "Error desconocido".', 'Código técnico discreto en mono para soporte.', 'Acción primaria "Reintentar" siempre visible.'] },
+];
+
+function EstadosTransversales() {
+  const [demo, setDemo] = React.useState('data');
+  const tabs = [['loading', 'Carga'], ['empty', 'Vacío'], ['error', 'Error'], ['data', 'Con datos']];
+
+  return (
+    <div style={{ width: 1120, padding: '48px 40px' }}>
+      <div style={{ marginBottom: 26 }}>
+        <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, color: 'var(--ink-900)', letterSpacing: '-.025em' }}>Estados transversales</h1>
+        <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginTop: 5 }}>Patrones de carga, vacío y error reutilizables en todo CasiLlego</div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow-xs)', overflow: 'hidden', marginBottom: 34 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '18px 24px', borderBottom: '1px solid var(--border-hairline)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)' }}>Recogidas de hoy</span>
+            <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 500 }}>Colegio del Valle Montessori · 14:30</span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 11, padding: 4 }}>
+            {tabs.map(([key, label]) => {
+              const active = demo === key;
+              return <span key={key} onClick={() => setDemo(key)} style={{ padding: '7px 15px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: active ? 'var(--ink-900)' : 'transparent', color: active ? '#fff' : 'var(--ink-300)', boxShadow: active ? '0 1px 3px rgba(14,31,48,.25)' : 'none' }}>{label}</span>;
+            })}
+          </div>
+        </div>
+
+        <div style={{ minHeight: 340, display: 'flex', flexDirection: 'column' }}>
+          {demo === 'loading' && (
+            <div style={{ padding: '8px 0' }}>
+              {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 18, color: 'var(--ink-200)', fontSize: 14, fontWeight: 600 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2.6" strokeLinecap="round" style={{ animation: 'yv-spin .8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>
+                Cargando recogidas…
+              </div>
+            </div>
+          )}
+          {demo === 'empty' && (
+            <EmptyState
+              icon={<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v6l9 4 9-4V7" /><path d="M9 17v4" /></svg>}
+              title="Sin recogidas pendientes"
+              description="Cuando un tutor confirme la salida de su hijo aparecerá aquí en tiempo real."
+              action={<Button variant="outline">Programar recogida</Button>}
+            />
+          )}
+          {demo === 'error' && (
+            <ErrorState
+              title="No se pudieron cargar las recogidas"
+              message="El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo."
+              code="Error 504 · gateway_timeout"
+              onRetry={() => setDemo('loading')}
+            />
+          )}
+          {demo === 'data' && (
+            <div style={{ padding: '8px 0' }}>
+              {PICKUPS.map((p) => (
+                <div key={p.child} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', borderBottom: '1px solid var(--surface-muted)' }}>
+                  <span style={{ width: 42, height: 42, borderRadius: '50%', background: p.avBg, color: p.avCol, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{p.initials}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>{p.child}</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>{p.grade} · recoge {p.tutor}</span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, width: 'max-content', padding: '5px 12px', borderRadius: 999, background: p.m.bg, color: p.m.col, fontSize: 13, fontWeight: 700 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: p.m.dot }} />{p.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink-200)', marginBottom: 14 }}>Anatomía del patrón</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+        {ANATOMY.map((a) => (
+          <div key={a.title} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20, boxShadow: 'var(--shadow-xs)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: a.dot }} />
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink-900)' }}>{a.title}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {a.points.map((pt) => (
+                <div key={pt} style={{ display: 'flex', gap: 9, fontSize: 13, color: 'var(--ink-700)', fontWeight: 500, lineHeight: 1.45 }}>
+                  <span style={{ color: a.dot, fontWeight: 800, flexShrink: 0 }}>·</span>{pt}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(EstadosTransversales));
+</script>
+<script>
+(function () {
+  var src = document.getElementById('app-src').textContent;
+  var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+  (0, eval)(out);
+})();
+</script>
+</body></html>
