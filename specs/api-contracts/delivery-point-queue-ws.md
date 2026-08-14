@@ -112,8 +112,10 @@ almacenan ni se reenvían.
 
 ## Preguntas abiertas
 
-Ninguna en este slice. El feed del tablero (`apps/board`) sigue pendiente
-de su propia fase. El tracking del padre ya se resolvió — ver
+Ninguna. El tracking del padre ya se resolvió — ver
 `specs/api-contracts/pickup-request-tracking-ws.md` (ADR-064): mismo
 puente, topic de tablero reutilizado, autorización por propiedad del
-tutor en vez de membresía de institución.
+tutor en vez de membresía de institución. El feed del tablero (`apps/board`)
+también — ver `specs/api-contracts/board-ws.md` (ADR-068): mismo puente,
+topic de tablero reutilizado, autorización por membresía de institución
+igual que este canal, pero sin el segundo filtro por `deliveryPointId`.

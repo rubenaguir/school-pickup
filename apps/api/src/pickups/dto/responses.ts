@@ -94,3 +94,32 @@ export interface ListDeliveryPointQueueResponse {
   offset: number;
   total: number;
 }
+
+/**
+ * Row shape of `GET /pickup-requests?institutionId=` (ADR-068 pt.3).
+ * Field for field the same object `buildBoardPayload()` publishes to
+ * `boardTopic` (`@casillego/shared`) — including `pickupRequestId` instead of
+ * the API-wide `id`, so `apps/board` can merge this snapshot with the
+ * WebSocket deltas (`specs/api-contracts/board-ws.md`) without any
+ * transformation in between. Deliberately NOT `PickupRequestQueueSummary`:
+ * no `deliveryCode` (ADR-051) — the board is a public screen, unlike the
+ * authenticated gate console.
+ */
+export interface PickupRequestBoardSummary {
+  pickupRequestId: string;
+  status: PickupRequestStatus;
+  studentFullName: string;
+  gradeOrGroup: string | null;
+  deliveryPointId: string | null;
+  estimatedArrivalAt: string | null;
+  etaSeconds: number | null;
+  arrivalMode: ArrivalMode | null;
+  updatedAt: string;
+}
+
+export interface ListPickupRequestsBoardResponse {
+  pickupRequests: PickupRequestBoardSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}

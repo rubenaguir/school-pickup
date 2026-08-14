@@ -6,6 +6,7 @@ import { EmailModule } from '../email/email.module';
 import { InstitutionsController } from './institutions.controller';
 import { InstitutionStatusController } from './institution-status.controller';
 import { InstitutionsService } from './institutions.service';
+import { InstitutionAccessService } from './institution-access.service';
 
 @Module({
   // InstitutionMember is here for two reasons: InstitutionMembershipGuard,
@@ -20,6 +21,7 @@ import { InstitutionsService } from './institutions.service';
     EmailModule,
   ],
   controllers: [InstitutionsController, InstitutionStatusController],
-  providers: [InstitutionsService],
+  providers: [InstitutionsService, InstitutionAccessService],
+  exports: [InstitutionAccessService],
 })
 export class InstitutionsModule {}

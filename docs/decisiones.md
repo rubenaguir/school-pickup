@@ -4248,6 +4248,20 @@ agregado completo).
    institución del `institution_member` que inició sesión (si esa persona
    pertenece a más de una, aplica la misma simplificación ya aceptada en
    `InstitutionContext`, ADR-042 punto 5: la primera).
+
+   **Recomendación operativa (no técnica): cuenta dedicada por
+   institución, no la personal de un admin/coordinador.** No existe
+   ningún concepto de "usuario de kiosco" en el modelo — no hace falta
+   construir uno: el flujo de "Invitar personal" ya existente
+   (`POST /institutions/:id/members/invite`, feature 012) sirve tal cual
+   para crear una cuenta genérica (ej. `tablero@nombreescuela.com`) que
+   cada institución usa para autenticar su kiosco. Evita que el acceso del
+   tablero dependa de que una persona específica siga siendo miembro de la
+   institución — su `refreshToken` sigue siendo válido mientras
+   `users.status = active`, sin revalidar membresía en cada uso (ver
+   `specs/api-contracts/auth.md`, `POST /auth/refresh`). Esta
+   recomendación debe quedar documentada en la guía de instalación del
+   tablero (`docs/design-brief.md` o un README operativo), no solo aquí.
 2. **`GET /pickup-requests?institutionId=...` nuevo**, tercer modo
    mutuamente excluyente junto a `enrollmentId`/`deliveryPointId` ya
    existentes. Autorización: `institution_member` de esa institución, sin

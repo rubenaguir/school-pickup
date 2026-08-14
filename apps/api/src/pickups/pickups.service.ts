@@ -31,6 +31,7 @@ import {
 import { isUniqueViolation } from '../common/db-errors.util';
 import { DeliveryPointAccessService } from '../delivery-points/delivery-point-access.service';
 import { geoPointToLatLng } from '../institutions/geo-point.mapper';
+import { InstitutionAccessService } from '../institutions/institution-access.service';
 import {
   AuditLog,
   DeliveryPoint,
@@ -50,8 +51,10 @@ import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-quer
 import type { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
+  ListPickupRequestsBoardResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
+  PickupRequestBoardSummary,
   PickupRequestCancelResponse,
   PickupRequestDeliverResponse,
   PickupRequestDetailResponse,
@@ -157,6 +160,7 @@ export class PickupsService {
     @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
     @Inject(PUSH_PROVIDER) private readonly pushProvider: PushProvider,
     private readonly deliveryPointAccess: DeliveryPointAccessService,
+    private readonly institutionAccess: InstitutionAccessService,
   ) {}
 
   async create(userId: string, dto: CreatePickupRequestDto): Promise<PickupRequestResponse> {
@@ -279,6 +283,58 @@ export class PickupsService {
 
     return {
       pickupRequests: pickupRequests.map((pickupRequest) => this.toQueueSummary(pickupRequest)),
+      limit,
+      offset,
+      total,
+    };
+  }
+
+  /**
+   * Aggregate board feed of a whole institution: the REST snapshot the
+   * board kiosk starts from, before the WebSocket bridge takes over with
+   * deltas (ADR-068 pt.2). Same shape as `listByDeliveryPoint` otherwise:
+   * institution_member-only authorization (no guardian side — the board has
+   * no individual-student perspective), active statuses only, never history.
+   *
+   * Its rows are `PickupRequestBoardSummary`, field for field the same as
+   * `buildBoardPayload()` publishes — no `deliveryCode` (ADR-051), unlike
+   * `PickupRequestQueueSummary` — so the board merges both without
+   * transforming either.
+   */
+  async listByInstitution(
+    userId: string,
+    query: ListPickupRequestsQueryDto & { institutionId: string },
+  ): Promise<ListPickupRequestsBoardResponse> {
+    const access = await this.institutionAccess.checkMemberAccess(query.institutionId, userId);
+    if (access.outcome === 'not_found') {
+      throw new NotFoundException(RESOURCE_NOT_FOUND);
+    }
+    if (access.outcome === 'not_member') {
+      throw new ForbiddenException(NOT_INSTITUTION_MEMBER);
+    }
+
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const [pickupRequests, total] = await this.pickupRequestsRepository.findAndCount({
+      where: {
+        institution: { id: query.institutionId },
+        // Same narrowing-not-widening rule as listByDeliveryPoint: `status`
+        // intersects the active set, it never reaches into history.
+        status: In(
+          query.status ? ACTIVE_STATUSES.filter((s) => s === query.status) : ACTIVE_STATUSES,
+        ),
+      },
+      // deliveryPointId is part of PickupRequestBoardSummary (mirrors
+      // PickupRequestBoardPayload) — without this relation loaded it stays
+      // unpopulated and every row would wrongly report deliveryPointId: null.
+      relations: { enrollment: { student: true }, deliveryPoint: true },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return {
+      pickupRequests: pickupRequests.map((pickupRequest) => this.toBoardSummary(pickupRequest)),
       limit,
       offset,
       total,
@@ -752,6 +808,27 @@ export class PickupsService {
         ? pickupRequest.estimatedArrivalAt.toISOString()
         : null,
       etaSeconds: pickupRequest.etaSeconds,
+      updatedAt: pickupRequest.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Field for field the same object `buildBoardPayload` publishes over MQTT
+   * (ADR-068 pt.3) — keep the two in step, same reasoning as `toQueueSummary`
+   * versus `buildQueuePayload`.
+   */
+  private toBoardSummary(pickupRequest: PickupRequest): PickupRequestBoardSummary {
+    return {
+      pickupRequestId: pickupRequest.id,
+      status: pickupRequest.status,
+      studentFullName: pickupRequest.enrollment.student.fullName,
+      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
+      estimatedArrivalAt: pickupRequest.estimatedArrivalAt
+        ? pickupRequest.estimatedArrivalAt.toISOString()
+        : null,
+      etaSeconds: pickupRequest.etaSeconds,
+      arrivalMode: pickupRequest.arrivalMode,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
   }

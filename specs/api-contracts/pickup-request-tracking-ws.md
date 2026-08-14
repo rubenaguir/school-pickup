@@ -101,5 +101,6 @@ REST antes de reanudar el consumo de deltas.
   este canal).
 - `specs/api-contracts/pickup-realtime-mqtt.md` (topic de origen y forma
   del payload de tablero).
-- `specs/api-contracts/delivery-point-queue-ws.md` (canal hermano, misma
-  arquitectura, autorización distinta).
+- `specs/api-contracts/delivery-point-queue-ws.md` y
+  `specs/api-contracts/board-ws.md` (canales hermanos, misma arquitectura,
+  autorización y alcance del filtrado distintos).

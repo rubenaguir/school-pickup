@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { In } from 'typeorm';
-import { buildQueuePayload } from '@casillego/shared';
+import { buildBoardPayload, buildQueuePayload } from '@casillego/shared';
 import { PickupsService } from './pickups.service';
 import {
   PickupRequest,
@@ -131,6 +131,7 @@ function buildService(overrides?: {
   mqttClient?: Partial<Record<'publish', unknown>>;
   deliveryPoints?: FakeDeliveryPoint[];
   deliveryPointAccess?: Partial<Record<'checkMemberAccess', unknown>>;
+  institutionAccess?: Partial<Record<'checkMemberAccess', unknown>>;
 }) {
   const pickupRequestsRepo = {
     exists: vi.fn().mockResolvedValue(false),
@@ -196,6 +197,10 @@ function buildService(overrides?: {
     checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'granted', institutionId: 'inst-1' }),
     ...overrides?.deliveryPointAccess,
   };
+  const institutionAccess = {
+    checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'granted' }),
+    ...overrides?.institutionAccess,
+  };
   const service = new PickupsService(
     pickupRequestsRepo as never,
     enrollmentsRepo as never,
@@ -209,6 +214,7 @@ function buildService(overrides?: {
     mqttClient as never,
     pushProvider as never,
     deliveryPointAccess as never,
+    institutionAccess as never,
   );
   return {
     service,
@@ -225,6 +231,7 @@ function buildService(overrides?: {
     dataSource,
     mqttClient,
     deliveryPointAccess,
+    institutionAccess,
   };
 }
 
@@ -973,6 +980,190 @@ describe('PickupsService', () => {
 
       await expect(
         service.listByDeliveryPoint('user-1', { deliveryPointId: DP_ID }),
+      ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
+      expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listByInstitution', () => {
+    const INST_ID = 'inst-1';
+
+    it('returns the active board feed of the institution for an institution_member', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([
+            [
+              buildOwnedPickupRequest({
+                status: 'arriving',
+                deliveryPoint: { id: 'dp-1' } as DeliveryPoint,
+                arrivalMode: 'vehicle',
+              }),
+            ],
+            1,
+          ]),
+        },
+      });
+
+      const result = await service.listByInstitution('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests).toEqual([
+        {
+          pickupRequestId: 'pr-1',
+          status: 'arriving',
+          studentFullName: 'Ana Pérez',
+          gradeOrGroup: '3°B',
+          deliveryPointId: 'dp-1',
+          estimatedArrivalAt: null,
+          etaSeconds: null,
+          arrivalMode: 'vehicle',
+          updatedAt: '2026-07-16T08:00:00.000Z',
+        },
+      ]);
+      expect(result).toMatchObject({ limit: 20, offset: 0, total: 1 });
+    });
+
+    it('never includes deliveryCode (ADR-051, ADR-068 pt.3)', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByInstitution('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests[0]).not.toHaveProperty('deliveryCode');
+    });
+
+    // ADR-068 pt.3: the shape exists so apps/board can merge snapshot and
+    // deltas untouched. If the two drift apart, that stops being true.
+    it('returns rows shaped exactly like the WebSocket delta payload', async () => {
+      const pickupRequest = buildOwnedPickupRequest({
+        status: 'arriving',
+        deliveryPoint: { id: 'dp-1' } as DeliveryPoint,
+        arrivalMode: 'vehicle',
+      });
+      const { service } = buildService({
+        pickupRequests: { findAndCount: vi.fn().mockResolvedValue([[pickupRequest], 1]) },
+      });
+
+      const result = await service.listByInstitution('user-1', { institutionId: INST_ID });
+
+      const boardPayload = buildBoardPayload({
+        pickupRequestId: pickupRequest.id,
+        status: pickupRequest.status,
+        studentFullName: pickupRequest.enrollment.student.fullName,
+        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        deliveryPointId: 'dp-1',
+        estimatedArrivalAt: null,
+        etaSeconds: null,
+        arrivalMode: pickupRequest.arrivalMode,
+        vehicleDescription: pickupRequest.vehicleDescription,
+        vehiclePlate: pickupRequest.vehiclePlate,
+        deliveryCode: pickupRequest.deliveryCode,
+        updatedAt: pickupRequest.updatedAt.toISOString(),
+      });
+
+      expect(result.pickupRequests[0]).toEqual(boardPayload);
+    });
+
+    it('never returns the generic summary shape (no id)', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildOwnedPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByInstitution('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests[0]).not.toHaveProperty('id');
+    });
+
+    it('filters to active statuses only, never history', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByInstitution('user-1', { institutionId: INST_ID });
+
+      expect(findAndCount).toHaveBeenCalledWith({
+        where: {
+          institution: { id: INST_ID },
+          status: In(['en_route', 'arriving', 'arrived']),
+        },
+        relations: { enrollment: { student: true }, deliveryPoint: true },
+        order: { createdAt: 'DESC' },
+        take: 20,
+        skip: 0,
+      });
+    });
+
+    it('narrows within the active set when status is given', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByInstitution('user-1', { institutionId: INST_ID, status: 'arrived' });
+
+      expect(findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { institution: { id: INST_ID }, status: In(['arrived']) },
+        }),
+      );
+    });
+
+    // A terminal status cannot widen the feed back into history: it
+    // intersects to nothing, which is an empty page, not an error.
+    it('intersects to nothing when status is terminal', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByInstitution('user-1', { institutionId: INST_ID, status: 'delivered' });
+
+      expect(findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { institution: { id: INST_ID }, status: In([]) },
+        }),
+      );
+    });
+
+    it('applies limit/offset paging', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 12]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      const result = await service.listByInstitution('user-1', {
+        institutionId: INST_ID,
+        limit: 5,
+        offset: 10,
+      });
+
+      expect(findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 5, skip: 10 }));
+      expect(result).toMatchObject({ limit: 5, offset: 10, total: 12 });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND when the institution does not exist', async () => {
+      const { service, pickupRequestsRepo } = buildService({
+        institutionAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_found' }),
+        },
+      });
+
+      await expect(
+        service.listByInstitution('user-1', { institutionId: 'missing' }),
+      ).rejects.toMatchObject({ response: { code: 'RESOURCE_NOT_FOUND' } });
+      expect(pickupRequestsRepo.findAndCount).not.toHaveBeenCalled();
+    });
+
+    // No guardian side of the OR here (ADR-068 pt.2): a guardian of a
+    // student at this institution still has no business reading the whole
+    // board feed unless they are also an institution_member.
+    it('rejects with 403 NOT_INSTITUTION_MEMBER for a non-member, guardian or not', async () => {
+      const { service, studentGuardiansRepo } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(true) },
+        institutionAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_member' }),
+        },
+      });
+
+      await expect(
+        service.listByInstitution('user-1', { institutionId: INST_ID }),
       ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
       expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
     });

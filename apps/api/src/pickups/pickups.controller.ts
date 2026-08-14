@@ -16,6 +16,7 @@ import { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto
 import { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
+  ListPickupRequestsBoardResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
   PickupRequestCancelResponse,
@@ -49,23 +50,32 @@ export class PickupsController {
     return this.pickupsService.findById(request.user.sub, id);
   }
 
-  // Two mutually exclusive modes on one endpoint (ADR-050 pt.6). The DTO has
-  // already rejected "both" and "neither", so a present deliveryPointId is
-  // unambiguously the queue mode; anything else is the enrollment mode.
+  // Three mutually exclusive modes on one endpoint (ADR-050 pt.6, ADR-068
+  // pt.2). The DTO has already rejected "more than one" and "none", so each
+  // present id unambiguously picks its mode; enrollment is the fallback.
   @Get()
   list(
     @Query() query: ListPickupRequestsQueryDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<ListPickupRequestsResponse | ListDeliveryPointQueueResponse> {
-    return query.deliveryPointId !== undefined
-      ? this.pickupsService.listByDeliveryPoint(request.user.sub, {
-          ...query,
-          deliveryPointId: query.deliveryPointId,
-        })
-      : this.pickupsService.listByEnrollment(request.user.sub, {
-          ...query,
-          enrollmentId: query.enrollmentId!,
-        });
+  ): Promise<
+    ListPickupRequestsResponse | ListDeliveryPointQueueResponse | ListPickupRequestsBoardResponse
+  > {
+    if (query.deliveryPointId !== undefined) {
+      return this.pickupsService.listByDeliveryPoint(request.user.sub, {
+        ...query,
+        deliveryPointId: query.deliveryPointId,
+      });
+    }
+    if (query.institutionId !== undefined) {
+      return this.pickupsService.listByInstitution(request.user.sub, {
+        ...query,
+        institutionId: query.institutionId,
+      });
+    }
+    return this.pickupsService.listByEnrollment(request.user.sub, {
+      ...query,
+      enrollmentId: query.enrollmentId!,
+    });
   }
 
   @Post(':id/location')

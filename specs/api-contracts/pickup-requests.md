@@ -33,6 +33,7 @@ tutor, o membresía a la institución) contra el `pickup_requests` en cuestión.
 | `GET /pickup-requests/:id` | verificación manual en el `service`: **OR** entre tutor dueño y miembro de la institución (ver abajo) |
 | `GET /pickup-requests?enrollmentId=` | verificación manual en el `service`: mismo **OR**, resuelto sobre el `enrollments` (ver abajo) |
 | `GET /pickup-requests?deliveryPointId=` | verificación manual en el `service`: **solo** el lado `institution_member` del OR, resuelto sobre el `delivery_points` (ver abajo) |
+| `GET /pickup-requests?institutionId=` | verificación manual en el `service`: `institution_member` de esa institución, sin restricción de `role` (ver abajo) |
 | `PATCH /pickup-requests/:id/arrived` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
 | `PATCH /pickup-requests/:id/deliver` | **`InstitutionMembershipGuard`** en modo ruta por recurso: `@InstitutionResource({ entity: PickupRequest })` resuelve el `pickup_requests` por su `:id`, lee su `institution_id` (denormalizado, ADR-018 punto 4) y verifica la membresía antes de llegar al controller. Sin restricción de `role` (ADR-011) |
 | `PATCH /pickup-requests/:id/cancel` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
@@ -57,6 +58,13 @@ El usuario debe ser `institution_members` de la institución dueña del
 manual en el `service`, no con `InstitutionMembershipGuard`, por la misma razón
 que el resto del endpoint: la institución llega por query param, no por ruta ni
 por recurso `:id`.
+
+**`GET /pickup-requests?institutionId=` tampoco usa el OR** (ADR-068 punto 2):
+es la perspectiva del tablero de institución (`apps/board`), sin noción de un
+tutor individual. El usuario debe ser `institution_members` de esa
+`institutionId`, con cualquier `role` (ADR-011) — misma verificación manual que
+el resto del contrato, no `InstitutionMembershipGuard`, porque la institución
+llega por query param.
 
 Toda transición de `status` se valida contra la máquina de estados compartida en
 `packages/shared` (`pickup-request-status-machine.ts`, ADR-017); un intento de
@@ -199,24 +207,28 @@ sigue siendo server-side vía `PATCH .../deliver` (ADR-024 punto 4).
 | 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es el tutor dueño **ni** `institution_members` de la institución del `pickup_requests` (falla el OR; se replica el mismo `code` que usa el guard compartido, ADR-031 punto 1) |
 | 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
 
-## `GET /pickup-requests?enrollmentId=...` · `?deliveryPointId=...`
+## `GET /pickup-requests?enrollmentId=...` · `?deliveryPointId=...` · `?institutionId=...`
 
-Un mismo endpoint con **dos modos mutuamente excluyentes**, elegidos por el query
-param que llega:
+Un mismo endpoint con **tres modos mutuamente excluyentes**, elegidos por el
+query param que llega:
 - **`enrollmentId`** — histórico de recogidas de un `enrollments`. Ver features
   018–022.
 - **`deliveryPointId`** — cola operativa de un `delivery_points`: el snapshot
   inicial de la Consola de puerta, sobre el que después se aplican los deltas de
   tiempo real (ADR-050 punto 6). Ver feature 021.
+- **`institutionId`** — feed agregado de una institución completa: el snapshot
+  inicial del tablero (`apps/board`), sobre el que después se aplican los
+  deltas de tiempo real (ADR-068 punto 2).
 
-Hay que enviar **exactamente uno** de los dos: enviar ambos, o ninguno, es
+Hay que enviar **exactamente uno** de los tres: enviar más de uno, o ninguno, es
 `400 INVALID_PAYLOAD`.
 
 **Query params**
 | Param | Requerido | Notas |
 |---|---|---|
-| `enrollmentId` | exactamente uno de los dos | debe corresponder a un alumno del que el usuario es guardián, o a una institución de la que es miembro |
-| `deliveryPointId` | exactamente uno de los dos | debe corresponder a un `delivery_points` de una institución de la que el usuario es miembro (cualquier `role`) |
+| `enrollmentId` | exactamente uno de los tres | debe corresponder a un alumno del que el usuario es guardián, o a una institución de la que es miembro |
+| `deliveryPointId` | exactamente uno de los tres | debe corresponder a un `delivery_points` de una institución de la que el usuario es miembro (cualquier `role`) |
+| `institutionId` | exactamente uno de los tres | debe corresponder a una institución de la que el usuario es miembro (cualquier `role`) |
 | `status` | no | filtra por uno de los valores del enum |
 | `limit` | no | tamaño de página; default `20` (ADR-024 punto 9) |
 | `offset` | no | desplazamiento; default `0` (ADR-024 punto 9) |
@@ -237,6 +249,21 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 - Autorización distinta (solo `institution_member`, ver arriba).
 - **Forma de respuesta distinta** (ADR-051 punto 3): `PickupRequestQueueSummary`,
   no el `PickupRequestSummary` genérico del modo `enrollmentId`. Ver abajo.
+
+### Diferencias del modo `institutionId`
+
+- **Solo estados activos** (`en_route`, `arriving`, `arrived`), mismo criterio
+  que el modo `deliveryPointId` (ADR-068 punto 2): el tablero es una vista
+  operativa del momento, no un registro histórico.
+- `status`, si se envía, **acota dentro** de ese conjunto activo, igual que en
+  el modo `deliveryPointId`.
+- Autorización distinta (solo `institution_member`, ver arriba) — sin lado de
+  tutor, igual que `deliveryPointId`.
+- **Forma de respuesta distinta**: `PickupRequestBoardSummary` (ADR-068 punto
+  3) — **sin `deliveryCode`**, a propósito (ADR-051): a diferencia de
+  `PickupRequestQueueSummary`, esta vista alimenta una pantalla pública
+  (`apps/board`, kiosko en la recepción de la institución), donde el código de
+  verificación de la entrega nunca debe aparecer. Ver abajo.
 
 **Response 200 — modo `enrollmentId`** (`PickupRequestSummary`; sin cambios)
 ```json
@@ -279,6 +306,36 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 }
 ```
 
+**Response 200 — modo `institutionId`** (`PickupRequestBoardSummary`)
+```json
+{
+  "pickupRequests": [
+    {
+      "pickupRequestId": "uuid",
+      "status": "en_route | arriving | arrived",
+      "studentFullName": "string (join: student vía enrollment)",
+      "gradeOrGroup": "string | null (join: enrollment)",
+      "deliveryPointId": "uuid | null",
+      "estimatedArrivalAt": "string (timestamptz) | null",
+      "etaSeconds": "number | null",
+      "arrivalMode": "vehicle | walking | null",
+      "updatedAt": "string (timestamptz)"
+    }
+  ],
+  "limit": "number",
+  "offset": "number",
+  "total": "number"
+}
+```
+
+Campo por campo el mismo `PickupRequestBoardPayload` que ya construye
+`buildBoardPayload()` (`packages/shared`) y que publica
+`school-pickup/institution/{institutionId}/board`
+(`specs/api-contracts/pickup-realtime-mqtt.md`) — mismo criterio de paridad de
+nombres que el modo `deliveryPointId` frente a `buildQueuePayload()`, para que
+`apps/board` fusione este snapshot con los deltas de
+`specs/api-contracts/board-ws.md` sin transformar ninguno de los dos.
+
 **Por qué dos formas y no una** (ADR-051 punto 3). Cada fila de este modo replica
 **campo por campo** el payload que `buildQueuePayload()` publica en
 `deliveryPointQueueTopic` (`specs/api-contracts/pickup-realtime-mqtt.md`) más
@@ -302,10 +359,10 @@ consola ordena por ETA, no por hora de inicio.
 **Errores**
 | Código | `code` | Caso |
 |---|---|---|
-| 400 | `INVALID_PAYLOAD` | ninguno de `enrollmentId`/`deliveryPointId`, los dos a la vez, o cualquiera de ellos mal formado |
+| 400 | `INVALID_PAYLOAD` | ninguno de `enrollmentId`/`deliveryPointId`/`institutionId`, más de uno a la vez, o cualquiera de ellos mal formado |
 | 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
-| 403 | `NOT_INSTITUTION_MEMBER` | modo `enrollmentId`: el usuario no es guardián del alumno **ni** miembro de la institución del `enrollments` (falla el OR). Modo `deliveryPointId`: el usuario no es `institution_members` de la institución dueña del `delivery_points` |
-| 404 | `RESOURCE_NOT_FOUND` | el `enrollments` o el `delivery_points` indicado no existe |
+| 403 | `NOT_INSTITUTION_MEMBER` | modo `enrollmentId`: el usuario no es guardián del alumno **ni** miembro de la institución del `enrollments` (falla el OR). Modo `deliveryPointId`: el usuario no es `institution_members` de la institución dueña del `delivery_points`. Modo `institutionId`: el usuario no es `institution_members` de esa `institutionId` |
+| 404 | `RESOURCE_NOT_FOUND` | el `enrollments`, el `delivery_points` o el `institutionId` indicado no existe |
 
 ## `POST /pickup-requests/:id/location`
 
@@ -477,11 +534,17 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   `deliveryPointId`, espejo del payload de tiempo real, con `deliveryCode`).
 - ADR-065 (`institutionLocation` en `GET /pickup-requests/:id`, sin
   restricción de `InstitutionMembershipGuard`).
+- ADR-068 (punto 2: filtro `institutionId` como snapshot REST del tablero de
+  institución; punto 3: `PickupRequestBoardSummary`, espejo de
+  `PickupRequestBoardPayload`, sin `deliveryCode`; punto 4: canal WebSocket
+  hermano).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
-  continúan ese snapshot).
+  continúan el snapshot del modo `deliveryPointId`).
+- `specs/api-contracts/board-ws.md` (los deltas de tiempo real que continúan el
+  snapshot del modo `institutionId`).
 - `docs/arquitectura.md` (§`InstitutionMembershipGuard`: los tres patrones de
   resolución de `institutionId`, incluido el de verificación manual OR que usan
-  los dos `GET` de este contrato).
+  los `GET` de este contrato).
 
 ## Preguntas abiertas
 

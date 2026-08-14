@@ -125,8 +125,10 @@ school-pickup/institution/{institutionId}/board
 
 - **Publica:** el `api` (al crear, feature 018) y el `worker` (en cada
   actualización de estado/ETA, features 019–022).
-- **Consume:** el `board` (kiosko) de la institución, que refresca el listado
-  estilo "llegadas de aeropuerto".
+- **Consume:** el `api` mismo, por comodín, para reenviarlo al `board`
+  (kiosko) de cada institución vía `specs/api-contracts/board-ws.md`
+  (ADR-050, ADR-068) — el navegador nunca se suscribe directo al broker.
+  El tablero refresca así el listado estilo "llegadas de aeropuerto".
 
 **Payload** (estado de un `pickup_requests` para el tablero; los campos marcados
 "(join)" provienen de entidades relacionadas, no de columnas de `pickup_requests`)

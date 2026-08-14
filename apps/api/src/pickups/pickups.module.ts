@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryPointsModule } from '../delivery-points/delivery-points.module';
+import { InstitutionsModule } from '../institutions/institutions.module';
 import { MqttModule } from '../mqtt/mqtt.module';
 import { PushModule } from '../push-subscriptions/push.module';
 import {
@@ -37,6 +38,7 @@ import { PickupRequestAccessService } from './pickup-request-access.service';
     MqttModule,
     PushModule,
     DeliveryPointsModule,
+    InstitutionsModule,
   ],
   controllers: [PickupsController, PickupDeliveryController],
   providers: [PickupsService, PickupRequestAccessService],

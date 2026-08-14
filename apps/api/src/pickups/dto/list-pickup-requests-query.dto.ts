@@ -31,22 +31,29 @@ function toOptionalNumber({ value }: { value: unknown }): number | undefined {
   return value === undefined ? undefined : Number(value);
 }
 
-// "Exactly one of enrollmentId or deliveryPointId" (ADR-050 pt.6) has no
-// built-in equivalent in class-validator, and unlike create-enrollment.dto.ts
-// there is no always-required field to anchor the check on: both filters are
-// optional in isolation. @IsOptional()/@ValidateIf() skip *every* decorator on
-// their property, including a @Validate, which would silently let the "neither
-// provided" case through — so enrollmentId carries no @IsOptional at all, and
-// its optionality is expressed by the constraint below instead.
-@ValidatorConstraint({ name: 'exactlyOneOfEnrollmentIdOrDeliveryPointId', async: false })
-class ExactlyOneOfEnrollmentIdOrDeliveryPointIdConstraint implements ValidatorConstraintInterface {
+// "Exactly one of enrollmentId, deliveryPointId or institutionId" (ADR-050
+// pt.6, ADR-068 pt.2) has no built-in equivalent in class-validator, and
+// unlike create-enrollment.dto.ts there is no always-required field to anchor
+// the check on: all three filters are optional in isolation.
+// @IsOptional()/@ValidateIf() skip *every* decorator on their property,
+// including a @Validate, which would silently let the "none provided" case
+// through — so enrollmentId carries no @IsOptional at all, and its
+// optionality is expressed by the constraint below instead.
+@ValidatorConstraint({
+  name: 'exactlyOneOfEnrollmentIdDeliveryPointIdOrInstitutionId',
+  async: false,
+})
+class ExactlyOneOfEnrollmentIdDeliveryPointIdOrInstitutionIdConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {
     const dto = args.object as ListPickupRequestsQueryDto;
-    return (dto.enrollmentId !== undefined) !== (dto.deliveryPointId !== undefined);
+    const providedCount = [dto.enrollmentId, dto.deliveryPointId, dto.institutionId].filter(
+      (value) => value !== undefined,
+    ).length;
+    return providedCount === 1;
   }
 
   defaultMessage(): string {
-    return 'Exactly one of enrollmentId or deliveryPointId must be provided.';
+    return 'Exactly one of enrollmentId, deliveryPointId or institutionId must be provided.';
   }
 }
 
@@ -62,13 +69,17 @@ class OptionalUuidConstraint implements ValidatorConstraintInterface {
 }
 
 export class ListPickupRequestsQueryDto {
-  @Validate(ExactlyOneOfEnrollmentIdOrDeliveryPointIdConstraint)
+  @Validate(ExactlyOneOfEnrollmentIdDeliveryPointIdOrInstitutionIdConstraint)
   @Validate(OptionalUuidConstraint)
   enrollmentId?: string;
 
   @IsOptional()
   @IsUUID()
   deliveryPointId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  institutionId?: string;
 
   @IsOptional()
   @IsIn(PICKUP_REQUEST_STATUS_VALUES)
