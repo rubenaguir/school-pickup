@@ -4225,3 +4225,67 @@ iniciar sesión).
 - `specs/api-contracts/auth.md` (`POST /auth/refresh`, forma actualizada).
 - `apps/api/src/auth/auth.module.ts` (`JWT_REFRESH_TTL`, 30 días — sin
   cambios, solo deja de ser un límite absoluto para sesiones activas).
+
+## ADR-068 — Plomería de `apps/board`: sesión reutilizada de `institution_member`, snapshot + WS del feed completo, filtro por punto de entrega en cliente
+
+**Contexto.** `apps/board` es hoy un esqueleto. Necesita: cómo se autentica
+un kiosco sin usuario presente, un snapshot inicial del feed completo de
+la institución (no existe — `GET /pickup-requests` solo filtra por
+`enrollmentId` o `deliveryPointId`, ninguno sirve para "toda la
+institución"), y su propio canal WebSocket (los dos existentes son de cola
+por punto de entrega y de seguimiento individual, ninguno expone el feed
+agregado completo).
+
+**Decisión.**
+1. **Sesión: login normal de `institution_member`, sin mecanismo nuevo.**
+   Con la rotación de `refreshToken` ya resuelta (ADR-067), una sesión
+   iniciada una sola vez al instalar el kiosco se mantiene indefinidamente
+   mientras el tablero esté en uso activo — no hace falta un token de
+   larga duración dedicado. **Sin restricción de `role`** (ADR-011, mismo
+   criterio que la consola de puerta): cualquier `institution_member`
+   puede dejar el kiosco autenticado. A diferencia de `apps/portal`, no
+   hay switcher ni selección de institución — el kiosco muestra siempre la
+   institución del `institution_member` que inició sesión (si esa persona
+   pertenece a más de una, aplica la misma simplificación ya aceptada en
+   `InstitutionContext`, ADR-042 punto 5: la primera).
+2. **`GET /pickup-requests?institutionId=...` nuevo**, tercer modo
+   mutuamente excluyente junto a `enrollmentId`/`deliveryPointId` ya
+   existentes. Autorización: `institution_member` de esa institución, sin
+   restricción de `role` (mismo criterio que el resto de este ADR). Solo
+   estados activos (`en_route`/`arriving`/`arrived`), mismo criterio que
+   el filtro por `deliveryPointId`.
+3. **Forma de respuesta nueva: `PickupRequestBoardSummary`** — **sin
+   `deliveryCode`**, a propósito (ADR-051: el tablero es una pantalla
+   pública, nunca debe mostrar el código de verificación, a diferencia de
+   `PickupRequestQueueSummary` que sí lo trae para la consola de puerta,
+   una pantalla autenticada y operada por staff). Mismos campos que
+   `PickupRequestBoardPayload` (el payload que ya construye
+   `buildBoardPayload()`) — mismo criterio de paridad de nombres entre
+   REST y WS ya usado en cola/seguimiento, para fusionar sin transformar.
+4. **Gateway WS nuevo**, mismo patrón que los dos anteriores
+   (`board.gateway.ts`): se suscribe al wildcard de tablero
+   (`school-pickup/institution/+/board`, ya usado también por
+   seguimiento), autorización por membresía de institución (no por
+   propiedad de un `pickup_request` — distinto del canal de seguimiento),
+   reenvía filtrado por `institutionId` de la conexión.
+5. **Filtro por punto de entrega: en cliente, sin endpoint nuevo.** El
+   feed completo ya trae `deliveryPointId` por fila — filtrar/agrupar por
+   punto de entrega es una operación local sobre los datos ya recibidos,
+   no justifica una llamada aparte.
+6. **TTS (voceo automático): Web Speech API del navegador**, sin decisión
+   de arquitectura — estándar, sin servicio externo.
+7. **`packages/ui` como dependencia**, mismo patrón que `portal`/`parent`
+   (ADR-036/ADR-042 punto 4/ADR-063 punto 8).
+
+## Referencias
+
+- ADR-011 (consola de puerta y tablero sin restricción de `role` dentro
+  del tenant).
+- ADR-042 (punto 5: simplificación de "primera membresía" cuando hay más
+  de una, reutilizada aquí sin selector).
+- ADR-050 (patrón original del puente WebSocket).
+- ADR-051 (`deliveryCode` fuera del payload/summary de tablero, a
+  propósito).
+- ADR-067 (rotación de `refreshToken`, la pieza que hace viable la sesión
+  indefinida del kiosco sin mecanismo nuevo).
+- `docs/design-brief.md` (sección "3. Tablero de institución").
