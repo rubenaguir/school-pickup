@@ -339,7 +339,7 @@ WebSocket de tiempo real (base ya lista para Fase 8/9), y el design system
 completo en `packages/ui`. Sin pendientes abiertos en el checklist
 original de `docs/design-brief.md` para este frontend.
 
-## Fase 8 — Frontend: `apps/parent` (PWA)
+## Fase 8 — Frontend: `apps/parent` (PWA) ✅ completo
 
 - [x] Plomería base: PWA instalable, `LocationProvider` intercambiable,
       Wake Lock con degradación, Page Visibility, sesión, routing (ADR-063)
@@ -351,18 +351,30 @@ original de `docs/design-brief.md` para este frontend.
       catálogo de vehículos / captura libre / caminando)
 - [x] Pantalla de seguimiento (★ hero): mapa (dos marcadores + línea recta,
       no ruta real — ADR-065), ETA, Wake Lock, Page Visibility, aviso de
-      área de entrega, código de entrega (**solo PIN, sin QR todavía**),
-      estado pausado, "Ya llegué"/Cancelar
-- [ ] QR del código de entrega — quedó fuera de esta capa, solo se
-      construyó el PIN numérico (ver Backlog técnico)
+      área de entrega, código de entrega (**solo PIN, sin QR — ver Backlog
+      técnico, decisión de producto, no un pendiente técnico**), estado
+      pausado, "Ya llegué"/Cancelar
+- [x] Notificaciones push (ADR-066): `push_subscriptions` (migración +
+      entidad + índice único `user_id`+`endpoint`), `web-push` (VAPID),
+      envío best-effort a los demás tutores autorizados tras
+      `PATCH /pickup-requests/:id/deliver` (excluye a quien recogió),
+      service worker propio vía `injectManifest` (`push`/
+      `notificationclick`, abre "Mis hijos"), prompt de permiso no
+      intrusivo en `apps/parent` que respeta `Notification.permission` y un
+      descarte persistente por dispositivo — implementado en una sesión
+      anterior, quedó sin marcar aquí hasta esta auditoría
 - ~~Onboarding: vínculo con institución vía `join_code`~~ — **fuera de
   alcance de `apps/parent`**, esa acción ya vive en `apps/portal`
   ("Asociar institución", Capa 3k). Ítem desactualizado del plan original,
   antes de separar los roles de cada frontend con claridad.
-- [ ] Permisos de notificaciones (push) — no abordado todavía; distinto de
-      las preferencias de notificación ya construidas en `apps/portal`
-      (ADR-059, qué se notifica), esto sería la entrega real vía Push API
-      del navegador
+
+**Fase 8 completa.** El QR del código de entrega (`design-brief.md`
+original pedía PIN + QR) queda deliberadamente fuera de alcance — no es un
+pendiente técnico, es una decisión de producto confirmada al cerrar esta
+fase: agregaría fricción en el momento de mayor presión operativa (la
+ventana de salida) a cambio de un beneficio no demostrado sin al menos una
+institución real usando el sistema. Ver Backlog técnico para la condición
+exacta que reabriría este ítem.
 
 ## Fase 9 — Frontend: `apps/board` (kiosko) ✅ completo
 
@@ -424,7 +436,7 @@ verificado en vivo tampoco por la misma razón).
 
 | Ítem | Origen | Mejora futura si se requiere |
 |---|---|---|
-| Código de entrega en `apps/parent` solo muestra el PIN numérico, sin QR — el `design-brief.md` original pedía ambos | Capa 4d — quedó a criterio de la sesión, se priorizó el PIN | Agregar una librería ligera de generación de QR client-side (ej. `qrcode` o similar) si en la práctica el PIN de 4 dígitos resulta insuficiente para la consola de puerta (que ya lo verifica manualmente sin escáner hoy) |
+| Código de entrega en `apps/parent` solo muestra el PIN numérico, sin QR — el `design-brief.md` original pedía ambos | Capa 4d (Fase 8) — decisión de cierre de fase, confirmada con el humano: el QR se evaluó y se descarta por ahora, no por falta de tiempo. Un escáner que falla en el momento de mayor presión del staff (la ventana de salida) agrega fricción justo donde menos se puede permitir, y sin una escuela real en producción no hay señal de que el PIN de 4 dígitos sea insuficiente — la consola de puerta ya lo verifica manualmente sin problema hoy | No implementar hasta tener al menos una institución real en fase de pruebas y observar ahí si el PIN genera fricción operativa real. Si esa señal aparece, agregar una librería ligera de generación de QR client-side (ej. `qrcode` o similar) — no antes, y no por precaución especulativa |
 | Throttling de envío de ubicación del tutor fijado en 15s (`apps/parent`) como punto de partida razonable, sin optimizar todavía para el balance real entre consumo de red/batería y percepción de tiempo real | ADR-064 punto 3 — decisión inicial, confirmada como "por ahora" por el humano, no como definitiva | Revisar con datos reales de uso (no solo intuición): posibles mejoras — intervalo adaptativo según velocidad de desplazamiento, reducir frecuencia si la app está en segundo plano/pausada, o mover parte de la lógica de throttling al propio `LocationProvider` en vez de un temporizador fijo en la pantalla |
 | Foto de alumno (`photoUrl`) omitida en Alta de alumno — sin infraestructura de subida de archivos en el proyecto, y deliberadamente diferida por consideración de privacidad de menores, no solo por falta de tooling | ADR-058 (Capa 3j) | Antes de implementar, resolver explícitamente: proveedor de almacenamiento, control de acceso a las imágenes, retención/borrado, y quién puede verlas — no solo "agregar un input de subida" |
 | `<input type="time">` en la pantalla de Horarios se renderiza en 12h (AM/PM) en navegadores con esa configuración regional (Chrome ignora `lang="es-ES"` para esto) — el valor guardado y mostrado en las filas del listado sí es 24h correcto, solo el widget de captura varía | ADR-053 (Capa 3f) — un time-picker propio en 24h consistente requeriría sumar un componente nuevo a `@casillego/ui`, decisión de design system (ADR-036/ADR-049), no de esta pantalla | Evaluar un componente de hora propio en `@casillego/ui` si se confirma que es fricción real para el personal de instituciones, no solo una inconsistencia teórica — no construir sin esa señal |

@@ -4447,3 +4447,53 @@ consumidores previstos.
   `apps/portal/src/gate-console/queue-socket.ts`,
   `apps/portal/src/gate-console/useDeliveryPointQueue.ts` (el patrón que
   este ADR replica por tercera vez, ver punto 6).
+
+## ADR-070 — Cierre de Fase 8: el QR del código de entrega se descarta deliberadamente, no se difiere por falta de tiempo
+
+**Contexto.** `docs/design-brief.md` pide que la pantalla de código de
+entrega de `apps/parent` (feature 021, Capa 4d) muestre "QR y PIN de 4
+dígitos". Solo se construyó el PIN (Fase 8). Al auditar el cierre de la
+fase, esto quedaba registrado en `docs/plan-implementacion.md` como un
+ítem de Backlog técnico condicionado a que "el PIN de 4 dígitos resulte
+insuficiente para la consola de puerta" — redacción que sugería una
+omisión pendiente de tiempo/prioridad, no una decisión evaluada.
+
+**Decisión.**
+1. **El QR se descarta a propósito, confirmado con el humano al cerrar la
+   fase — no es deuda técnica.** Dos razones concretas, no solo "se
+   priorizó el PIN":
+   - **Fricción en el momento equivocado.** La consola de puerta opera
+     durante la ventana de salida, el momento de mayor presión operativa
+     del staff (ADR-052: "una consola que tarda medio minuto en volver es
+     una consola que se perdió el evento"). Un QR que falla al escanear
+     (cámara sucia, pantalla del tutor con brillo bajo, ángulo, tablet sin
+     cámara) agrega una fuente de fricción justo ahí — el PIN tecleado a
+     mano no tiene ese modo de falla.
+   - **Sin beneficio demostrado.** No hay ninguna institución real en
+     producción todavía — no existe evidencia de que el PIN de 4 dígitos
+     sea insuficiente en la práctica. Construir el QR ahora sería resolver
+     un problema hipotético.
+2. **Condición explícita para reabrir el ítem**: al menos una institución
+   real en fase de pruebas, y una señal operativa concreta de que el PIN
+   genera fricción real en la consola de puerta — no una preferencia
+   estética de "el design-brief pedía ambos". Sin esa señal, no se
+   implementa.
+3. **No cambia nada del modelo ni del contrato de API** — `delivery_code`
+   ya es el mismo valor que serviría de contenido a un QR futuro; esta
+   decisión es exclusivamente de alcance de pantalla en `apps/parent`, no
+   de esquema.
+
+**Consecuencias.** Cierra formalmente Fase 8 (`docs/plan-implementacion.md`)
+sin este ítem pendiente — queda en Backlog técnico únicamente como
+condición de reapertura, no como trabajo diferido a corto plazo.
+
+## Referencias
+
+- `docs/design-brief.md` (pantalla de código de entrega, "QR y PIN de 4
+  dígitos").
+- ADR-052 (precedente del mismo criterio: la consola de puerta se diseña
+  para no perder eventos durante la ventana de salida — la misma ventana
+  cuya presión motiva descartar el QR aquí).
+- ADR-058 (precedente de estructura: una omisión deliberada con su propia
+  razón explícita, no una casilla sin marcar).
+- `docs/plan-implementacion.md` — Fase 8, Backlog técnico.
