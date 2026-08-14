@@ -29,8 +29,9 @@ export function writeTokens(
   tokens: { accessToken: string; refreshToken?: string },
 ): void {
   storage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
-  // POST /auth/refresh returns only a new accessToken — refresh tokens are not
-  // rotated (specs/api-contracts/auth.md), so the stored one must survive.
+  // Optional so a caller writing only a new accessToken doesn't clobber the
+  // refresh token already on file. In practice both POST /auth/login and
+  // POST /auth/refresh return a refreshToken (ADR-067: refresh rotates it too).
   if (tokens.refreshToken !== undefined) {
     storage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
   }

@@ -140,11 +140,11 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     }
 
     const response = await send('POST', '/auth/refresh', { refreshToken }, null);
-    // Only a new accessToken comes back; the refresh token is not rotated
-    // (specs/api-contracts/auth.md).
-    const { accessToken } = await parse<{ accessToken: string }>(response);
-    writeTokens(storage, { accessToken });
-    return accessToken;
+    // The refresh token is rotated on every call (ADR-067): the response
+    // carries a fresh one, which must be stored in place of the one just used.
+    const tokens = await parse<{ accessToken: string; refreshToken: string }>(response);
+    writeTokens(storage, tokens);
+    return tokens.accessToken;
   }
 
   function refreshOnce(): Promise<string> {

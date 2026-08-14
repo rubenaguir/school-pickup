@@ -261,7 +261,10 @@ export class AuthService {
       });
     }
 
-    return { accessToken: this.issueAccessToken(user) };
+    return {
+      accessToken: this.issueAccessToken(user),
+      refreshToken: this.issueRefreshToken(user),
+    };
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {

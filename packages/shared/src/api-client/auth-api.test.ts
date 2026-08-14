@@ -62,7 +62,8 @@ describe('token storage', () => {
     };
 
     writeTokens(storage, { accessToken: 'a1', refreshToken: 'r1' });
-    // POST /auth/refresh answers with accessToken only — no rotation.
+    // `refreshToken` is optional: a caller writing only a new accessToken
+    // must not clobber the refresh token already on file.
     writeTokens(storage, { accessToken: 'a2' });
 
     expect(storage.getItem(ACCESS_TOKEN_KEY)).toBe('a2');

@@ -69,7 +69,9 @@ describe('createApiClient', () => {
     const fetchImpl = vi
       .fn<FetchLike>()
       .mockResolvedValueOnce(respond(401, { message: 'Unauthorized', statusCode: 401 }))
-      .mockResolvedValueOnce(respond(200, { accessToken: 'fresh-access' }))
+      .mockResolvedValueOnce(
+        respond(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
+      )
       .mockResolvedValueOnce(respond(200, { memberships: [{ institutionId: 'inst-a' }] }));
     const client = build(fetchImpl);
 
@@ -81,8 +83,8 @@ describe('createApiClient', () => {
     // The replay carries the refreshed token, not the stale one.
     expect(fetchImpl.mock.calls[2][1]?.headers).toEqual({ Authorization: 'Bearer fresh-access' });
     expect(storage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-access');
-    // Refresh tokens are not rotated: the stored one must survive untouched.
-    expect(storage.getItem(REFRESH_TOKEN_KEY)).toBe('good-refresh');
+    // ADR-067: the refresh token rotates too — the stored one must be the new one.
+    expect(storage.getItem(REFRESH_TOKEN_KEY)).toBe('fresh-refresh');
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
@@ -122,7 +124,9 @@ describe('createApiClient', () => {
   it('performs a single refresh for concurrent 401s (single-flight)', async () => {
     const fetchImpl = vi.fn<FetchLike>().mockImplementation((url) => {
       if (url === `${BASE_URL}/auth/refresh`) {
-        return Promise.resolve(respond(200, { accessToken: 'fresh-access' }));
+        return Promise.resolve(
+          respond(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
+        );
       }
       const token = storage.getItem(ACCESS_TOKEN_KEY);
       return Promise.resolve(
@@ -190,7 +194,9 @@ describe('createApiClient', () => {
     const fetchImpl = vi
       .fn<FetchLike>()
       .mockResolvedValueOnce(respond(401, { message: 'Unauthorized', statusCode: 401 }))
-      .mockResolvedValueOnce(respond(200, { accessToken: 'fresh-access' }))
+      .mockResolvedValueOnce(
+        respond(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
+      )
       .mockResolvedValueOnce(respond(200, { id: 'pr-1', status: 'delivered' }));
     const client = build(fetchImpl);
 

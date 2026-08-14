@@ -311,7 +311,7 @@ describe('AuthService.login', () => {
 });
 
 describe('AuthService.refresh', () => {
-  it('issues a new access token for a valid refresh token and an active user', async () => {
+  it('issues a new access token and a rotated refresh token for a valid refresh token and an active user', async () => {
     const { service, refreshJwtService } = buildAuthService({
       usersRepository: {
         findOneBy: vi
@@ -324,7 +324,13 @@ describe('AuthService.refresh', () => {
     const result = await service.refresh({ refreshToken });
 
     expect(result.accessToken).toEqual(expect.any(String));
-    expect(Object.keys(result)).toEqual(['accessToken']);
+    expect(result.refreshToken).toEqual(expect.any(String));
+    expect(Object.keys(result).sort()).toEqual(['accessToken', 'refreshToken']);
+    // ADR-067: the response carries a freshly-issued refresh token for the
+    // same user, not the caller's original one echoed back.
+    expect(
+      refreshJwtService.verify<{ sub: string; type: string }>(result.refreshToken),
+    ).toMatchObject({ sub: 'u1', type: 'refresh' });
   });
 
   it('rejects with 401 INVALID_REFRESH_TOKEN for a malformed token', async () => {
