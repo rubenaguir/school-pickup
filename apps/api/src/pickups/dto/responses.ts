@@ -1,4 +1,8 @@
-import type { ArrivalMode, PickupRequestStatus } from '@casillego/shared';
+import type {
+  ArrivalMode,
+  PickupRequestStatus,
+  StudentGuardianRelationship,
+} from '@casillego/shared';
 import type { LatLng } from '../../institutions/geo-point.mapper';
 
 export interface PickupRequestResponse {
@@ -119,6 +123,36 @@ export interface PickupRequestBoardSummary {
 
 export interface ListPickupRequestsBoardResponse {
   pickupRequests: PickupRequestBoardSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+/**
+ * Row shape of `GET /pickup-requests?institutionId=&view=monitor` (ADR-071
+ * pt.2). Field for field the same object `buildBoardMonitorPayload()`
+ * publishes to `boardMonitorTopic` (`@casillego/shared`) — same
+ * REST/WebSocket parity criterion as `PickupRequestBoardSummary`. Never used
+ * without `view=monitor` explicit.
+ */
+export interface PickupRequestBoardMonitorSummary {
+  pickupRequestId: string;
+  status: PickupRequestStatus;
+  studentFullName: string;
+  gradeOrGroup: string | null;
+  deliveryPointId: string | null;
+  estimatedArrivalAt: string | null;
+  etaSeconds: number | null;
+  arrivalMode: ArrivalMode | null;
+  guardianFullName: string;
+  guardianRelationship: StudentGuardianRelationship;
+  vehicleDescription: string | null;
+  vehiclePlate: string | null;
+  updatedAt: string;
+}
+
+export interface ListPickupRequestsBoardMonitorResponse {
+  pickupRequests: PickupRequestBoardMonitorSummary[];
   limit: number;
   offset: number;
   total: number;

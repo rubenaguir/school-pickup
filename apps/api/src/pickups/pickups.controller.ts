@@ -16,6 +16,7 @@ import { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto
 import { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
+  ListPickupRequestsBoardMonitorResponse,
   ListPickupRequestsBoardResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
@@ -58,7 +59,10 @@ export class PickupsController {
     @Query() query: ListPickupRequestsQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<
-    ListPickupRequestsResponse | ListDeliveryPointQueueResponse | ListPickupRequestsBoardResponse
+    | ListPickupRequestsResponse
+    | ListDeliveryPointQueueResponse
+    | ListPickupRequestsBoardResponse
+    | ListPickupRequestsBoardMonitorResponse
   > {
     if (query.deliveryPointId !== undefined) {
       return this.pickupsService.listByDeliveryPoint(request.user.sub, {
@@ -67,6 +71,12 @@ export class PickupsController {
       });
     }
     if (query.institutionId !== undefined) {
+      if (query.view === 'monitor') {
+        return this.pickupsService.listByInstitutionMonitor(request.user.sub, {
+          ...query,
+          institutionId: query.institutionId,
+        });
+      }
       return this.pickupsService.listByInstitution(request.user.sub, {
         ...query,
         institutionId: query.institutionId,

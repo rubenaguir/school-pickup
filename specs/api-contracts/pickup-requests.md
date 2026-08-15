@@ -229,9 +229,17 @@ Hay que enviar **exactamente uno** de los tres: enviar más de uno, o ninguno, e
 | `enrollmentId` | exactamente uno de los tres | debe corresponder a un alumno del que el usuario es guardián, o a una institución de la que es miembro |
 | `deliveryPointId` | exactamente uno de los tres | debe corresponder a un `delivery_points` de una institución de la que el usuario es miembro (cualquier `role`) |
 | `institutionId` | exactamente uno de los tres | debe corresponder a una institución de la que el usuario es miembro (cualquier `role`) |
+| `view` | no | solo junto a `institutionId`; `board` (default) o `monitor` — ver abajo (ADR-071 pt.2) |
 | `status` | no | filtra por uno de los valores del enum |
 | `limit` | no | tamaño de página; default `20` (ADR-024 punto 9) |
 | `offset` | no | desplazamiento; default `0` (ADR-024 punto 9) |
+
+`view` **no** es un cuarto filtro mutuamente excluyente con
+`enrollmentId`/`deliveryPointId`/`institutionId` — es un modificador de
+*forma* de un request que ya está acotado por `institutionId` (ADR-071 pt.2,
+pt.5). Si llega sin `institutionId`, la respuesta sigue siendo
+`400 INVALID_PAYLOAD` porque ningún filtro válido está presente, no porque
+`view` lo exija por sí mismo.
 
 Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 `enrollments` acumula recogidas durante años.
@@ -264,6 +272,15 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   `PickupRequestQueueSummary`, esta vista alimenta una pantalla pública
   (`apps/board`, kiosko en la recepción de la institución), donde el código de
   verificación de la entrega nunca debe aparecer. Ver abajo.
+- **`view=monitor` cambia la forma de respuesta a `PickupRequestBoardMonitorSummary`**
+  (ADR-071 pt.2, pt.5): mismos campos que `PickupRequestBoardSummary` más
+  `guardianFullName`/`guardianRelationship`/`vehicleDescription`/`vehiclePlate` —
+  el snapshot inicial de Carril, el modo de staff del tablero de institución,
+  antes de que el WebSocket de `specs/api-contracts/board-monitor-ws.md` tome
+  el relevo con los deltas. Misma autorización que `view=board` (default):
+  `institution_member` de esa `institutionId`, sin restricción de `role`.
+  **Sin `deliveryCode`**, igual criterio que `view=board`: ADR-051 no cambia
+  para ningún modo del tablero.
 
 **Response 200 — modo `enrollmentId`** (`PickupRequestSummary`; sin cambios)
 ```json
@@ -335,6 +352,39 @@ Campo por campo el mismo `PickupRequestBoardPayload` que ya construye
 nombres que el modo `deliveryPointId` frente a `buildQueuePayload()`, para que
 `apps/board` fusione este snapshot con los deltas de
 `specs/api-contracts/board-ws.md` sin transformar ninguno de los dos.
+
+**Response 200 — modo `institutionId`, `view=monitor`** (`PickupRequestBoardMonitorSummary`)
+```json
+{
+  "pickupRequests": [
+    {
+      "pickupRequestId": "uuid",
+      "status": "en_route | arriving | arrived",
+      "studentFullName": "string (join: student vía enrollment)",
+      "gradeOrGroup": "string | null (join: enrollment)",
+      "deliveryPointId": "uuid | null",
+      "estimatedArrivalAt": "string (timestamptz) | null",
+      "etaSeconds": "number | null",
+      "arrivalMode": "vehicle | walking | null",
+      "guardianFullName": "string (join: student_guardians → guardian)",
+      "guardianRelationship": "mother | father | grandparent | driver | other (join: student_guardians)",
+      "vehicleDescription": "string | null",
+      "vehiclePlate": "string | null",
+      "updatedAt": "string (timestamptz)"
+    }
+  ],
+  "limit": "number",
+  "offset": "number",
+  "total": "number"
+}
+```
+
+Campo por campo el mismo `PickupRequestBoardMonitorPayload` que ya construye
+`buildBoardMonitorPayload()` (`packages/shared`) y que publica
+`school-pickup/institution/{institutionId}/board-monitor`
+(`specs/api-contracts/pickup-realtime-mqtt.md`), para que Carril fusione este
+snapshot con los deltas de `specs/api-contracts/board-monitor-ws.md` sin
+transformar ninguno de los dos.
 
 **Por qué dos formas y no una** (ADR-051 punto 3). Cada fila de este modo replica
 **campo por campo** el payload que `buildQueuePayload()` publica en
@@ -538,10 +588,16 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   institución; punto 3: `PickupRequestBoardSummary`, espejo de
   `PickupRequestBoardPayload`, sin `deliveryCode`; punto 4: canal WebSocket
   hermano).
+- ADR-071 (punto 2: `view=monitor`, snapshot REST de Carril,
+  `PickupRequestBoardMonitorSummary`, espejo de
+  `PickupRequestBoardMonitorPayload`, sin `deliveryCode`; punto 5: `view` como
+  modificador de forma, no un cuarto filtro).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
   continúan el snapshot del modo `deliveryPointId`).
 - `specs/api-contracts/board-ws.md` (los deltas de tiempo real que continúan el
-  snapshot del modo `institutionId`).
+  snapshot del modo `institutionId`, `view=board`).
+- `specs/api-contracts/board-monitor-ws.md` (los deltas de tiempo real que
+  continúan el snapshot del modo `institutionId`, `view=monitor`).
 - `docs/arquitectura.md` (§`InstitutionMembershipGuard`: los tres patrones de
   resolución de `institutionId`, incluido el de verificación manual OR que usan
   los `GET` de este contrato).

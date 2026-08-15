@@ -1,9 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Card } from '@casillego/ui';
-import type { StudentGuardianRelationship } from '@casillego/shared';
+import {
+  STUDENT_GUARDIAN_RELATIONSHIPS,
+  relationshipLabel,
+  type StudentGuardianRelationship,
+} from '@casillego/shared';
 import { useTutor } from '../tutor/TutorContext';
-import { STUDENT_GUARDIAN_RELATIONSHIPS, relationshipLabel } from '../students/student-labels';
 import { createStudentErrorMessage } from '../students/student-error-messages';
 import { useCreateStudent } from '../students/useCreateStudent';
 import { Alert } from '../components/Alert';

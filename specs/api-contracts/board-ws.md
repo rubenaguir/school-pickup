@@ -12,9 +12,14 @@ de Mosquitto no hay ninguna conexión nueva — mismo principio que los dos
 canales hermanos (cola de punto de entrega, seguimiento del tutor).
 
 Este canal transporta **solo deltas**. El estado inicial se obtiene por
-REST con `GET /pickup-requests?institutionId=...`
-(`specs/api-contracts/pickup-requests.md`) — dos mecanismos separados,
-nunca uno híbrido (mismo criterio que ADR-050 punto 6).
+REST con `GET /pickup-requests?institutionId=...` (`view=board`, el
+default si se omite; `specs/api-contracts/pickup-requests.md`) — dos
+mecanismos separados, nunca uno híbrido (mismo criterio que ADR-050 punto 6).
+
+Carril, el modo de staff del tablero (ADR-071 pt.2), **no** usa este canal:
+tiene su propio puente, `specs/api-contracts/board-monitor-ws.md`, porque su
+payload lleva datos de tutor/vehículo que este canal público nunca debe
+transportar.
 
 ## Endpoint
 
@@ -106,6 +111,10 @@ REST antes de reanudar el consumo de deltas.
 - `specs/api-contracts/delivery-point-queue-ws.md` y
   `specs/api-contracts/pickup-request-tracking-ws.md` (canales hermanos,
   misma arquitectura, autorización y alcance del filtrado distintos).
+- `specs/api-contracts/board-monitor-ws.md` (Carril, el canal hermano del
+  modo de staff — mismo mecanismo, payload con datos de tutor/vehículo,
+  ADR-071 pt.2).
+- ADR-071 (punto 2: por qué Carril no reutiliza este canal).
 
 ## Preguntas abiertas
 

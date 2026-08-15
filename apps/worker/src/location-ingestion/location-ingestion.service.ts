@@ -1,10 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { LocationUpdate, PickupRequest } from '@casillego/shared/entities';
+import { LocationUpdate, PickupRequest, StudentGuardian } from '@casillego/shared/entities';
 import { applyPickupRequestTransition } from '@casillego/shared/pickup-request-transition';
 import {
+  boardMonitorTopic,
   boardTopic,
+  buildBoardMonitorPayload,
   buildBoardPayload,
   buildQueuePayload,
   deliveryPointQueueTopic,
@@ -14,6 +16,7 @@ import {
   type MqttClient,
   type PickupRequestRealtimeSnapshot,
   type PickupRequestStatus,
+  type StudentGuardianRelationship,
 } from '@casillego/shared';
 import { haversineDistanceMeters } from '../shared/haversine-distance.util';
 import { geoPointToLatLng, latLngToGeoPoint } from './geo-point.mapper';
@@ -31,6 +34,8 @@ export class LocationIngestionService {
     @InjectRepository(PickupRequest) private readonly pickupRequestRepo: Repository<PickupRequest>,
     @InjectRepository(LocationUpdate)
     private readonly locationUpdateRepo: Repository<LocationUpdate>,
+    @InjectRepository(StudentGuardian)
+    private readonly studentGuardiansRepo: Repository<StudentGuardian>,
     @Inject(MAPS_PROVIDER) private readonly mapsProvider: MapsProvider,
     @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
     private readonly dataSource: DataSource,
@@ -51,7 +56,12 @@ export class LocationIngestionService {
 
     const pickupRequest = await this.pickupRequestRepo.findOne({
       where: { id: pickupRequestId },
-      relations: { institution: true, enrollment: { student: true }, deliveryPoint: true },
+      relations: {
+        institution: true,
+        enrollment: { student: true },
+        deliveryPoint: true,
+        guardian: true,
+      },
     });
     if (!pickupRequest) {
       this.logger.warn(`Discarding location update for unknown pickup_request ${pickupRequestId}`);
@@ -127,8 +137,32 @@ export class LocationIngestionService {
     return distanceMeters >= THROTTLE_DISTANCE_METERS;
   }
 
+  // ADR-071 pt.2: same student_guardians lookup already used by
+  // PickupsService.notifyOtherGuardiansOfDelivery (ADR-066 pt.5) to resolve
+  // the guardian-student link. Kept as its own small query here — not shared
+  // with apps/api's identically-named private method — since api and worker
+  // are separate processes with no code-sharing mechanism for private service
+  // methods; duplicating this one small query is simpler than inventing a
+  // cross-process abstraction for it. Defensive 'other' fallback: a missing
+  // link should never happen in practice, but must never throw and break a
+  // realtime publish.
+  private async resolveGuardianRelationship(
+    studentId: string,
+    guardianId: string,
+  ): Promise<StudentGuardianRelationship> {
+    const link = await this.studentGuardiansRepo.findOne({
+      where: { student: { id: studentId }, guardian: { id: guardianId } },
+    });
+    return link?.relationship ?? 'other';
+  }
+
   private async publishRealtimeUpdate(pickupRequest: PickupRequest): Promise<void> {
     const deliveryPointId = pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null;
+
+    const guardianRelationship = await this.resolveGuardianRelationship(
+      pickupRequest.enrollment.student.id,
+      pickupRequest.guardian.id,
+    );
 
     const snapshot: PickupRequestRealtimeSnapshot = {
       pickupRequestId: pickupRequest.id,
@@ -144,6 +178,8 @@ export class LocationIngestionService {
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
       deliveryCode: pickupRequest.deliveryCode,
+      guardianFullName: pickupRequest.guardian.fullName ?? '',
+      guardianRelationship,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
 
@@ -160,6 +196,11 @@ export class LocationIngestionService {
           1,
         );
       }
+      await this.mqttClient.publish(
+        boardMonitorTopic(pickupRequest.institution.id),
+        buildBoardMonitorPayload(snapshot),
+        1,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to publish pickup_request ${pickupRequest.id} realtime update to MQTT`,

@@ -19,7 +19,7 @@ function buildPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
       arrivingLeadMinutes: 5,
       geofenceRadiusMeters: 100,
     },
-    guardian: { id: 'user-1' },
+    guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
     deliveryPoint: null,
     status: 'en_route',
     startedAt: new Date('2026-07-17T08:00:00.000Z'),
@@ -43,6 +43,7 @@ function buildService(overrides?: {
   pickupRequest?: PickupRequest | null;
   mapsProvider?: Partial<Record<'getEta', unknown>>;
   mqttClient?: Partial<Record<'publish', unknown>>;
+  studentGuardians?: Partial<Record<'findOne', unknown>>;
 }) {
   const pickupRequest =
     overrides?.pickupRequest === undefined ? buildPickupRequest() : overrides.pickupRequest;
@@ -53,6 +54,10 @@ function buildService(overrides?: {
   };
   const locationUpdateRepo = {
     insert: vi.fn().mockResolvedValue(undefined),
+  };
+  const studentGuardiansRepo = {
+    findOne: vi.fn().mockResolvedValue({ relationship: 'mother' }),
+    ...overrides?.studentGuardians,
   };
   const statusHistoryRepo = {
     create: vi.fn((partial: object) => partial),
@@ -81,6 +86,7 @@ function buildService(overrides?: {
   const service = new LocationIngestionService(
     pickupRequestRepo as never,
     locationUpdateRepo as never,
+    studentGuardiansRepo as never,
     mapsProvider as never,
     mqttClient as never,
     dataSource as never,
@@ -90,6 +96,7 @@ function buildService(overrides?: {
     service,
     pickupRequestRepo,
     locationUpdateRepo,
+    studentGuardiansRepo,
     statusHistoryRepo,
     mapsProvider,
     mqttClient,
@@ -272,7 +279,45 @@ describe('LocationIngestionService', () => {
 
     await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
 
-    expect(mqttClient.publish).toHaveBeenCalledTimes(1);
+    // Board + board-monitor, no queue publish: no delivery_point_id.
+    expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+  });
+
+  it('also publishes the board-monitor payload, with guardian/vehicle data and no deliveryCode', async () => {
+    const { service, mqttClient } = buildService();
+
+    await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
+
+    expect(mqttClient.publish).toHaveBeenCalledWith(
+      `school-pickup/institution/${INSTITUTION_ID}/board-monitor`,
+      expect.objectContaining({
+        pickupRequestId: PICKUP_REQUEST_ID,
+        guardianFullName: 'Sofía Ramírez',
+        guardianRelationship: 'mother',
+      }),
+      1,
+    );
+    const publishMock = mqttClient.publish as ReturnType<typeof vi.fn>;
+    const monitorCall = publishMock.mock.calls.find(
+      ([topic]) => topic === `school-pickup/institution/${INSTITUTION_ID}/board-monitor`,
+    );
+    expect(monitorCall?.[1]).not.toHaveProperty('deliveryCode');
+  });
+
+  // Defensive fallback (ADR-071 pt.2): should never happen in practice, but a
+  // missing student_guardians link must not throw and block ETA processing.
+  it('falls back to relationship "other" when the student_guardians link is not found', async () => {
+    const { service, mqttClient } = buildService({
+      studentGuardians: { findOne: vi.fn().mockResolvedValue(null) },
+    });
+
+    await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
+
+    expect(mqttClient.publish).toHaveBeenCalledWith(
+      `school-pickup/institution/${INSTITUTION_ID}/board-monitor`,
+      expect.objectContaining({ guardianRelationship: 'other' }),
+      1,
+    );
   });
 
   it('does not throw when the MQTT publish fails, and still keeps the already-saved ETA', async () => {
@@ -359,10 +404,10 @@ describe('LocationIngestionService', () => {
       expect(pickupRequestRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'arriving', etaSeconds: 250 }),
       );
-      expect(mqttClient.publish).toHaveBeenCalledTimes(1);
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
     });
 
-    it('publishes exactly once, not twice, when the transition applies', async () => {
+    it('publishes exactly once per topic, not twice, when the transition applies', async () => {
       const { service, mqttClient } = buildService({
         mapsProvider: {
           getEta: vi.fn().mockResolvedValue({ etaSeconds: 250, distanceMeters: 2000 }),
@@ -371,7 +416,7 @@ describe('LocationIngestionService', () => {
 
       await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
 
-      expect(mqttClient.publish).toHaveBeenCalledTimes(1);
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
     });
   });
 });

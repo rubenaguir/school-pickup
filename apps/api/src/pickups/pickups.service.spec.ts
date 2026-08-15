@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { In } from 'typeorm';
-import { buildBoardPayload, buildQueuePayload } from '@casillego/shared';
+import { buildBoardMonitorPayload, buildBoardPayload, buildQueuePayload } from '@casillego/shared';
 import { PickupsService } from './pickups.service';
 import {
   PickupRequest,
@@ -269,7 +269,7 @@ describe('PickupsService', () => {
       expect(result.deliveryPointId).toBe('dp-1');
       expect(result.vehicleDescription).toBe('Honda CRV gris');
       expect(result.vehiclePlate).toBe('ABC-123');
-      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledTimes(3);
       expect(mqttClient.publish).toHaveBeenNthCalledWith(
         1,
         'school-pickup/institution/inst-1/board',
@@ -279,6 +279,12 @@ describe('PickupsService', () => {
       expect(mqttClient.publish).toHaveBeenNthCalledWith(
         2,
         'school-pickup/institution/inst-1/delivery-point/dp-1/queue',
+        expect.any(Object),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenNthCalledWith(
+        3,
+        'school-pickup/institution/inst-1/board-monitor',
         expect.any(Object),
         1,
       );
@@ -351,6 +357,22 @@ describe('PickupsService', () => {
         estimatedArrivalAt: null,
         etaSeconds: null,
         updatedAt: '2026-07-16T08:00:00.000Z',
+      });
+
+      // ADR-071 pt.2: the board-monitor payload never carries deliveryCode
+      // either, unlike the queue payload above.
+      const [monitorTopic, monitorPayload] = publishMock.mock.calls[2] as [
+        string,
+        Record<string, unknown>,
+        number,
+      ];
+      expect(monitorTopic).toBe('school-pickup/institution/inst-1/board-monitor');
+      expect(monitorPayload).not.toHaveProperty('deliveryCode');
+      expect(monitorPayload).toMatchObject({
+        pickupRequestId: 'pr-1',
+        status: 'en_route',
+        vehicleDescription: 'Honda CRV gris',
+        vehiclePlate: 'ABC-123',
       });
     });
 
@@ -443,7 +465,8 @@ describe('PickupsService', () => {
       expect(result.deliveryPointId).toBeNull();
       expect(result.vehicleDescription).toBeNull();
       expect(result.vehiclePlate).toBeNull();
-      expect(mqttClient.publish).toHaveBeenCalledTimes(1);
+      // Board + board-monitor, no queue publish: no delivery_point_id.
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
     });
 
     it('creates a pickup request with a free-capture vehicle (no vehicleId)', async () => {
@@ -1169,6 +1192,186 @@ describe('PickupsService', () => {
     });
   });
 
+  // Carril, the staff monitor mode of the board (ADR-071 pt.2): same rows as
+  // listByInstitution plus guardian/vehicle data.
+  describe('listByInstitutionMonitor', () => {
+    const INST_ID = 'inst-1';
+
+    function buildMonitorPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
+      return buildOwnedPickupRequest({
+        status: 'arriving',
+        deliveryPoint: { id: 'dp-1' } as DeliveryPoint,
+        arrivalMode: 'vehicle',
+        guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
+        vehicleDescription: 'Honda CRV gris',
+        vehiclePlate: 'ABC-123',
+        ...overrides,
+      });
+    }
+
+    it('returns the active monitor feed of the institution, including guardian/vehicle data', async () => {
+      const { service, studentGuardiansRepo } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildMonitorPickupRequest()], 1]),
+        },
+        studentGuardians: {
+          findOne: vi.fn().mockResolvedValue({
+            relationship: 'mother',
+            guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
+          }),
+        },
+      });
+
+      const result = await service.listByInstitutionMonitor('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests).toEqual([
+        {
+          pickupRequestId: 'pr-1',
+          status: 'arriving',
+          studentFullName: 'Ana Pérez',
+          gradeOrGroup: '3°B',
+          deliveryPointId: 'dp-1',
+          estimatedArrivalAt: null,
+          etaSeconds: null,
+          arrivalMode: 'vehicle',
+          guardianFullName: 'Sofía Ramírez',
+          guardianRelationship: 'mother',
+          vehicleDescription: 'Honda CRV gris',
+          vehiclePlate: 'ABC-123',
+          updatedAt: '2026-07-16T08:00:00.000Z',
+        },
+      ]);
+      expect(result).toMatchObject({ limit: 20, offset: 0, total: 1 });
+      expect(studentGuardiansRepo.findOne).toHaveBeenCalledWith({
+        where: { student: { id: 'stu-1' }, guardian: { id: 'user-1' } },
+        relations: { guardian: true },
+      });
+    });
+
+    it('never includes deliveryCode', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildMonitorPickupRequest()], 1]),
+        },
+      });
+
+      const result = await service.listByInstitutionMonitor('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests[0]).not.toHaveProperty('deliveryCode');
+    });
+
+    // ADR-071 pt.2: the shape exists so Carril can merge snapshot and deltas
+    // untouched, same reasoning as listByInstitution vs buildBoardPayload.
+    it('returns rows shaped exactly like the WebSocket delta payload', async () => {
+      const pickupRequest = buildMonitorPickupRequest();
+      const { service } = buildService({
+        pickupRequests: { findAndCount: vi.fn().mockResolvedValue([[pickupRequest], 1]) },
+        studentGuardians: {
+          findOne: vi.fn().mockResolvedValue({
+            relationship: 'mother',
+            guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
+          }),
+        },
+      });
+
+      const result = await service.listByInstitutionMonitor('user-1', { institutionId: INST_ID });
+
+      const monitorPayload = buildBoardMonitorPayload({
+        pickupRequestId: pickupRequest.id,
+        status: pickupRequest.status,
+        studentFullName: pickupRequest.enrollment.student.fullName,
+        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        deliveryPointId: 'dp-1',
+        estimatedArrivalAt: null,
+        etaSeconds: null,
+        arrivalMode: pickupRequest.arrivalMode,
+        guardianFullName: 'Sofía Ramírez',
+        guardianRelationship: 'mother',
+        vehicleDescription: pickupRequest.vehicleDescription,
+        vehiclePlate: pickupRequest.vehiclePlate,
+        deliveryCode: pickupRequest.deliveryCode,
+        updatedAt: pickupRequest.updatedAt.toISOString(),
+      });
+
+      expect(result.pickupRequests[0]).toEqual(monitorPayload);
+    });
+
+    // Defensive fallback (ADR-071 pt.2): should never happen in practice — a
+    // pickup_request's guardian always has an active link — but a missing
+    // student_guardians row must not throw and take down the whole listing.
+    it('falls back to relationship "other" when the student_guardians link is not found', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findAndCount: vi.fn().mockResolvedValue([[buildMonitorPickupRequest()], 1]),
+        },
+        studentGuardians: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      const result = await service.listByInstitutionMonitor('user-1', { institutionId: INST_ID });
+
+      expect(result.pickupRequests[0].guardianRelationship).toBe('other');
+    });
+
+    it('filters to active statuses only, never history, loading the guardian relation', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 0]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      await service.listByInstitutionMonitor('user-1', { institutionId: INST_ID });
+
+      expect(findAndCount).toHaveBeenCalledWith({
+        where: {
+          institution: { id: INST_ID },
+          status: In(['en_route', 'arriving', 'arrived']),
+        },
+        relations: { enrollment: { student: true }, deliveryPoint: true, guardian: true },
+        order: { createdAt: 'DESC' },
+        take: 20,
+        skip: 0,
+      });
+    });
+
+    it('applies limit/offset paging', async () => {
+      const findAndCount = vi.fn().mockResolvedValue([[], 12]);
+      const { service } = buildService({ pickupRequests: { findAndCount } });
+
+      const result = await service.listByInstitutionMonitor('user-1', {
+        institutionId: INST_ID,
+        limit: 5,
+        offset: 10,
+      });
+
+      expect(findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 5, skip: 10 }));
+      expect(result).toMatchObject({ limit: 5, offset: 10, total: 12 });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND when the institution does not exist', async () => {
+      const { service, pickupRequestsRepo } = buildService({
+        institutionAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_found' }),
+        },
+      });
+
+      await expect(
+        service.listByInstitutionMonitor('user-1', { institutionId: 'missing' }),
+      ).rejects.toMatchObject({ response: { code: 'RESOURCE_NOT_FOUND' } });
+      expect(pickupRequestsRepo.findAndCount).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 NOT_INSTITUTION_MEMBER for a non-member, guardian or not', async () => {
+      const { service, studentGuardiansRepo } = buildService({
+        studentGuardians: { exists: vi.fn().mockResolvedValue(true) },
+        institutionAccess: {
+          checkMemberAccess: vi.fn().mockResolvedValue({ outcome: 'not_member' }),
+        },
+      });
+
+      await expect(
+        service.listByInstitutionMonitor('user-1', { institutionId: INST_ID }),
+      ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
+      expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
+    });
+  });
+
   describe('arrive', () => {
     it('transitions from en_route to arrived (direct jump, ADR-024 pt.8)', async () => {
       const { service, mqttClient } = buildService({
@@ -1282,7 +1485,7 @@ describe('PickupsService', () => {
       },
     );
 
-    it('publishes the cancelled status to the board topic exactly once', async () => {
+    it('publishes the cancelled status to the board topic (and board-monitor) when there is no delivery point', async () => {
       const { service, mqttClient } = buildService({
         pickupRequests: {
           findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'en_route' })),
@@ -1291,9 +1494,16 @@ describe('PickupsService', () => {
 
       await service.cancel('user-1', 'pr-1');
 
-      expect(mqttClient.publish).toHaveBeenCalledTimes(1);
-      expect(mqttClient.publish).toHaveBeenCalledWith(
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenNthCalledWith(
+        1,
         'school-pickup/institution/inst-1/board',
+        expect.objectContaining({ status: 'cancelled' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenNthCalledWith(
+        2,
+        'school-pickup/institution/inst-1/board-monitor',
         expect.objectContaining({ status: 'cancelled' }),
         1,
       );
@@ -1313,10 +1523,16 @@ describe('PickupsService', () => {
 
       await service.cancel('user-1', 'pr-1');
 
-      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledTimes(3);
       expect(mqttClient.publish).toHaveBeenNthCalledWith(
         2,
         'school-pickup/institution/inst-1/delivery-point/dp-1/queue',
+        expect.objectContaining({ status: 'cancelled' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenNthCalledWith(
+        3,
+        'school-pickup/institution/inst-1/board-monitor',
         expect.objectContaining({ status: 'cancelled' }),
         1,
       );
@@ -1562,7 +1778,7 @@ describe('PickupsService', () => {
 
       await service.deliver('staff-1', 'pr-1', '1234');
 
-      expect(mqttClient.publish).toHaveBeenCalledTimes(1);
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
       expect(mqttClient.publish).toHaveBeenCalledWith(
         'school-pickup/institution/inst-1/board',
         expect.objectContaining({

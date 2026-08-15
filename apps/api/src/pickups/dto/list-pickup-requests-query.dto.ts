@@ -85,6 +85,15 @@ export class ListPickupRequestsQueryDto {
   @IsIn(PICKUP_REQUEST_STATUS_VALUES)
   status?: PickupRequestStatus;
 
+  // A shape modifier of an institutionId-scoped request (ADR-071 pt.2, pt.5),
+  // not a fourth mutually-exclusive filter — deliberately NOT wired into
+  // ExactlyOneOfEnrollmentIdDeliveryPointIdOrInstitutionIdConstraint above.
+  // `view` present without `institutionId` still gets rejected: that
+  // constraint already requires exactly one of the three filters.
+  @IsOptional()
+  @IsIn(['board', 'monitor'])
+  view?: 'board' | 'monitor';
+
   @IsOptional()
   @Transform(toOptionalNumber)
   @IsInt()

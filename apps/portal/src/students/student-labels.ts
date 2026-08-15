@@ -1,9 +1,4 @@
-import type {
-  EnrollmentStatus,
-  InstitutionType,
-  StudentGuardianRelationship,
-  StudentGuardianStatus,
-} from '@casillego/shared';
+import type { EnrollmentStatus, InstitutionType, StudentGuardianStatus } from '@casillego/shared';
 
 const INSTITUTION_TYPE_LABELS: Record<InstitutionType, string> = {
   school: 'Escuela',
@@ -15,31 +10,12 @@ export function institutionTypeLabel(type: InstitutionType): string {
 }
 
 /**
- * The five values of `student_guardians.relationship`
- * (specs/entities/student_guardian.md), in the order the "Alta de alumno"
- * selector offers them. Mirrors the DTO enum of `apps/api` and nothing
- * else — no extra value is invented here, same criterion as
- * `INSTITUTION_MEMBER_ROLES`.
+ * `STUDENT_GUARDIAN_RELATIONSHIPS`/`relationshipLabel` moved to
+ * `@casillego/shared` once `apps/board` became a second real consumer
+ * (ADR-071 pt.3). Re-exported here so existing imports of this module keep
+ * working without every caller having to switch its import path.
  */
-export const STUDENT_GUARDIAN_RELATIONSHIPS: readonly StudentGuardianRelationship[] = [
-  'mother',
-  'father',
-  'grandparent',
-  'driver',
-  'other',
-];
-
-const RELATIONSHIP_LABELS: Record<StudentGuardianRelationship, string> = {
-  mother: 'Madre',
-  father: 'Padre',
-  grandparent: 'Abuelo/a',
-  driver: 'Chofer',
-  other: 'Otro',
-};
-
-export function relationshipLabel(relationship: StudentGuardianRelationship): string {
-  return RELATIONSHIP_LABELS[relationship];
-}
+export { STUDENT_GUARDIAN_RELATIONSHIPS, relationshipLabel } from '@casillego/shared';
 
 /**
  * `student_guardians.status` (specs/entities/student_guardian.md). Distinct

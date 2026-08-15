@@ -1,14 +1,14 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import type { StudentGuardianRelationship } from '@casillego/shared';
-import { useAuth } from '../auth/AuthContext';
-import { useTutor } from '../tutor/TutorContext';
 import {
   STUDENT_GUARDIAN_RELATIONSHIPS,
-  guardianStatusLabel,
   relationshipLabel,
-} from '../students/student-labels';
+  type StudentGuardianRelationship,
+} from '@casillego/shared';
+import { useAuth } from '../auth/AuthContext';
+import { useTutor } from '../tutor/TutorContext';
+import { guardianStatusLabel } from '../students/student-labels';
 import {
   inviteStudentGuardianErrorMessage,
   listStudentGuardiansErrorMessage,

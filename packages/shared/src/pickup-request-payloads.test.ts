@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildBoardMonitorPayload,
   buildBoardPayload,
   buildQueuePayload,
   type PickupRequestRealtimeSnapshot,
@@ -17,6 +18,8 @@ const snapshot: PickupRequestRealtimeSnapshot = {
   vehicleDescription: 'Honda CRV gris',
   vehiclePlate: 'ABC-123',
   deliveryCode: '4821',
+  guardianFullName: 'Luis Pérez',
+  guardianRelationship: 'father',
   updatedAt: '2026-07-16T08:00:00.000Z',
 };
 
@@ -39,6 +42,14 @@ describe('buildBoardPayload', () => {
     const payload = buildBoardPayload(snapshot);
     expect(payload).not.toHaveProperty('vehicleDescription');
     expect(payload).not.toHaveProperty('vehiclePlate');
+  });
+
+  // ADR-071 pt.2: the board is a public kiosk screen. Guardian identity and
+  // vehicle data are for Carril (staff-only) alone.
+  it('does not leak the board-monitor-only guardian fields', () => {
+    const payload = buildBoardPayload(snapshot);
+    expect(payload).not.toHaveProperty('guardianFullName');
+    expect(payload).not.toHaveProperty('guardianRelationship');
   });
 
   // ADR-051 pt.2. The board runs on a public screen in the institution's
@@ -81,5 +92,44 @@ describe('buildQueuePayload', () => {
     const payload = buildQueuePayload(snapshot);
     expect(payload).not.toHaveProperty('deliveryPointId');
     expect(payload).not.toHaveProperty('arrivalMode');
+  });
+
+  it('does not leak the board-monitor-only guardian fields', () => {
+    const payload = buildQueuePayload(snapshot);
+    expect(payload).not.toHaveProperty('guardianFullName');
+    expect(payload).not.toHaveProperty('guardianRelationship');
+  });
+});
+
+describe('buildBoardMonitorPayload', () => {
+  it('produces the exact shape documented in pickup-realtime-mqtt.md', () => {
+    expect(buildBoardMonitorPayload(snapshot)).toEqual({
+      pickupRequestId: 'pr-1',
+      status: 'en_route',
+      studentFullName: 'Ana Pérez',
+      gradeOrGroup: '3°B',
+      deliveryPointId: 'dp-1',
+      estimatedArrivalAt: null,
+      etaSeconds: null,
+      arrivalMode: 'vehicle',
+      guardianFullName: 'Luis Pérez',
+      guardianRelationship: 'father',
+      vehicleDescription: 'Honda CRV gris',
+      vehiclePlate: 'ABC-123',
+      updatedAt: '2026-07-16T08:00:00.000Z',
+    });
+  });
+
+  // ADR-071 pt.2: Carril is a staff-only view, but it still never shows the
+  // delivery verification code — same rule as the board, not relaxed for
+  // Carril just because it carries other sensitive fields.
+  it('never includes deliveryCode, even though the snapshot carries one', () => {
+    expect(snapshot.deliveryCode).toBe('4821');
+
+    const payload = buildBoardMonitorPayload(snapshot);
+
+    expect(payload).not.toHaveProperty('deliveryCode');
+    expect(Object.values(payload)).not.toContain('4821');
+    expect(JSON.stringify(payload)).not.toContain('4821');
   });
 });

@@ -224,16 +224,66 @@ broker sigue siendo la intención de largo plazo, pero hoy la barrera real de
 aislamiento multi-tenant para este topic es el puente del `api`, no el broker
 (ADR-050, contexto).
 
+## Topic — Carril (monitor de institución)
+
+```
+school-pickup/institution/{institutionId}/board-monitor
+```
+
+- **Publica:** el `api` (al crear, feature 018) y el `worker` (en cada
+  actualización de estado/ETA, features 019–022) — mismos dos puntos que ya
+  publican el feed agregado del tablero, mismo throttle de 20s del `worker`,
+  sin mecanismo nuevo de frecuencia (ADR-071 pt.2).
+- **Consume:** el `api` mismo, por comodín, para reenviarlo a Carril (el modo
+  de staff del tablero de institución) vía
+  `specs/api-contracts/board-monitor-ws.md` — el navegador nunca se
+  suscribe directo al broker.
+
+**Canal deliberadamente separado del feed agregado del tablero** (ADR-071
+pt.2): si el payload de Carril viajara por `boardTopic`, cualquier kiosko
+físico público (Andén/Sereno) recibiría datos de tutor/vehículo por la red
+aunque la interfaz nunca los pinte — alcanzables por cualquiera con acceso
+físico al dispositivo (DevTools, inspección de red). Mismo criterio
+arquitectónico que ya separa este topic de la cola de la consola de puerta
+(ADR-050/051): consumidor distinto, payload distinto, canal distinto.
+
+**Payload** (mismos campos que el del tablero, más datos de tutor/vehículo)
+```json
+{
+  "pickupRequestId": "uuid",
+  "status": "en_route | arriving | arrived | delivered | cancelled",
+  "studentFullName": "string (join: student vía enrollment)",
+  "gradeOrGroup": "string | null (join: enrollment)",
+  "deliveryPointId": "uuid | null",
+  "estimatedArrivalAt": "string (timestamptz) | null",
+  "etaSeconds": "number | null",
+  "arrivalMode": "vehicle | walking | null",
+  "guardianFullName": "string (join: student_guardians → guardian)",
+  "guardianRelationship": "mother | father | grandparent | driver | other (join: student_guardians)",
+  "vehicleDescription": "string | null",
+  "vehiclePlate": "string | null",
+  "updatedAt": "string (timestamptz)"
+}
+```
+
+`guardianFullName`/`guardianRelationship` se resuelven con una consulta
+adicional a `student_guardians` (mismo patrón ya usado por
+`notifyOtherGuardiansOfDelivery`, ADR-066 punto 5), no con una relación
+nueva. `deliveryCode` **no** viaja en este payload — mismo criterio que el
+tablero público, ADR-051 no cambia para ningún modo del tablero, solo para la
+consola de puerta. `buildBoardMonitorPayload()` tiene un test dedicado que
+falla si alguien lo arrastra.
+
 ## Cuándo se publica (por transición)
 
 | Momento | Feature | Topics |
 |---|---|---|
-| Creación (`en_route`) | 018 | agregado; cola si hay `delivery_point_id` |
-| Recálculo de ETA / posición | 019 | agregado; cola si aplica |
-| `arriving` (automático) | 020 | agregado; cola si aplica |
-| `arrived` (tutor) | 021 | agregado; cola si aplica |
-| `delivered` (staff) | 021 | agregado; cola si aplica |
-| `cancelled` (tutor) | 022 | agregado; cola si aplica |
+| Creación (`en_route`) | 018 | agregado; cola si hay `delivery_point_id`; Carril |
+| Recálculo de ETA / posición | 019 | agregado; cola si aplica; Carril |
+| `arriving` (automático) | 020 | agregado; cola si aplica; Carril |
+| `arrived` (tutor) | 021 | agregado; cola si aplica; Carril |
+| `delivered` (staff) | 021 | agregado; cola si aplica; Carril |
+| `cancelled` (tutor) | 022 | agregado; cola si aplica; Carril |
 
 ## Referencias
 
@@ -252,7 +302,11 @@ aislamiento multi-tenant para este topic es el puente del `api`, no el broker
 - ADR-050 (el navegador nunca se conecta al broker; puente WebSocket en el `api`,
   suscripción por comodín al topic de cola y `parseDeliveryPointQueueTopic`).
 - ADR-051 (`deliveryCode` en el payload de cola, nunca en el de tablero).
+- ADR-071 (punto 2: canal `board-monitor` separado para Carril, con datos de
+  tutor/vehículo; punto 3: `relationshipLabel` promovido a
+  `packages/shared`).
 - `specs/api-contracts/delivery-point-queue-ws.md` (contrato del puente).
+- `specs/api-contracts/board-monitor-ws.md` (contrato del puente de Carril).
 - `docs/arquitectura.md` (nombres de topic, ACL por tenant, flujo de tiempo
   real, estructura y ciclo de vida MQTT del `worker`).
 

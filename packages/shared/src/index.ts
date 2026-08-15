@@ -34,6 +34,7 @@ export * from './types/geo-point';
 
 export * from './pickup-request-status-machine';
 export * from './pickup-request-payloads';
+export * from './student-guardian-labels';
 export * from './ports';
 export * from './adapters/node-mqtt-client';
 export * from './api-client';
@@ -129,6 +130,27 @@ export function parseDeliveryPointQueueTopic(
  */
 export function parseBoardTopic(topic: string): { institutionId: string } | null {
   const match = /^school-pickup\/institution\/([^/]+)\/board$/.exec(topic);
+  if (!match) return null;
+  return { institutionId: match[1] };
+}
+
+/**
+ * Board monitor (Carril) stream — deliberately separate from `boardTopic`
+ * (ADR-071 pt.2): never share a transport with the public board topic, since
+ * this payload carries guardian/vehicle data that a public kiosk must never
+ * receive over the wire, even unrendered.
+ * `school-pickup/institution/{institutionId}/board-monitor`.
+ */
+export function boardMonitorTopic(institutionId: string): string {
+  return `${institutionTopic(institutionId)}/board-monitor`;
+}
+
+/**
+ * Inverse of `boardMonitorTopic`, same contract as `parseBoardTopic`: returns
+ * `null`, never throws, for anything that isn't that exact shape.
+ */
+export function parseBoardMonitorTopic(topic: string): { institutionId: string } | null {
+  const match = /^school-pickup\/institution\/([^/]+)\/board-monitor$/.exec(topic);
   if (!match) return null;
   return { institutionId: match[1] };
 }

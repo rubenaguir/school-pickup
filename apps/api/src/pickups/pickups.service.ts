@@ -11,7 +11,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import {
+  boardMonitorTopic,
   boardTopic,
+  buildBoardMonitorPayload,
   buildBoardPayload,
   buildQueuePayload,
   deliveryPointQueueTopic,
@@ -51,9 +53,11 @@ import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-quer
 import type { SendLocationDto } from './dto/send-location.dto';
 import type {
   ListDeliveryPointQueueResponse,
+  ListPickupRequestsBoardMonitorResponse,
   ListPickupRequestsBoardResponse,
   ListPickupRequestsResponse,
   PickupRequestArrivedResponse,
+  PickupRequestBoardMonitorSummary,
   PickupRequestBoardSummary,
   PickupRequestCancelResponse,
   PickupRequestDeliverResponse,
@@ -341,6 +345,47 @@ export class PickupsService {
     };
   }
 
+  /**
+   * Carril (staff monitor view, ADR-071 pt.2): same rows as `listByInstitution`
+   * plus guardian/vehicle data — never used without `view=monitor` explicit
+   * (`ListPickupRequestsQueryDto`). Same authorization, same active-statuses-
+   * only rule; the only differences are the extra `guardian: true` relation
+   * and the per-row `guardianRelationship` resolution below.
+   */
+  async listByInstitutionMonitor(
+    userId: string,
+    query: ListPickupRequestsQueryDto & { institutionId: string },
+  ): Promise<ListPickupRequestsBoardMonitorResponse> {
+    const access = await this.institutionAccess.checkMemberAccess(query.institutionId, userId);
+    if (access.outcome === 'not_found') {
+      throw new NotFoundException(RESOURCE_NOT_FOUND);
+    }
+    if (access.outcome === 'not_member') {
+      throw new ForbiddenException(NOT_INSTITUTION_MEMBER);
+    }
+
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const [pickupRequests, total] = await this.pickupRequestsRepository.findAndCount({
+      where: {
+        institution: { id: query.institutionId },
+        status: In(
+          query.status ? ACTIVE_STATUSES.filter((s) => s === query.status) : ACTIVE_STATUSES,
+        ),
+      },
+      relations: { enrollment: { student: true }, deliveryPoint: true, guardian: true },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    const summaries = await Promise.all(
+      pickupRequests.map((pickupRequest) => this.toBoardMonitorSummary(pickupRequest)),
+    );
+
+    return { pickupRequests: summaries, limit, offset, total };
+  }
+
   async arrive(userId: string, id: string): Promise<PickupRequestArrivedResponse> {
     const pickupRequest = await this.findPickupRequestOrFail(id);
     this.assertOwner(pickupRequest, userId);
@@ -463,6 +508,31 @@ export class PickupsService {
     return this.studentGuardiansRepository.exists({
       where: { student: { id: studentId }, guardian: { id: userId } },
     });
+  }
+
+  // ADR-071 pt.2: same student_guardians lookup already used by
+  // notifyOtherGuardiansOfDelivery (ADR-066 pt.5) to resolve the
+  // guardian-student link — reused here for the Carril payload
+  // (guardianFullName/guardianRelationship), shared between
+  // listByInstitutionMonitor and publishRealtimeUpdate so the query isn't
+  // duplicated. Returns both fields from a single query rather than trusting
+  // pickup_request.guardian to already carry a loaded fullName, which is not
+  // reliably true (the entity `create()` just saved only has a `{ id }`
+  // reference for guardian). Defensive fallbacks: a missing link should never
+  // happen in practice (a pickup_request's guardian always has an active
+  // link), but must never throw and break a realtime publish.
+  private async resolveGuardianRelationship(
+    studentId: string,
+    guardianId: string,
+  ): Promise<{ relationship: StudentGuardianRelationship; guardianFullName: string }> {
+    const link = await this.studentGuardiansRepository.findOne({
+      where: { student: { id: studentId }, guardian: { id: guardianId } },
+      relations: { guardian: true },
+    });
+    return {
+      relationship: link?.relationship ?? 'other',
+      guardianFullName: link?.guardian?.fullName ?? '',
+    };
   }
 
   private async assertReadAccess(
@@ -703,6 +773,11 @@ export class PickupsService {
     enrollment: Enrollment,
     deliveryPointId: string | null,
   ): Promise<void> {
+    const { relationship, guardianFullName } = await this.resolveGuardianRelationship(
+      enrollment.student.id,
+      pickupRequest.guardian.id,
+    );
+
     const snapshot: PickupRequestRealtimeSnapshot = {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
@@ -717,6 +792,8 @@ export class PickupsService {
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
       deliveryCode: pickupRequest.deliveryCode,
+      guardianFullName,
+      guardianRelationship: relationship,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
 
@@ -733,6 +810,11 @@ export class PickupsService {
           1,
         );
       }
+      await this.mqttClient.publish(
+        boardMonitorTopic(enrollment.institutionId),
+        buildBoardMonitorPayload(snapshot),
+        1,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to publish pickup_request ${pickupRequest.id} creation to MQTT`,
@@ -829,6 +911,40 @@ export class PickupsService {
         : null,
       etaSeconds: pickupRequest.etaSeconds,
       arrivalMode: pickupRequest.arrivalMode,
+      updatedAt: pickupRequest.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Field for field the same object `buildBoardMonitorPayload` publishes over
+   * MQTT (ADR-071 pt.2) — keep the two in step, same reasoning as
+   * `toBoardSummary` versus `buildBoardPayload`. `guardianFullName` comes
+   * straight off the `guardian: true` relation loaded by
+   * `listByInstitutionMonitor` — only `guardianRelationship` needs the
+   * per-row `student_guardians` lookup.
+   */
+  private async toBoardMonitorSummary(
+    pickupRequest: PickupRequest,
+  ): Promise<PickupRequestBoardMonitorSummary> {
+    const { relationship } = await this.resolveGuardianRelationship(
+      pickupRequest.enrollment.student.id,
+      pickupRequest.guardian.id,
+    );
+    return {
+      pickupRequestId: pickupRequest.id,
+      status: pickupRequest.status,
+      studentFullName: pickupRequest.enrollment.student.fullName,
+      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
+      estimatedArrivalAt: pickupRequest.estimatedArrivalAt
+        ? pickupRequest.estimatedArrivalAt.toISOString()
+        : null,
+      etaSeconds: pickupRequest.etaSeconds,
+      arrivalMode: pickupRequest.arrivalMode,
+      guardianFullName: pickupRequest.guardian.fullName ?? '',
+      guardianRelationship: relationship,
+      vehicleDescription: pickupRequest.vehicleDescription,
+      vehiclePlate: pickupRequest.vehiclePlate,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
   }
