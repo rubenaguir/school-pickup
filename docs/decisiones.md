@@ -5174,3 +5174,103 @@ aplica, es previo a cualquier sesión).
   (`deliveriesByDay`, el patrón que este ADR reutiliza sin institución).
 - `design/casillego-design-system/ui_kits/portal-admin/index.html`,
   función `OpsRole()` (fuente visual de este ADR).
+
+## ADR-075 — Extracción del patrón "canal WS con snapshot REST + deltas", en dos piezas, no en una
+
+**Contexto.** El patrón aparece 5 veces: consola de puerta (ADR-052),
+seguimiento del tutor en `apps/parent` (ADR-064), tablero público
+(ADR-069), tablero Carril (ADR-071), Dashboard institucional (ADR-072).
+Cada aparición decidió conscientemente no extraer todavía — señalado
+como backlog en cada una de esas decisiones, con el conteo subiendo cada
+vez. Antes de diseñar la extracción se comparó el código real de las 5
+instancias, no solo la descripción — el hallazgo cambia el diseño:
+
+**No es un solo patrón duplicado 5 veces — son dos patrones distintos.**
+
+1. **La capa de conexión** (abrir el socket, pedir el snapshot REST desde
+   `onopen`, bufferizar deltas que llegan mientras el snapshot está en
+   vuelo, reconectar con backoff `[1000, 2000, 5000, 10000]`, detectar
+   los 4 códigos de cierre fatal) es **idéntica letra por letra** en las
+   5 — `reconnectDelayMs`, `fatalCloseReason`, `FATAL_CLOSE_REASONS`, y el
+   constructor de URL del socket (misma forma, solo cambia el `path` y
+   los parámetros de query) no divergen ni un carácter entre archivos.
+2. **La función de fusión (`merge`)** no es igual entre las 5:
+   - `mergeQueueDelta` (consola de puerta) devuelve solo el arreglo.
+   - `mergeBoardDelta` (tablero público) devuelve además
+     `changedStatusIds` — lo necesita para la animación de pulso y el
+     voceo (ADR-069), las otras cuatro no.
+   - El seguimiento del tutor en `apps/parent` **no fusiona un arreglo en
+     absoluto** — sigue un solo `pickup_request`, no una lista; su
+     `applyDelta` reemplaza campos de un objeto, estructuralmente otro
+     problema.
+   - Solo **2 de las 5** (`mergeBoardMonitorDelta` de Carril y del
+     Dashboard institucional) son copias exactas entre sí — la única
+     fusión genuinamente duplicada.
+
+Forzar las 3 fusiones distintas a una sola forma compartida sería
+exactamente el riesgo que este backlog venía señalando: una abstracción
+con un `if` especial por consumidor es peor que las copias simples que
+hay hoy. No se hace.
+
+**Decisión.**
+
+### 1. `packages/shared/src/realtime-channel.ts` — piezas puras, sin React
+
+`reconnectDelayMs`, `fatalCloseReason`, `FATAL_CLOSE_REASONS`,
+`buildRealtimeSocketUrl(apiBaseUrl, path, params)` (generaliza los 5
+constructores de URL, que ya comparten forma). También
+`isActiveBoardStatus`/`mergeBoardMonitorDelta` — la única fusión
+verdaderamente duplicada, movida junto con su predicado (hoy vive
+duplicada en `apps/board` y re-declarada aparte en `apps/portal`).
+`packages/shared` no tiene React como dependencia (solo `mqtt`/`typeorm`,
+confirmado en `package.json`) — correcto para código que también corre
+en `apps/api`/`apps/worker`, aunque estas piezas específicas hoy solo las
+consume el frontend.
+
+### 2. `packages/ui/src/hooks/useRealtimeChannel.ts` — el hook genérico, no en `packages/shared`
+
+`packages/ui` **sí** tiene React como dependencia (confirmado en su
+`package.json`) — es donde debe vivir cualquier hook, no en
+`packages/shared`. Hook genérico parametrizado por:
+- `buildUrl: (accessToken: string) => string`
+- `fetchSnapshot: () => Promise<TState>`
+- `applyDelta: (current: TState, delta: TDelta) => TState`
+- `parseDelta: (raw: unknown) => TDelta | null`
+
+Reemplaza el cuerpo del `useEffect` que hoy se repite en los 5 hooks
+(`useDeliveryPointQueue`, `useInstitutionBoard`,
+`useInstitutionBoardMonitor` ×2, `useTrackingPickupRequest`) — cada uno
+pasa su propio `applyDelta`/`parseDelta`/tipo de estado, sin que el hook
+genérico necesite saber si `TState` es un arreglo o un objeto único.
+
+### 3. Migración en 3 pasos, no en un solo prompt
+
+Riesgo creciente, verificado entre cada paso — las 5 pantallas ya están
+en producción y verificadas, un refactor que las rompa es más caro que
+el problema que resuelve:
+
+1. **Extraer las piezas puras** (punto 1) a `packages/shared`, actualizar
+   los 5 archivos `*-socket.ts` para importarlas en vez de redeclararlas
+   — cambio mecánico, sin tocar ningún `useEffect`, verificable con los
+   tests ya existentes sin escribir ninguno nuevo.
+2. **Construir `useRealtimeChannel`** (punto 2) y migrar **un solo
+   consumidor** (`useDeliveryPointQueue`, el original y el más probado) —
+   probar el diseño contra el caso real más antiguo antes de tocar los
+   otros 4.
+3. **Migrar los 4 restantes**, uno por uno o en lote una vez el paso 2
+   quede verificado en vivo — incluyendo el caso de `apps/parent` (objeto
+   único, no arreglo), que es la prueba real de que el hook genérico no
+   asumió por accidente que `TState` siempre es una lista.
+
+**Consecuencias.** Cierra el ítem de backlog más señalado de todo el
+proyecto (5 instancias). El caso de `apps/parent` es lo que confirma que
+la abstracción no se sobre-ajustó a los 4 casos de "lista de filas" —
+si el hook genérico solo hubiera funcionado para arreglos, habría sido
+la señal de que la generalización estaba mal.
+
+## Referencias
+
+- ADR-050, ADR-052, ADR-064, ADR-069, ADR-071, ADR-072 (cada aparición
+  del patrón, y el backlog que fue subiendo el conteo en cada una).
+- `packages/shared/package.json`/`packages/ui/package.json` (confirmación
+  real de qué paquete tiene React como dependencia — la base del punto 2).
