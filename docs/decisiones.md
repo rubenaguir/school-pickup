@@ -5067,3 +5067,110 @@ operador de puerta hoy solo confirma la entrega por el código — mostrar
 quién dice ser el tutor es una verificación adicional razonable en un
 contexto de seguridad escolar, consistente con por qué el código de
 entrega existe en primer lugar (ADR-024).
+
+## ADR-074 — Fase C: shell de navegación del rol Operador/OPS
+
+**Contexto.** Mismo ejercicio que ADR-072 (Fase A), ahora para el rol
+Operador/OPS. `apps/portal/src/admin/AdminNav.tsx` documenta hoy una
+decisión explícita: *"Deliberately not the sidebar `NavItem` pattern of
+the six institution screens: this context has no institution to show...
+and only two destinations"* — tomada **antes** de que el design system
+real (`design/casillego-design-system/`) se importara al repo. El kit
+(`OpsRole()`, `ui_kits/portal-admin/index.html`) sí usa el mismo shell de
+sidebar de 250px que el rol Institución, con 4 secciones (Resumen/
+Instituciones/Usuarios/Configuración) — la razón que dio `AdminNav.tsx`
+para omitirlo ya no aplica: el diseño real siempre lo contempló, la
+decisión se tomó sin haber visto el kit.
+
+A diferencia del Dashboard institucional (ADR-072), **la mayoría de los
+datos de "Resumen" ya son reales** — `GlobalMetrics.tsx` ya renderiza los
+6 campos de `AdminMetricsResponse` (`institutionsByStatus`,
+`pendingRequests`, `registeredGuardiansCount`, `pickupRequestsTotal`,
+`topInstitutionsByUsage`, `averagePickupDurationSeconds`), solo que en un
+arreglo de tarjetas plano, no en la agrupación del kit. Un solo vacío
+real: la gráfica "Recogidas por día" (últimos 14 días) no tiene ningún
+campo detrás hoy.
+
+**Decisión.**
+
+### 1. `OpsShell` — mismo patrón que `InstitutionShell` (ADR-072), 2 ítems, no 4
+
+Nuevo `apps/portal/src/admin/OpsShell.tsx`: sidebar 250px
+(`var(--ink-900)`), insignia "OPS" junto al wordmark (el kit la tiene,
+`InstitutionShell` no la necesitaba), eyebrow "OPERADOR" + "Consola
+global", **2 ítems de navegación** (Resumen, Instituciones) — **no los 4
+del kit**. "Usuarios" y "Configuración" ya se diferieron indefinidamente
+al cerrar la Fase A (ADR-072, confirmado con el humano) — no se muestran
+ni siquiera deshabilitados: a diferencia de "Reportar incidencia"
+(ADR-024/034, con fecha implícita de "todavía no", tooltip "disponible
+en una versión futura"), estos dos no tienen ningún horizonte — mostrar
+un ítem de nav deshabilitado sugeriría lo contrario. El ítem
+"Instituciones" lleva el mismo contador de pendientes que
+`InstitutionApproval.tsx` ya calcula, no una consulta nueva. Header:
+breadcrumb "Operador / {sección}" — **sin caja de búsqueda**, mismo
+criterio y misma razón que ADR-072 punto 1 (nada que buscar todavía
+detrás de ese control).
+
+`OpsShell` se monta como layout de React Router **dentro** de
+`SuperAdminRoute` (que ya es un layout con `<Outlet/>`, ADR-055 punto 2)
+— mismo mecanismo exacto que `InstitutionShell` dentro de
+`InstitutionGate`. `AdminNav.tsx` se elimina, no se deja sin usar.
+
+### 2. `GlobalMetrics.tsx` — reagrupación visual, sin dato nuevo salvo uno
+
+Los 6 campos existentes se reorganizan al layout del kit: 4 tarjetas KPI
+en fila, "Instituciones por estado" + tiempo medio de recogida en una
+columna, "Top instituciones por uso" con barras proporcionales — **datos
+que ya se calculan**, solo cambia el arreglo visual, igual criterio que
+tuvo el Dashboard institucional con lo que sí era real.
+
+- **"Instituciones activas" pierde el chip "▲ N este mes"** del kit —
+  `institutionsByStatus` es una foto del momento, no un histórico; no hay
+  con qué calcular la variación mensual de instituciones activas sin
+  agregar seguimiento de cambios de estado en el tiempo (`audit_log` ya
+  registra transiciones individuales, pero agregarlas en una métrica es
+  una pieza nueva, no una que ya exista). Se omite el chip, se conserva
+  el número — mismo criterio que "Entregados" perdió su porcentaje
+  cuando "Esperados" no tenía dato real (ADR-072 punto 3).
+- **"Recogidas por día" (14 días) sí se construye** — a diferencia de
+  "Esperados" (que no tenía ningún dato real detrás), esto es calculable
+  con el mismo patrón ya probado en
+  `institution-reports.service.ts` (`deliveriesByDay`,
+  `status = 'delivered' AND completedAt BETWEEN :start AND :end`,
+  agrupado por día) — aquí sin filtro de institución, ventana de 14 días
+  natural (no la del mes calendario que ya usa
+  `pickupRequestsTotal`/`resolveMetricsWindow`, son dos ventanas
+  distintas con propósitos distintos). Campo nuevo
+  `deliveriesByDay: DeliveriesByDayEntry[]` en `AdminMetricsResponse`
+  — mismo tipo que ya exporta `institution-reports`, reutilizado, no
+  redeclarado.
+
+### 3. `InstitutionApproval.tsx` — solo se le quita el `<main>` de página completa
+
+Mismo tratamiento que Personnel.tsx/Reports.tsx en la Fase A (ADR-072
+punto 5): su contenido interno (aprobar/suspender/reactivar
+instituciones) ya está construido y verificado, no se rediseña en esta
+fase — solo deja de traer su propio `<main>` de altura completa, ahora lo
+provee `OpsShell`.
+
+**Consecuencias.** Cierra el patrón de shell para los dos roles del
+portal que lo necesitaban (Institución en ADR-072, Operador aquí) — no
+queda ninguna pantalla de `apps/portal` fuera de un shell salvo la
+Consola de puerta (deliberadamente, ADR-073) y `Login`/`acceso` (no
+aplica, es previo a cualquier sesión).
+
+## Referencias
+
+- ADR-055 punto 2 (`SuperAdminRoute`, el layout que `OpsShell` anida).
+- ADR-038 (métricas globales — puntos 2/3/5/7 no cambian: ventana de
+  comparación mensual, `pendingRequests` expuesto dos veces a propósito,
+  top 5, sin caché).
+- ADR-072 (precedente completo: mismo patrón de shell, mismo criterio de
+  "omitir un dato sin fuente real en vez de inventarlo", mismo criterio
+  de "no mostrar un pendiente indefinido como si tuviera fecha").
+- `apps/portal/src/admin/AdminNav.tsx` (decisión que este ADR reemplaza —
+  tomada sin haber visto el kit real).
+- `apps/api/src/institution-reports/institution-reports.service.ts`
+  (`deliveriesByDay`, el patrón que este ADR reutiliza sin institución).
+- `design/casillego-design-system/ui_kits/portal-admin/index.html`,
+  función `OpsRole()` (fuente visual de este ADR).

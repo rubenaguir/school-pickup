@@ -335,28 +335,50 @@ obsoleto en migración 401) corregido.
       paneles fiel al kit `puerta-consola` (hoy tarjeta centrada
       `max-width: 820px`), más "Vocear" como evento cruzado hacia
       `apps/board`:
-  - [ ] Endpoint nuevo `POST /pickup-requests/:id/announce` (calco de
+  - [x] Endpoint nuevo `POST /pickup-requests/:id/announce` (calco de
         `PickupDeliveryController`, sin restricción de `role`,
         `audit_log.action = pickup_request.announced`)
-  - [ ] Topic MQTT nuevo `board-announce`, multiplexado sobre la misma
+  - [x] Topic MQTT nuevo `board-announce`, multiplexado sobre la misma
         conexión `/ws/board` que Andén/Sereno ya mantienen (discriminador
         `kind: 'row' | 'announce'` nuevo en el wire format — **no** un
         sexto canal WS duplicado, ADR-072 punto 5 ya lo señaló como
         límite)
-  - [ ] `apps/board`: `parseBoardDelta`/`parseBoardAnnounce` con el
+  - [x] `apps/board`: `parseBoardDelta`/`parseBoardAnnounce` con el
         discriminador nuevo, voceo manual reutiliza el mismo mecanismo de
         TTS + pulso que el automático (ADR-069)
-  - [ ] `apps/portal`: layout de dos paneles (barra superior con conteos +
+  - [x] `apps/portal`: layout de dos paneles (barra superior con conteos +
         reloj, lista de fila de salida 452px, panel de detalle), selector
-        de puerta integrado al encabezado (el kit no lo necesita, nuestra
-        realidad multi-puerta sí), código de entrega con captura real
-        (se mantiene sin cambios de lógica, ADR-024 puntos 4/11 — **no**
-        se adopta el flujo "Entrega directa sin código" del kit)
-  - [ ] "Reportar incidencia" se conserva deshabilitado en el nuevo
+        de puerta integrado al encabezado, código de entrega con captura
+        real (sin cambios de lógica, ADR-024 puntos 4/11), más
+        `guardianFullName`/`guardianRelationship` agregados a
+        `PickupRequestQueuePayload`/`PickupRequestQueueSummary` (enmienda,
+        "Quién recoge") — gap real encontrado y corregido en ambos
+        caminos (REST y MQTT) durante la implementación
+  - [x] "Reportar incidencia" se conserva deshabilitado en el nuevo
         layout (ADR-024 punto 5, ADR-034 — sin cambios)
-- [ ] **Fase C (pendiente de ADR)** — shell de navegación del rol
+
+  **Fase B completa** — auditada en las 3 partes (backend, `apps/board`,
+  `apps/portal`), ciclo completo verificado en vivo (consola → vocear →
+  tablero suena), `npm run check` en verde (959 tests).
+- [ ] **Fase C (ADR-074, en curso)** — shell de navegación del rol
       Operador/OPS envolviendo `InstitutionApproval`/`GlobalMetrics`
-      existentes
+      existentes:
+  - [ ] `OpsShell` nuevo (mismo patrón que `InstitutionShell`, ADR-072),
+        2 ítems de navegación (Resumen/Instituciones) — no los 4 del kit,
+        "Usuarios"/"Configuración" ni siquiera se muestran deshabilitados
+        (diferido indefinidamente, sin fecha, ADR-074 punto 1)
+  - [ ] `AdminNav.tsx` eliminado — su razón original ("sin shell, solo
+        dos destinos") se tomó antes de importar el design system real
+  - [ ] `GlobalMetrics.tsx` reagrupado al layout del kit — 5 de 6 campos
+        ya eran reales, solo cambia el arreglo visual; nuevo
+        `deliveriesByDay` en `AdminMetricsResponse` (único dato
+        genuinamente nuevo, mismo patrón que `institution-reports`, sin
+        filtro de institución); chip de variación mensual de
+        "Instituciones activas" omitido (sin histórico agregado que lo
+        respalde)
+  - [ ] `InstitutionApproval.tsx`: solo se le quita el `<main>` de página
+        completa, su contenido no se rediseña (mismo criterio que
+        Personnel/Reports en Fase A)
 - [ ] "Usuarios" y "Configuración" del rol Operador (secciones del kit
       OPS) — **diferido indefinidamente, no es un pendiente de esta
       reapertura.** Confirmado con el humano: el concepto de roles ya
