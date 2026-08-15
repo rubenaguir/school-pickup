@@ -151,7 +151,8 @@ export function AndenBoard({
                     gridTemplateColumns: '1fr 140px 200px 140px',
                     gap: 16,
                     alignItems: 'center',
-                    padding: '18px 38px',
+                    padding: '0 38px',
+                    flex: 1,
                     borderBottom: '1px solid rgba(255,255,255,.05)',
                     background: filled ? 'rgba(14,165,164,0.06)' : 'transparent',
                   }}
