@@ -52,6 +52,8 @@ import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type { SendLocationDto } from './dto/send-location.dto';
 import type {
+  DeliveredTodayGroupCount,
+  DeliveredTodayResponse,
   ListDeliveryPointQueueResponse,
   ListPickupRequestsBoardMonitorResponse,
   ListPickupRequestsBoardResponse,
@@ -384,6 +386,49 @@ export class PickupsService {
     );
 
     return { pickupRequests: summaries, limit, offset, total };
+  }
+
+  /**
+   * Dashboard's "Entregados hoy"/"Por nivel" baseline (ADR-072 §6 amendment):
+   * same `status = 'delivered' AND completedAt BETWEEN :start AND :end`
+   * query `InstitutionReportsService.get()` already proves for `period =
+   * 'today'`, but not reused as-is — that endpoint requires `role = admin`
+   * (ADR-060 pt.6), while the Dashboard is visible to any
+   * `institution_member` (ADR-071 pt.1). `asOf` is captured once, before the
+   * query runs, and reused as both the query's upper bound and the response
+   * field the client uses to de-duplicate against live deltas.
+   */
+  async getDeliveredToday(institutionId: string): Promise<DeliveredTodayResponse> {
+    const asOf = new Date();
+    const startOfToday = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate(), 0, 0, 0, 0);
+
+    const deliveredPickups = await this.pickupRequestsRepository
+      .createQueryBuilder('pickup')
+      .innerJoinAndSelect('pickup.enrollment', 'enrollment')
+      .where('pickup.institution = :institutionId', { institutionId })
+      .andWhere('pickup.status = :status', { status: 'delivered' })
+      .andWhere('pickup.completedAt BETWEEN :start AND :end', {
+        start: startOfToday,
+        end: asOf,
+      })
+      .getMany();
+
+    return {
+      asOf: asOf.toISOString(),
+      total: deliveredPickups.length,
+      byGroup: this.groupDeliveredByGrade(deliveredPickups),
+    };
+  }
+
+  private groupDeliveredByGrade(pickups: readonly PickupRequest[]): DeliveredTodayGroupCount[] {
+    const counts = new Map<string, number>();
+    for (const pickup of pickups) {
+      const label = pickup.enrollment.gradeOrGroup ?? 'Sin grupo';
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es-MX'));
   }
 
   async arrive(userId: string, id: string): Promise<PickupRequestArrivedResponse> {

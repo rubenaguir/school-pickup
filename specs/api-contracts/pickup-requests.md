@@ -37,6 +37,7 @@ tutor, o membresía a la institución) contra el `pickup_requests` en cuestión.
 | `PATCH /pickup-requests/:id/arrived` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
 | `PATCH /pickup-requests/:id/deliver` | **`InstitutionMembershipGuard`** en modo ruta por recurso: `@InstitutionResource({ entity: PickupRequest })` resuelve el `pickup_requests` por su `:id`, lee su `institution_id` (denormalizado, ADR-018 punto 4) y verifica la membresía antes de llegar al controller. Sin restricción de `role` (ADR-011) |
 | `PATCH /pickup-requests/:id/cancel` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
+| `GET /institutions/:id/delivered-today` | **`InstitutionMembershipGuard`** en modo degenerado (`@InstitutionResource({ entity: Institution, idParam: 'id', institutionColumn: 'id' })`, mismo caso que `GET /institutions/:id/reports`): `institution_member` de esa `:id`, sin restricción de `role` (ver abajo) |
 
 **`GET /pickup-requests/:id` y `GET /pickup-requests?enrollmentId=` usan el
 patrón de verificación manual OR**, no el guard compartido: la lectura la permite
@@ -548,6 +549,49 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
 | 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
 | 409 | `INVALID_STATUS_TRANSITION` | transición inválida (ya está en un estado terminal), según la máquina de estados compartida (ADR-017) |
 
+## `GET /institutions/:id/delivered-today`
+
+Línea base persistida de "entregados hoy" del Dashboard del rol Institución
+(`apps/portal`) — enmienda a ADR-072 punto 3, ver `docs/decisiones.md`. Vive
+en este contrato, no en `specs/api-contracts/institution-reports.md`, por
+autorización distinta: `GET /institutions/:id/reports` exige `role = admin`
+(ADR-060 punto 6), mientras que este endpoint es visible para cualquier
+`institution_member` — mismo criterio que el resto de este contrato para el
+modo `institutionId` (ADR-071 punto 1). No es un descuido de organización,
+es la razón por la que existe un endpoint propio en vez de reutilizar el de
+reportes.
+
+Misma consulta que `InstitutionReportsService.get()` ya prueba para
+`period = 'today'` (`status = 'delivered' AND completed_at BETWEEN` inicio
+del día calendario `AND :asOf`), agrupada además por
+`enrollment.grade_or_group` (mismo criterio que `dashboard-grouping.ts` del
+frontend: sin inventar un campo "nivel" que no existe — una fila sin grupo
+cuenta bajo `"Sin grupo"`).
+
+**Request:** sin body ni query params.
+
+**Response 200**
+```json
+{
+  "asOf": "string (timestamptz, ISO 8601)",
+  "total": "number",
+  "byGroup": [{ "label": "string", "count": "number" }]
+}
+```
+
+`asOf` es el instante en que el servidor ejecutó la consulta — nunca un
+valor enviado por el cliente. El cliente lo usa para descartar, sin
+contarlos dos veces, los deltas en vivo del canal `board-monitor`
+(`specs/api-contracts/board-monitor-ws.md`) cuyo `updatedAt` sea anterior o
+igual a `asOf`: esa entrega ya está incluida en `total`/`byGroup`.
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es `institution_members` de esa `:id` |
+| 404 | `RESOURCE_NOT_FOUND` | la institución no existe (caso degenerado del guard, ADR-022 punto 4) |
+
 ## Referencias
 
 - `specs/features/018-crear-pickup-request.md`,
@@ -592,6 +636,9 @@ El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
   `PickupRequestBoardMonitorSummary`, espejo de
   `PickupRequestBoardMonitorPayload`, sin `deliveryCode`; punto 5: `view` como
   modificador de forma, no un cuarto filtro).
+- ADR-072 (enmienda al punto 3: `GET /institutions/:id/delivered-today`,
+  línea base persistida de "entregados hoy" para el Dashboard del rol
+  Institución, sin restricción de `role`).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
   continúan el snapshot del modo `deliveryPointId`).
 - `specs/api-contracts/board-ws.md` (los deltas de tiempo real que continúan el

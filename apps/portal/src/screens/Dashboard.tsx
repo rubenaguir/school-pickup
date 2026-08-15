@@ -11,7 +11,6 @@ import {
   boardMonitorSocketErrorMessage,
 } from '../institution/board-monitor-error-messages';
 import { STATUS_META, etaDisplay } from '../institution/board-monitor-display';
-import { groupDeliveredByGroup } from '../institution/dashboard-grouping';
 import { sortBoardRows, type BoardMonitorRow } from '../institution/board-monitor-rows';
 
 const EYEBROW_STYLE = {
@@ -155,16 +154,12 @@ export function Dashboard() {
     (row) => row.status === 'en_route' || row.status === 'arriving',
   ).length;
   const enPuertaCount = monitor.rows.filter((row) => row.status === 'arrived').length;
-  const entregadosCount = monitor.deliveredSinceConnect.length;
-
-  const groups = useMemo(
-    () => groupDeliveredByGroup(monitor.deliveredSinceConnect),
-    [monitor.deliveredSinceConnect],
-  );
+  const entregadosCount = monitor.deliveredToday.total;
+  const groups = monitor.deliveredToday.byGroup;
 
   const allRows = useMemo(
-    () => sortBoardRows([...monitor.rows, ...monitor.deliveredSinceConnect]),
-    [monitor.rows, monitor.deliveredSinceConnect],
+    () => sortBoardRows([...monitor.rows, ...monitor.deliveredRows]),
+    [monitor.rows, monitor.deliveredRows],
   );
   const visibleRows = allRows.filter((row) => matchesFilter(row, filter));
 
@@ -231,7 +226,7 @@ export function Dashboard() {
         <Card>
           <span style={PANEL_TITLE_STYLE}>Por nivel</span>
           <div style={{ fontSize: 12, color: 'var(--ink-200)', fontWeight: 500, marginTop: 2 }}>
-            Entregas registradas desde que se abrió este panel
+            Entregados hoy
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
             {groups.length === 0 ? (

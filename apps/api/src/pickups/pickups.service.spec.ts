@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { In } from 'typeorm';
 import { buildBoardMonitorPayload, buildBoardPayload, buildQueuePayload } from '@casillego/shared';
 import { PickupsService } from './pickups.service';
@@ -1369,6 +1369,78 @@ describe('PickupsService', () => {
         service.listByInstitutionMonitor('user-1', { institutionId: INST_ID }),
       ).rejects.toMatchObject({ response: { code: 'NOT_INSTITUTION_MEMBER' } });
       expect(studentGuardiansRepo.exists).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getDeliveredToday', () => {
+    function buildDeliveredTodayQueryBuilder(pickups: PickupRequest[]) {
+      const queryBuilder: Record<string, unknown> = {
+        getMany: vi.fn().mockResolvedValue(pickups),
+      };
+      for (const method of ['innerJoinAndSelect', 'where', 'andWhere']) {
+        queryBuilder[method] = vi.fn(() => queryBuilder);
+      }
+      return queryBuilder;
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('groups delivered pickups by gradeOrGroup, "Sin grupo" for a missing one, sorted es-MX', async () => {
+      const pickups = [
+        buildPickupRequest({ enrollment: { gradeOrGroup: '5° A' } as Enrollment }),
+        buildPickupRequest({ enrollment: { gradeOrGroup: '3° B' } as Enrollment }),
+        buildPickupRequest({ enrollment: { gradeOrGroup: '3° B' } as Enrollment }),
+        buildPickupRequest({ enrollment: { gradeOrGroup: null } as Enrollment }),
+      ];
+      const queryBuilder = buildDeliveredTodayQueryBuilder(pickups);
+      const { service } = buildService({
+        pickupRequests: { createQueryBuilder: vi.fn(() => queryBuilder) },
+      });
+
+      const result = await service.getDeliveredToday('inst-1');
+
+      expect(result.total).toBe(4);
+      expect(result.byGroup).toEqual([
+        { label: '3° B', count: 2 },
+        { label: '5° A', count: 1 },
+        { label: 'Sin grupo', count: 1 },
+      ]);
+    });
+
+    it('captures asOf before running the query and reuses it as the query upper bound', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-15T20:03:00.000Z'));
+
+      const queryBuilder = buildDeliveredTodayQueryBuilder([]);
+      const { service } = buildService({
+        pickupRequests: { createQueryBuilder: vi.fn(() => queryBuilder) },
+      });
+
+      const result = await service.getDeliveredToday('inst-1');
+
+      expect(result.asOf).toBe('2026-08-15T20:03:00.000Z');
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        'pickup.completedAt BETWEEN :start AND :end',
+        expect.objectContaining({ end: new Date('2026-08-15T20:03:00.000Z') }),
+      );
+    });
+
+    it('scopes the query to the institution and delivered status', async () => {
+      const queryBuilder = buildDeliveredTodayQueryBuilder([]);
+      const { service } = buildService({
+        pickupRequests: { createQueryBuilder: vi.fn(() => queryBuilder) },
+      });
+
+      await service.getDeliveredToday('inst-1');
+
+      expect(queryBuilder.where).toHaveBeenCalledWith('pickup.institution = :institutionId', {
+        institutionId: 'inst-1',
+      });
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('pickup.status = :status', {
+        status: 'delivered',
+      });
     });
   });
 

@@ -157,3 +157,20 @@ export interface ListPickupRequestsBoardMonitorResponse {
   offset: number;
   total: number;
 }
+
+export interface DeliveredTodayGroupCount {
+  label: string;
+  count: number;
+}
+
+/**
+ * `GET /institutions/:id/delivered-today` (ADR-072 §6 amendment). `asOf` is
+ * the instant the server ran the query — never a client-sent value — so the
+ * Dashboard can tell the client which live deltas are already counted in
+ * `total`/`byGroup` and which arrived after.
+ */
+export interface DeliveredTodayResponse {
+  asOf: string;
+  total: number;
+  byGroup: DeliveredTodayGroupCount[];
+}

@@ -12,6 +12,11 @@ import {
   fatalCloseReason,
   reconnectDelayMs,
 } from './board-monitor-socket';
+import {
+  addDeliveredToday,
+  EMPTY_DELIVERED_TODAY,
+  type DeliveredToday,
+} from './dashboard-grouping';
 
 const BOARD_MONITOR_PAGE_SIZE = 200;
 
@@ -22,19 +27,28 @@ export interface InstitutionBoardMonitorValue {
   status: BoardMonitorStatus;
   rows: BoardMonitorRow[];
   /**
-   * Deliveries observed live since this hook connected — NOT a full-day
-   * total. The REST snapshot (`view=monitor`) only ever returns the active
-   * statuses (`en_route`/`arriving`/`arrived`, ADR-071 pt.2's
-   * "active-statuses-only" rule on `listByInstitutionMonitor`), and
-   * `mergeBoardMonitorDelta` removes a row the instant a delta marks it
-   * `delivered` — by design, so Carril's table never shows a stale finished
-   * pickup. That leaves no snapshot and no persisted row to count "delivered
-   * today" from; the only signal that ever exists is the delta itself, in
-   * the instant it arrives. The Dashboard's "Entregados" KPI and "Por nivel"
-   * panel (ADR-072 §6) are built on this list instead of a full-day count for
-   * that reason — captured here, once, rather than in the screen.
+   * Full-day "delivered today" accumulator behind the Dashboard's
+   * "Entregados" KPI and "Por nivel" panel (ADR-072 §6 amendment). Seeded
+   * from `GET /institutions/:id/delivered-today` on connect and on every
+   * reconnect, then incremented in place — never rebuilt from a growing row
+   * list — as live `delivered` deltas arrive on `/ws/board-monitor`. Survives
+   * a page refresh because the baseline it seeds from is a real persisted
+   * count (`pickup_requests.completed_at`), not something only ever observed
+   * while this hook was connected.
    */
-  deliveredSinceConnect: BoardMonitorRow[];
+  deliveredToday: DeliveredToday;
+  /**
+   * Individual rows observed going `delivered` live since this hook
+   * connected — NOT a full-day list, and NOT the source of `deliveredToday`
+   * (see above). Exists only so the Dashboard's "Actividad en vivo" table can
+   * keep showing a just-delivered pickup, dimmed, for the rest of the
+   * session: the REST snapshot (`view=monitor`) only ever returns active
+   * statuses (ADR-071 pt.2), and `mergeBoardMonitorDelta` removes a row the
+   * instant a delta marks it `delivered` — by design, so the table never
+   * shows a stale finished pickup on its own. Resets to empty on `reload()`,
+   * same as before this accumulator was split in two.
+   */
+  deliveredRows: BoardMonitorRow[];
   error: ApiError | null;
   connection: ConnectionState;
   connectionErrorReason: string | null;
@@ -43,6 +57,12 @@ export interface InstitutionBoardMonitorValue {
 
 interface ListInstitutionBoardMonitorResponse {
   pickupRequests: BoardMonitorRow[];
+}
+
+interface DeliveredTodayApiResponse {
+  asOf: string;
+  total: number;
+  byGroup: DeliveredToday['byGroup'];
 }
 
 function asApiError(caught: unknown): ApiError {
@@ -75,7 +95,8 @@ export function useInstitutionBoardMonitor(
   institutionId: string | null,
 ): InstitutionBoardMonitorValue {
   const [rows, setRows] = useState<BoardMonitorRow[]>([]);
-  const [deliveredSinceConnect, setDeliveredSinceConnect] = useState<BoardMonitorRow[]>([]);
+  const [deliveredToday, setDeliveredToday] = useState<DeliveredToday>(EMPTY_DELIVERED_TODAY);
+  const [deliveredRows, setDeliveredRows] = useState<BoardMonitorRow[]>([]);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [connectionErrorReason, setConnectionErrorReason] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -98,7 +119,8 @@ export function useInstitutionBoardMonitor(
     setLoadedId(null);
     setFailure(null);
     setConnectionErrorReason(null);
-    setDeliveredSinceConnect([]);
+    setDeliveredToday(EMPTY_DELIVERED_TODAY);
+    setDeliveredRows([]);
     setAttempt((n) => n + 1);
   }, []);
 
@@ -111,7 +133,58 @@ export function useInstitutionBoardMonitor(
     let retries = 0;
     let buffered: BoardMonitorRow[] | null = null;
     let localRows: BoardMonitorRow[] = [];
-    let localDelivered: BoardMonitorRow[] = [];
+    let localDeliveredRows: BoardMonitorRow[] = [];
+    let localDeliveredToday: DeliveredToday = EMPTY_DELIVERED_TODAY;
+    // Gates delivered deltas until the delivered-today baseline (with its
+    // `asOf` cutoff) is known — reopened on every reconnect, since a fresh
+    // reconnect re-seeds the baseline and any stale `asOf` from before it
+    // would double- or under-count. `null` asOf (baseline fetch failed) means
+    // "no cutoff, count everything live" — the pre-amendment behavior.
+    let deliveredTodayReady = false;
+    let asOf: string | null = null;
+    let pendingDeliveredDeltas: BoardMonitorRow[] = [];
+
+    function applyDeliveredToAggregate(delta: BoardMonitorRow) {
+      if (!deliveredTodayReady) {
+        pendingDeliveredDeltas.push(delta);
+        return;
+      }
+      if (asOf !== null && delta.updatedAt <= asOf) return;
+      localDeliveredToday = addDeliveredToday(localDeliveredToday, delta);
+      setDeliveredToday(localDeliveredToday);
+    }
+
+    function loadDeliveredToday(id: string) {
+      deliveredTodayReady = false;
+      apiClient
+        .get<DeliveredTodayApiResponse>(`/institutions/${encodeURIComponent(id)}/delivered-today`)
+        .then((response) => {
+          if (cancelled) return;
+          asOf = response.asOf;
+          localDeliveredToday = { total: response.total, byGroup: response.byGroup };
+          settleDeliveredToday();
+        })
+        .catch(() => {
+          // Best-effort (ADR-072 §6 amendment): a failed baseline must not
+          // take down the rest of the Dashboard — falls back to the
+          // pre-amendment behavior, an accumulator starting at 0 from here.
+          if (cancelled) return;
+          asOf = null;
+          settleDeliveredToday();
+        });
+    }
+
+    function settleDeliveredToday() {
+      deliveredTodayReady = true;
+      const pending = pendingDeliveredDeltas;
+      pendingDeliveredDeltas = [];
+      for (const delta of pending) {
+        if (asOf === null || delta.updatedAt > asOf) {
+          localDeliveredToday = addDeliveredToday(localDeliveredToday, delta);
+        }
+      }
+      setDeliveredToday(localDeliveredToday);
+    }
 
     function applyLiveDelta(delta: BoardMonitorRow) {
       if (buffered) {
@@ -119,8 +192,9 @@ export function useInstitutionBoardMonitor(
         return;
       }
       if (delta.status === 'delivered') {
-        localDelivered = [...localDelivered, delta];
-        setDeliveredSinceConnect(localDelivered);
+        localDeliveredRows = [...localDeliveredRows, delta];
+        setDeliveredRows(localDeliveredRows);
+        applyDeliveredToAggregate(delta);
       }
       localRows = sortBoardRows(mergeBoardMonitorDelta(localRows, delta));
       setRows(localRows);
@@ -138,8 +212,11 @@ export function useInstitutionBoardMonitor(
           buffered = null;
           const deliveredWhileBuffering = pending.filter((delta) => delta.status === 'delivered');
           if (deliveredWhileBuffering.length > 0) {
-            localDelivered = [...localDelivered, ...deliveredWhileBuffering];
-            setDeliveredSinceConnect(localDelivered);
+            localDeliveredRows = [...localDeliveredRows, ...deliveredWhileBuffering];
+            setDeliveredRows(localDeliveredRows);
+            for (const delta of deliveredWhileBuffering) {
+              applyDeliveredToAggregate(delta);
+            }
           }
           const merged = pending.reduce(
             (acc, delta) => mergeBoardMonitorDelta(acc, delta),
@@ -175,6 +252,7 @@ export function useInstitutionBoardMonitor(
         retries = 0;
         setConnection('live');
         loadSnapshot(id);
+        loadDeliveredToday(id);
       };
 
       opened.onmessage = (event: MessageEvent) => {
@@ -217,7 +295,8 @@ export function useInstitutionBoardMonitor(
   return {
     status,
     rows,
-    deliveredSinceConnect,
+    deliveredToday,
+    deliveredRows,
     error,
     connection,
     connectionErrorReason,

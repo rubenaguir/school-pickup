@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { groupDeliveredByGroup } from './dashboard-grouping';
+import {
+  addDeliveredToday,
+  EMPTY_DELIVERED_TODAY,
+  type DeliveredToday,
+} from './dashboard-grouping';
 import type { BoardMonitorRow } from './board-monitor-rows';
 
 function row(overrides: Partial<BoardMonitorRow> = {}): BoardMonitorRow {
@@ -21,40 +25,35 @@ function row(overrides: Partial<BoardMonitorRow> = {}): BoardMonitorRow {
   };
 }
 
-describe('groupDeliveredByGroup', () => {
-  it('counts only delivered rows, grouped by gradeOrGroup', () => {
-    const rows = [
-      row({ pickupRequestId: 'pr-1', gradeOrGroup: '3° B' }),
-      row({ pickupRequestId: 'pr-2', gradeOrGroup: '3° B' }),
-      row({ pickupRequestId: 'pr-3', gradeOrGroup: '5° A' }),
-      row({ pickupRequestId: 'pr-4', gradeOrGroup: '5° A', status: 'en_route' }),
-    ];
-
-    expect(groupDeliveredByGroup(rows)).toEqual([
-      { label: '3° B', count: 2 },
-      { label: '5° A', count: 1 },
-    ]);
+describe('addDeliveredToday', () => {
+  it('creates a new group on the first row of that gradeOrGroup', () => {
+    const result = addDeliveredToday(EMPTY_DELIVERED_TODAY, row({ gradeOrGroup: '3° B' }));
+    expect(result).toEqual({ total: 1, byGroup: [{ label: '3° B', count: 1 }] });
   });
 
-  it('groups a delivered row with no gradeOrGroup under "Sin grupo"', () => {
-    const rows = [row({ gradeOrGroup: null })];
-
-    expect(groupDeliveredByGroup(rows)).toEqual([{ label: 'Sin grupo', count: 1 }]);
+  it('increments an existing group without duplicating it', () => {
+    const seeded: DeliveredToday = { total: 4, byGroup: [{ label: '3° B', count: 4 }] };
+    const result = addDeliveredToday(seeded, row({ gradeOrGroup: '3° B' }));
+    expect(result).toEqual({ total: 5, byGroup: [{ label: '3° B', count: 5 }] });
   });
 
-  it('returns an empty list when nothing has been delivered', () => {
-    expect(groupDeliveredByGroup([row({ status: 'en_route' })])).toEqual([]);
+  it('groups a row with no gradeOrGroup under "Sin grupo"', () => {
+    const result = addDeliveredToday(EMPTY_DELIVERED_TODAY, row({ gradeOrGroup: null }));
+    expect(result).toEqual({ total: 1, byGroup: [{ label: 'Sin grupo', count: 1 }] });
   });
 
-  it('sorts groups alphabetically, es-MX', () => {
-    const rows = [
-      row({ pickupRequestId: 'pr-1', gradeOrGroup: 'Secundaria' }),
-      row({ pickupRequestId: 'pr-2', gradeOrGroup: 'Preescolar' }),
-    ];
+  it('keeps byGroup sorted alphabetically, es-MX, after an increment', () => {
+    const seeded: DeliveredToday = {
+      total: 1,
+      byGroup: [{ label: 'Secundaria', count: 1 }],
+    };
+    const result = addDeliveredToday(seeded, row({ gradeOrGroup: 'Preescolar' }));
+    expect(result.byGroup.map((entry) => entry.label)).toEqual(['Preescolar', 'Secundaria']);
+  });
 
-    expect(groupDeliveredByGroup(rows).map((entry) => entry.label)).toEqual([
-      'Preescolar',
-      'Secundaria',
-    ]);
+  it('does not mutate the input accumulator', () => {
+    const seeded: DeliveredToday = { total: 1, byGroup: [{ label: '3° B', count: 1 }] };
+    addDeliveredToday(seeded, row({ gradeOrGroup: '3° B' }));
+    expect(seeded).toEqual({ total: 1, byGroup: [{ label: '3° B', count: 1 }] });
   });
 });
