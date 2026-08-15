@@ -5052,3 +5052,18 @@ nueva idea.
   que motivó multiplexar en vez de abrir una sexta).
 - `design/casillego-design-system/ui_kits/puerta-consola/index.html`
   (fuente visual de este ADR).
+
+**Enmienda a ADR-073 (previo a la implementación del frontend).**
+`PickupRequestQueuePayload` (lo que la consola ya consume hoy) no trae
+nombre ni parentesco del tutor — solo vehículo y placa. El panel "Quién
+recoge" del kit los necesita. Extensión mínima: `PickupRequestRealtimeSnapshot`
+ya carga `guardianFullName`/`guardianRelationship` desde ADR-071 (para
+Carril/Dashboard) — `buildQueuePayload` pasa a copiar esos dos campos ya
+resueltos, sin ninguna consulta nueva, sin tocar `resolveGuardianRelationship`.
+Se agrega `guardianFullName: string` y
+`guardianRelationship: StudentGuardianRelationship` a
+`PickupRequestQueuePayload`. Justificación de producto, no solo visual: el
+operador de puerta hoy solo confirma la entrega por el código — mostrar
+quién dice ser el tutor es una verificación adicional razonable en un
+contexto de seguridad escolar, consistente con por qué el código de
+entrega existe en primer lugar (ADR-024).

@@ -1,4 +1,8 @@
-import type { PickupRequestQueuePayload, PickupRequestStatus } from '@casillego/shared';
+import type {
+  PickupRequestQueuePayload,
+  PickupRequestStatus,
+  StudentGuardianRelationship,
+} from '@casillego/shared';
 
 /**
  * One row of the gate console queue.
@@ -45,6 +49,16 @@ function isNullableNumber(value: unknown): value is number | null {
   return value === null || (typeof value === 'number' && Number.isFinite(value));
 }
 
+function isGuardianRelationship(value: unknown): value is StudentGuardianRelationship {
+  return (
+    value === 'mother' ||
+    value === 'father' ||
+    value === 'grandparent' ||
+    value === 'driver' ||
+    value === 'other'
+  );
+}
+
 /**
  * Validates the shape of an incoming WebSocket delta. Never throws — returns
  * `null` for anything that doesn't match, so one malformed message cannot
@@ -66,6 +80,8 @@ export function parseQueueDelta(raw: unknown): QueueRow | null {
   if (typeof payload.deliveryCode !== 'string') return null;
   if (!isNullableString(payload.estimatedArrivalAt)) return null;
   if (!isNullableNumber(payload.etaSeconds)) return null;
+  if (typeof payload.guardianFullName !== 'string') return null;
+  if (!isGuardianRelationship(payload.guardianRelationship)) return null;
   if (typeof payload.updatedAt !== 'string') return null;
 
   return {
@@ -78,6 +94,8 @@ export function parseQueueDelta(raw: unknown): QueueRow | null {
     deliveryCode: payload.deliveryCode,
     estimatedArrivalAt: payload.estimatedArrivalAt,
     etaSeconds: payload.etaSeconds,
+    guardianFullName: payload.guardianFullName,
+    guardianRelationship: payload.guardianRelationship,
     updatedAt: payload.updatedAt,
   };
 }

@@ -18,6 +18,8 @@ function row(overrides: Partial<QueueRow> = {}): QueueRow {
     deliveryCode: '7723',
     estimatedArrivalAt: '2026-08-09T14:06:00.000Z',
     etaSeconds: 300,
+    guardianFullName: 'Marisol Peña',
+    guardianRelationship: 'mother',
     updatedAt: '2026-08-09T14:01:00.000Z',
     ...overrides,
   };
@@ -46,6 +48,7 @@ describe('parseQueueDelta', () => {
     expect(parseQueueDelta({ ...row(), status: 'waiting' })).toBeNull();
     expect(parseQueueDelta({ ...row(), deliveryCode: undefined })).toBeNull();
     expect(parseQueueDelta({ ...row(), etaSeconds: 'pronto' })).toBeNull();
+    expect(parseQueueDelta({ ...row(), guardianRelationship: 'uncle' })).toBeNull();
   });
 
   it('keeps only the queue fields, dropping anything extra on the wire', () => {

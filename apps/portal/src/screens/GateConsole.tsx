@@ -1,58 +1,25 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import type { PickupRequestStatus } from '@casillego/shared';
+import { Avatar, Badge, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { relationshipLabel, type PickupRequestStatus } from '@casillego/shared';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
-import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
+import { useProfile } from '../profile/useProfile';
 import { deliveryPointListErrorMessage } from '../delivery-points/delivery-point-error-messages';
 import { useDeliveryPoints, type DeliveryPoint } from '../delivery-points/useDeliveryPoints';
 import {
+  announceErrorMessage,
   deliverErrorMessage,
   queueListErrorMessage,
   queueSocketErrorMessage,
 } from '../gate-console/gate-console-error-messages';
 import type { QueueRow } from '../gate-console/queue-rows';
 import { useDeliveryPointQueue, type ConnectionState } from '../gate-console/useDeliveryPointQueue';
+import { useClock } from '../gate-console/useClock';
 import { Alert } from '../components/Alert';
-import {
-  DELIVERY_POINTS_PATH,
-  DISMISSAL_SCHEDULE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  PERSONNEL_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
-
-const EYEBROW_STYLE = {
-  fontSize: 'var(--text-2xs)',
-  letterSpacing: 'var(--tracking-eyebrow)',
-  textTransform: 'uppercase',
-  fontWeight: 700,
-  color: 'var(--ink-200)',
-} as const;
-
-const META_VALUE_STYLE = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--ink-600)',
-} as const;
+import { DASHBOARD_PATH } from '../routes/paths';
 
 const DELIVERY_CODE_LENGTH = 4;
-
-const EMPTY_QUEUE_ICON = (
-  <svg
-    width="28"
-    height="28"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-  >
-    <path d="M3 17h2l1-5h12l1 5h2" />
-    <path d="M5 17v2h3v-2M16 17v2h3v-2" />
-    <path d="M8 12V7a4 4 0 0 1 8 0v5" />
-  </svg>
-);
 
 /* ------------------------------------------------------------------ */
 /* Etiquetas                                                           */
@@ -82,32 +49,6 @@ const STATUS_TONES: Record<
   cancelled: 'cancelled',
 };
 
-/** 24h clock, es-MX (.claude/rules/design-system.md). */
-function arrivalClock(estimatedArrivalAt: string | null): string | null {
-  if (!estimatedArrivalAt) return null;
-  const at = new Date(estimatedArrivalAt);
-  if (Number.isNaN(at.getTime())) return null;
-  return at.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-function etaLabel(etaSeconds: number | null): string {
-  if (etaSeconds === null) return 'Sin ETA';
-  const minutes = Math.max(1, Math.round(etaSeconds / 60));
-  return `${minutes} min`;
-}
-
-function vehicleLabel(row: QueueRow): string {
-  const parts = [row.vehicleDescription, row.vehiclePlate].filter(
-    (part): part is string => part !== null && part.trim().length > 0,
-  );
-  // No vehicle snapshot at all means the guardian walks up (ADR-014/ADR-025).
-  return parts.length === 0 ? 'A pie' : parts.join(' · ');
-}
-
-/* ------------------------------------------------------------------ */
-/* Indicador de conexión                                               */
-/* ------------------------------------------------------------------ */
-
 const CONNECTION_LABELS: Record<ConnectionState, string> = {
   connecting: 'Conectando…',
   live: 'En vivo',
@@ -116,41 +57,323 @@ const CONNECTION_LABELS: Record<ConnectionState, string> = {
 };
 
 const CONNECTION_COLORS: Record<ConnectionState, string> = {
-  connecting: 'var(--ink-300)',
-  live: 'var(--success)',
-  reconnecting: 'var(--warning)',
+  connecting: 'rgba(255,255,255,.5)',
+  live: 'var(--status-delivered)',
+  reconnecting: 'var(--status-arriving)',
   closed: 'var(--danger)',
 };
 
+/** 24h clock, es-MX (.claude/rules/design-system.md). */
+function arrivalClock(estimatedArrivalAt: string | null): string | null {
+  if (!estimatedArrivalAt) return null;
+  const at = new Date(estimatedArrivalAt);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function etaLabel(row: QueueRow): string {
+  if (row.status === 'arrived') return 'En puerta';
+  if (row.etaSeconds === null) return 'Sin ETA';
+  const minutes = Math.max(1, Math.round(row.etaSeconds / 60));
+  return `${minutes} min`;
+}
+
+function firstName(fullName: string): string {
+  return fullName.split(' ')[0] ?? fullName;
+}
+
+const EMPTY_QUEUE_ICON = (
+  <svg
+    width="28"
+    height="28"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+  >
+    <path d="M3 17h2l1-5h12l1 5h2" />
+    <path d="M5 17v2h3v-2M16 17v2h3v-2" />
+    <path d="M8 12V7a4 4 0 0 1 8 0v5" />
+  </svg>
+);
+
 /**
- * Not a `Badge`: its tones are the five pickup states plus brand/neutral, and
- * the health of a socket is none of those — recolouring one of them would be
- * exactly the mistake the design system forbids.
+ * Waveform + pulse keyframes for the "Vocear" indicators (kit fidelity —
+ * `puerta-consola/index.html`'s `yv-bar`/`yv-pulse`), renamed to avoid
+ * colliding with any other screen's own `@keyframes`.
  */
-function ConnectionIndicator({ connection }: { connection: ConnectionState }) {
+const ANNOUNCE_KEYFRAMES = `
+@keyframes clg-announce-bar{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+@keyframes clg-announce-pulse{0%,100%{box-shadow:0 0 0 0 rgba(14,165,164,0)}50%{box-shadow:0 0 0 7px rgba(14,165,164,.18)}}
+`;
+
+function Waveform({
+  size = 16,
+  color = 'var(--status-arrived)',
+}: {
+  size?: number;
+  color?: string;
+}) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: size, flexShrink: 0 }}>
+      {[0, 0.15, 0.3].map((delay) => (
+        <span
+          key={delay}
+          style={{
+            width: 3,
+            height: '100%',
+            background: color,
+            borderRadius: 2,
+            transformOrigin: 'bottom',
+            animation: `clg-announce-bar .9s infinite ${delay}s`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Barra superior                                                      */
+/* ------------------------------------------------------------------ */
+
+function TopBarDivider() {
+  return (
+    <span style={{ width: 1, height: 34, background: 'rgba(255,255,255,.12)', flexShrink: 0 }} />
+  );
+}
+
+function CountPill({ label, count, color }: { label: string; count: number; color: string }) {
   return (
     <span
-      role="status"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
         gap: 7,
         fontSize: 13,
         fontWeight: 700,
-        color: 'var(--ink-500)',
+        background: `color-mix(in srgb, ${color} 18%, transparent)`,
+        color,
+        padding: '6px 13px',
+        borderRadius: 999,
+        whiteSpace: 'nowrap',
       }}
     >
       <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: CONNECTION_COLORS[connection],
-          flexShrink: 0,
-        }}
+        style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }}
       />
-      {CONNECTION_LABELS[connection]}
+      {count} {label}
     </span>
+  );
+}
+
+interface TopBarProps {
+  institutionName: string;
+  points: ReturnType<typeof useDeliveryPoints>;
+  active: DeliveryPoint[];
+  selected: DeliveryPoint | null;
+  gateSelectId: string;
+  onChangeGate: (id: string) => void;
+  arrivedCount: number;
+  enRouteCount: number;
+  deliveredCount: number;
+  clock: { clock: string; dateText: string };
+  connection: ConnectionState | null;
+  displayName: string;
+  onBack: () => void;
+  onLogout: () => void;
+}
+
+function TopBar({
+  institutionName,
+  points,
+  active,
+  selected,
+  gateSelectId,
+  onChangeGate,
+  arrivedCount,
+  enRouteCount,
+  deliveredCount,
+  clock,
+  connection,
+  displayName,
+  onBack,
+  onLogout,
+}: TopBarProps) {
+  return (
+    <header
+      style={{
+        flexShrink: 0,
+        background: 'var(--ink-900)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 28px',
+        height: 82,
+        gap: 20,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+          <img src="/pin-mark.svg" width={28} height={32} alt="" />
+          <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>
+            Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: '.08em',
+              color: 'var(--brand)',
+              background: 'rgba(251,106,69,.16)',
+              padding: '3px 7px',
+              borderRadius: 6,
+            }}
+          >
+            PUERTA
+          </span>
+        </span>
+        <TopBarDivider />
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, minWidth: 0 }}>
+          <span
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: '-.01em',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {institutionName}
+          </span>
+          {points.status === 'ready' && active.length > 0 ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <label
+                htmlFor={gateSelectId}
+                style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', fontWeight: 500 }}
+              >
+                Puerta
+              </label>
+              <select
+                id={gateSelectId}
+                value={selected?.id ?? ''}
+                onChange={(event) => onChangeGate(event.target.value)}
+                style={{
+                  height: 26,
+                  border: '1px solid rgba(255,255,255,.18)',
+                  borderRadius: 7,
+                  padding: '0 8px',
+                  outline: 'none',
+                  background: 'rgba(255,255,255,.08)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                {selected === null && <option value="">Elige una puerta…</option>}
+                {active.map((point) => (
+                  <option key={point.id} value={point.id} style={{ color: '#0E1F30' }}>
+                    {point.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', fontWeight: 500 }}>
+              {points.status === 'loading' ? 'Cargando puertas…' : 'Sin puerta activa'}
+            </span>
+          )}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        {selected && (
+          <>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <CountPill label="en puerta" count={arrivedCount} color="var(--status-arrived)" />
+              <CountPill label="en camino" count={enRouteCount} color="var(--status-en-route)" />
+              <CountPill
+                label="entregados"
+                count={deliveredCount}
+                color="var(--status-delivered)"
+              />
+            </span>
+            {connection && (
+              <span
+                role="status"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: CONNECTION_COLORS[connection],
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: 'rgba(255,255,255,.5)' }}>
+                  {CONNECTION_LABELS[connection]}
+                </span>
+              </span>
+            )}
+            <TopBarDivider />
+          </>
+        )}
+        <span
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            lineHeight: 1.05,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 26,
+              fontWeight: 800,
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '-.02em',
+            }}
+          >
+            {clock.clock}
+          </span>
+          <span
+            style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', fontWeight: 500, marginTop: 2 }}
+          >
+            {clock.dateText}
+          </span>
+        </span>
+        <TopBarDivider />
+        <span
+          onClick={onBack}
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'rgba(255,255,255,.6)',
+            cursor: 'pointer',
+          }}
+        >
+          Volver al portal
+        </span>
+        <span
+          onClick={onLogout}
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'rgba(255,255,255,.6)',
+            cursor: 'pointer',
+          }}
+        >
+          Cerrar sesión
+        </span>
+        <Avatar name={displayName || '·'} size={40} />
+      </div>
+    </header>
   );
 }
 
@@ -158,29 +381,124 @@ function ConnectionIndicator({ connection }: { connection: ConnectionState }) {
 /* Fila de la cola                                                     */
 /* ------------------------------------------------------------------ */
 
-interface QueueRowCardProps {
+interface QueueListRowProps {
+  row: QueueRow;
+  selected: boolean;
+  isAnnouncing: boolean;
+  confirmed: boolean;
+  onSelect: () => void;
+}
+
+function QueueListRow({ row, selected, isAnnouncing, confirmed, onSelect }: QueueListRowProps) {
+  const status = confirmed ? 'delivered' : row.status;
+  const tone = STATUS_TONES[status];
+
+  return (
+    <div
+      onClick={onSelect}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 13,
+        padding: '13px 16px 13px 18px',
+        borderRadius: 14,
+        cursor: 'pointer',
+        background: '#fff',
+        border: `1px solid ${selected ? 'var(--brand)' : 'var(--border)'}`,
+        boxShadow: selected ? '0 8px 20px rgba(251,106,69,.16)' : 'var(--shadow-xs)',
+        opacity: confirmed ? 0.6 : 1,
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: 'var(--ink-900)',
+            letterSpacing: '-.01em',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {row.studentFullName}
+        </span>
+        <span style={{ fontSize: 13, color: 'var(--ink-300)', fontWeight: 500 }}>
+          {row.gradeOrGroup ?? 'Sin grupo'}
+        </span>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 5,
+          flexShrink: 0,
+        }}
+      >
+        {isAnnouncing ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              fontWeight: 800,
+              color: 'var(--status-arrived-fg)',
+            }}
+          >
+            <Waveform size={12} color="var(--status-arrived)" />
+            Voceando
+          </span>
+        ) : (
+          <Badge tone={tone}>
+            {confirmed ? STATUS_LABELS.delivered : STATUS_LABELS[row.status]}
+          </Badge>
+        )}
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: 'var(--ink-600)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {etaLabel(row)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel derecho — código de entrega + confirmación                    */
+/* ------------------------------------------------------------------ */
+
+interface DeliveryCodeFormProps {
   row: QueueRow;
   busy: boolean;
-  confirmed: boolean;
   errorMessage?: string;
   errorCode?: string;
   onDeliver: (deliveryCode: string) => void;
 }
 
-function QueueRowCard({
+/**
+ * Own component, remounted by `key={row.pickupRequestId}` from the caller: a
+ * plain `useState` here would carry a half-typed code over from the previous
+ * row when the operator switches selection, same class of bug as a route
+ * param that changes without remounting the screen.
+ */
+function DeliveryCodeForm({
   row,
   busy,
-  confirmed,
   errorMessage,
   errorCode,
   onDeliver,
-}: QueueRowCardProps) {
+}: DeliveryCodeFormProps) {
   const fieldId = useId();
   const [typedCode, setTypedCode] = useState('');
-
-  // Confirming is only offered in `arrived`: the state machine admits no other
-  // source for `delivered`, and the API would answer 409 (feature 021).
-  const canDeliver = row.status === 'arrived';
   const ready = typedCode.length === DELIVERY_CODE_LENGTH;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -190,154 +508,82 @@ function QueueRowCard({
   }
 
   return (
-    <Card>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <label htmlFor={fieldId} style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}>
+          Código del tutor
+        </label>
+        <input
+          id={fieldId}
+          value={typedCode}
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="0000"
+          aria-label={`Código de entrega de ${row.studentFullName}`}
+          onChange={(event) =>
+            setTypedCode(event.target.value.replace(/\D/g, '').slice(0, DELIVERY_CODE_LENGTH))
+          }
           style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-            flexWrap: 'wrap',
+            width: 110,
+            height: 48,
+            border: '1px solid var(--border-strong)',
+            borderRadius: 12,
+            padding: '0 14px',
+            outline: 'none',
+            background: 'var(--surface)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 20,
+            letterSpacing: '.14em',
+            color: 'var(--ink-900)',
           }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)' }}>
-                {row.studentFullName}
-              </span>
-              <Badge tone={STATUS_TONES[row.status]}>{STATUS_LABELS[row.status]}</Badge>
-            </div>
-            <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>
-              {row.gradeOrGroup ?? 'Sin grupo'} · {vehicleLabel(row)}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-            <span
-              style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}
-            >
-              <span style={EYEBROW_STYLE}>ETA</span>
-              <span
-                style={{
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1,
-                }}
-              >
-                {etaLabel(row.etaSeconds)}
-              </span>
-              {arrivalClock(row.estimatedArrivalAt) && (
-                <span style={{ fontSize: 12, color: 'var(--ink-300)' }}>
-                  Llega {arrivalClock(row.estimatedArrivalAt)}
-                </span>
-              )}
-            </span>
-
-            {/* El código se despliega para que el operador lo compare con el
-                que el tutor muestra en su app (ADR-024 punto 11); la
-                verificación real la hace el servidor (ADR-024 punto 4). */}
-            <span
-              style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}
-            >
-              <span style={EYEBROW_STYLE}>Código</span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 700,
-                  letterSpacing: '.08em',
-                  color: 'var(--ink-900)',
-                  lineHeight: 1,
-                }}
-              >
-                {row.deliveryCode}
-              </span>
-            </span>
-          </div>
-        </div>
-
-        <div
+        />
+        <button
+          type="submit"
+          disabled={!ready || busy}
           style={{
+            flex: 1,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-            flexWrap: 'wrap',
-            borderTop: '1px solid var(--border-hairline)',
-            paddingTop: 14,
+            justifyContent: 'center',
+            gap: 11,
+            height: 60,
+            borderRadius: 16,
+            border: 'none',
+            background: 'var(--status-delivered)',
+            color: '#fff',
+            fontSize: 18,
+            fontWeight: 800,
+            cursor: !ready || busy ? 'not-allowed' : 'pointer',
+            opacity: !ready || busy ? 0.5 : 1,
+            boxShadow: '0 8px 18px rgba(22,163,74,.28)',
+            fontFamily: 'var(--font-sans)',
           }}
         >
-          {canDeliver ? (
-            <form
-              onSubmit={handleSubmit}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
-            >
-              <label
-                htmlFor={fieldId}
-                style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}
-              >
-                Código del tutor
-              </label>
-              <input
-                id={fieldId}
-                value={typedCode}
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="0000"
-                aria-label={`Código de entrega de ${row.studentFullName}`}
-                onChange={(event) =>
-                  setTypedCode(event.target.value.replace(/\D/g, '').slice(0, DELIVERY_CODE_LENGTH))
-                }
-                style={{
-                  width: 96,
-                  height: 42,
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: 10,
-                  padding: '0 12px',
-                  outline: 'none',
-                  background: 'var(--surface)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 18,
-                  letterSpacing: '.14em',
-                  color: 'var(--ink-900)',
-                }}
-              />
-              {/* `subtle` y no `primary`: el coral lleno se reserva a un solo
-                  elemento dominante por pantalla (.claude/rules/
-                  design-system.md), y aquí la acción se repite en cada fila en
-                  puerta — mismo criterio que las acciones de fila de la
-                  pantalla de puntos de entrega. */}
-              <Button variant="subtle" size="md" type="submit" disabled={!ready || busy}>
-                {busy ? 'Confirmando…' : 'Confirmar entrega'}
-              </Button>
-            </form>
-          ) : (
-            <span style={META_VALUE_STYLE}>
-              La entrega se confirma cuando el tutor marque que ya llegó.
-            </span>
-          )}
+          {busy ? 'Confirmando…' : 'Confirmar entrega'}
+        </button>
+      </form>
+      {errorMessage && errorCode && <Alert message={errorMessage} code={errorCode} />}
+    </div>
+  );
+}
 
-          {/* Visible pero deshabilitado, sin handler ni llamada a la API: no
-              existe entidad que respalde una incidencia (ADR-034). */}
-          <span title="Estará disponible en una versión futura.">
-            <Button variant="outline" size="sm" disabled>
-              Reportar incidencia (próximamente)
-            </Button>
-          </span>
-        </div>
+/* ------------------------------------------------------------------ */
+/* Estados de sección — reutilizados por la cola y el detalle          */
+/* ------------------------------------------------------------------ */
 
-        {confirmed && (
-          <Alert
-            tone="success"
-            message="Entrega confirmada. La fila sale de la cola en cuanto llegue la actualización en vivo."
-          />
-        )}
-        {errorMessage && errorCode && <Alert message={errorMessage} code={errorCode} />}
-      </div>
-    </Card>
+function SectionMessage({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -346,7 +592,9 @@ function QueueRowCard({
 /* ------------------------------------------------------------------ */
 
 /**
- * Gate console of one delivery point (feature 021).
+ * Gate console of one delivery point (feature 021), two-panel kiosk layout
+ * (ADR-073 point 5). Stays outside `InstitutionShell` on purpose (App.tsx) —
+ * this is a full-viewport operational screen, not a page in the admin shell.
  *
  * The point is chosen first and the queue follows: the console operates one
  * gate at a time (`docs/design-brief.md`), and both the REST snapshot and the
@@ -356,8 +604,10 @@ export function GateConsole() {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const { current } = useInstitution();
+  const { profile } = useProfile();
   const institutionId = current?.institutionId ?? null;
   const gateSelectId = useId();
+  const clock = useClock();
 
   // Same hook the delivery points screen uses (Capa 3d), not a second call of
   // its own. Only active gates: an inactive point stops being assigned new
@@ -375,275 +625,665 @@ export function GateConsole() {
 
   const queue = useDeliveryPointQueue(selected?.id ?? null);
 
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+
+  // Session-local "entregados" pill: a delivered row leaves `queue.rows` the
+  // instant its delta lands (ADR-050 point 6), so there is nothing left in
+  // `rows` to count — this accumulates confirmations as they happen instead.
+  // Distinct from the Dashboard's server-side "entregados hoy" (ADR-072
+  // amendment): scoped to this gate and this tab, reset when the gate changes.
+  const [deliveredCount, setDeliveredCount] = useState(0);
+  // Dedupe key for the effect below, ref rather than state: it is read and
+  // written only from inside an effect, never during render, so it does not
+  // trip react-hooks/refs the way `gateId` below would if it were a ref.
+  // `pickupRequestId`s are UUIDs — a stale value surviving a gate switch
+  // can never collide with a different gate's id, so it needs no reset.
+  const countedDeliveredIdRef = useRef<string | null>(null);
+
+  // Reset by comparing against the gate the previous render saw, computed
+  // during rendering rather than in an effect (react-hooks/set-state-in-effect
+  // — this is the "adjusting state when a prop changes" case the rule wants
+  // resolved this way, not the "subscribe to an external system" case below).
+  const [gateId, setGateId] = useState<string | null>(selected?.id ?? null);
+  if (gateId !== (selected?.id ?? null)) {
+    setGateId(selected?.id ?? null);
+    setSelectedRowId(null);
+    setDeliveredCount(0);
+  }
+
+  // Genuinely reacting to the WebSocket-driven queue, not a prop of this
+  // component — the legitimate use of an effect the lint rule carves out.
+  useEffect(() => {
+    if (queue.deliveredId && queue.deliveredId !== countedDeliveredIdRef.current) {
+      countedDeliveredIdRef.current = queue.deliveredId;
+      setDeliveredCount((n) => n + 1);
+    }
+  }, [queue.deliveredId]);
+
+  // Opens on the top of the queue once it loads; never fights a manual pick
+  // afterwards, including one that has since left the queue (feature 021 —
+  // the console does not invent a next row to jump to). Computed during
+  // rendering, same reasoning as the reset above: `selectedRowId === null`
+  // only holds once, so this fires exactly once per gate.
+  if (selectedRowId === null && queue.rows.length > 0) {
+    setSelectedRowId(queue.rows[0].pickupRequestId);
+  }
+
+  const selectedRow = queue.rows.find((row) => row.pickupRequestId === selectedRowId) ?? null;
+  const confirmedRowId = queue.deliveredId;
+
+  const arrivedCount = queue.rows.filter((row) => row.status === 'arrived').length;
+  const enRouteCount = queue.rows.filter(
+    (row) => row.status === 'en_route' || row.status === 'arriving',
+  ).length;
+
+  const activeAnnounceId = queue.announcingId ?? queue.lastAnnouncedId;
+  const activeAnnounceRow = activeAnnounceId
+    ? (queue.rows.find((row) => row.pickupRequestId === activeAnnounceId) ?? null)
+    : null;
+
+  const queueBodyLoading = points.status === 'loading';
+  const queueBodyError = points.status === 'error';
+  const noActiveGates = points.status === 'ready' && active.length === 0;
+  const mustPickGate = points.status === 'ready' && active.length > 1 && selected === null;
+
   return (
-    <main
+    <div
       style={{
         minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
+        display: 'flex',
+        flexDirection: 'column',
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-              <span style={EYEBROW_STYLE}>Operación</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Consola de puerta
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
-          </div>
+      <style>{ANNOUNCE_KEYFRAMES}</style>
+      <TopBar
+        institutionName={current?.institutionName ?? 'Institución'}
+        points={points}
+        active={active}
+        selected={selected}
+        gateSelectId={gateSelectId}
+        onChangeGate={setChosenId}
+        arrivedCount={arrivedCount}
+        enRouteCount={enRouteCount}
+        deliveredCount={deliveredCount}
+        clock={clock}
+        connection={selected ? queue.connection : null}
+        displayName={profile?.fullName ?? session?.email ?? ''}
+        onBack={() => void navigate(DASHBOARD_PATH)}
+        onLogout={logout}
+      />
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
-            }}
-          >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
-          </div>
-        </Card>
-
-        {/* Selección del punto de entrega */}
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={EYEBROW_STYLE}>Punto de entrega</span>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
-                La consola trabaja una puerta a la vez. Cualquier miembro del personal puede
-                operarla, sin importar su rol.
-              </span>
-            </div>
-
-            {points.status === 'loading' && <SkeletonRow />}
-
-            {points.status === 'error' && (
-              <ErrorState
-                title="No pudimos cargar los puntos de entrega"
-                message={
-                  points.error ? deliveryPointListErrorMessage(points.error.code) : undefined
-                }
-                code={points.error?.code}
-                onRetry={points.reload}
-              />
-            )}
-
-            {points.status === 'ready' && active.length === 0 && (
-              <EmptyState
-                icon={EMPTY_QUEUE_ICON}
-                title="Sin puntos de entrega activos"
-                description="Esta institución no tiene ninguna puerta activa, así que no hay cola que operar. Un administrador puede crear o reactivar un punto de entrega."
-              />
-            )}
-
-            {points.status === 'ready' && active.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {/* Selector y no `SegmentedTabs`: el nombre de un punto de
-                    entrega es texto libre sin unicidad (specs/entities/
-                    delivery_point.md), así que la pastilla no puede
-                    identificarlo — y una institución grande tiene más puertas
-                    de las que caben en una fila de pastillas. */}
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label
-                    htmlFor={gateSelectId}
-                    style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}
-                  >
-                    Puerta
-                  </label>
-                  <select
-                    id={gateSelectId}
-                    value={selected?.id ?? ''}
-                    onChange={(event) => setChosenId(event.target.value)}
-                    style={{
-                      height: 42,
-                      minWidth: 220,
-                      border: '1px solid var(--border-strong)',
-                      borderRadius: 10,
-                      padding: '0 12px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 15,
-                      color: 'var(--ink-900)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {/* Con más de una puerta no se elige ninguna sola: mostrar
-                        la cola equivocada es peor que pedir un clic. El
-                        placeholder existe para que el `select` no aparente
-                        tener seleccionada la primera opción cuando el estado
-                        dice que no hay ninguna. */}
-                    {selected === null && <option value="">Elige una puerta…</option>}
-                    {active.map((point: DeliveryPoint) => (
-                      <option key={point.id} value={point.id}>
-                        {point.name}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-                {selected && <ConnectionIndicator connection={queue.connection} />}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {points.status === 'ready' && active.length > 1 && selected === null && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_QUEUE_ICON}
-              title="Elige la puerta que vas a operar"
-              description="Esta institución tiene varias puertas activas y la consola trabaja una a la vez. Elige la tuya arriba para ver su cola en vivo."
-            />
-          </Card>
-        )}
-
-        {/* Un cierre 4400/4401/4403/4404 no se reintenta: el handshake fue
-            rechazado, no se cayó la red (delivery-point-queue-ws.md). Con la
-            cola ya en pantalla es un aviso —lo que se ve sigue siendo cierto,
-            solo dejó de moverse—; sin ella es un estado de error, porque el
-            snapshot se pide al abrir el socket y sin socket nunca llega. */}
-        {selected && queue.connectionErrorReason && queue.status === 'ready' && (
+      {selected && queue.connectionErrorReason && queue.status === 'ready' && (
+        <div
+          style={{
+            padding: '10px 28px',
+            background: '#fff',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
           <Alert
             message={`La cola dejó de actualizarse en vivo. ${queueSocketErrorMessage(queue.connectionErrorReason)}`}
             code={queue.connectionErrorReason}
           />
-        )}
+        </div>
+      )}
 
-        {selected && queue.connectionErrorReason && queue.status !== 'ready' && (
-          <Card>
-            <ErrorState
-              title="No pudimos abrir la cola en vivo de esta puerta"
-              message={queueSocketErrorMessage(queue.connectionErrorReason)}
-              code={queue.connectionErrorReason}
-              onRetry={queue.reload}
-            />
-          </Card>
-        )}
-
-        {selected && queue.status === 'loading' && !queue.connectionErrorReason && (
-          <Card padding={0}>
+      {queueBodyLoading && (
+        <SectionMessage>
+          <div style={{ width: '100%', maxWidth: 420 }}>
             <SkeletonRow />
             <SkeletonRow />
             <SkeletonRow />
-          </Card>
-        )}
+          </div>
+        </SectionMessage>
+      )}
 
-        {selected && queue.status === 'error' && !queue.connectionErrorReason && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar la cola de esta puerta"
-              message={queue.error ? queueListErrorMessage(queue.error.code) : undefined}
-              code={queue.error?.code}
-              onRetry={queue.reload}
-            />
-          </Card>
-        )}
+      {queueBodyError && (
+        <SectionMessage>
+          <ErrorState
+            title="No pudimos cargar los puntos de entrega"
+            message={points.error ? deliveryPointListErrorMessage(points.error.code) : undefined}
+            code={points.error?.code}
+            onRetry={points.reload}
+          />
+        </SectionMessage>
+      )}
 
-        {selected && queue.status === 'ready' && queue.rows.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_QUEUE_ICON}
-              title="Sin recogidas pendientes"
-              description={`Ningún tutor va en camino a ${selected.name} en este momento. Las recogidas aparecen aquí en cuanto alguien avisa que va en camino.`}
-            />
-          </Card>
-        )}
+      {noActiveGates && (
+        <SectionMessage>
+          <EmptyState
+            icon={EMPTY_QUEUE_ICON}
+            title="Sin puntos de entrega activos"
+            description="Esta institución no tiene ninguna puerta activa, así que no hay cola que operar. Un administrador puede crear o reactivar un punto de entrega."
+          />
+        </SectionMessage>
+      )}
 
-        {selected &&
-          queue.status === 'ready' &&
-          queue.rows.map((row) => (
-            <QueueRowCard
-              key={row.pickupRequestId}
-              row={row}
-              busy={queue.busyId === row.pickupRequestId}
-              confirmed={queue.deliveredId === row.pickupRequestId}
-              errorMessage={
-                queue.deliverError?.pickupRequestId === row.pickupRequestId
-                  ? deliverErrorMessage(queue.deliverError.error.code)
-                  : undefined
-              }
-              errorCode={
-                queue.deliverError?.pickupRequestId === row.pickupRequestId
-                  ? queue.deliverError.error.code
-                  : undefined
-              }
-              onDeliver={(deliveryCode) => queue.deliver(row.pickupRequestId, deliveryCode)}
-            />
-          ))}
-      </div>
-    </main>
+      {mustPickGate && (
+        <SectionMessage>
+          <EmptyState
+            icon={EMPTY_QUEUE_ICON}
+            title="Elige la puerta que vas a operar"
+            description="Esta institución tiene varias puertas activas y la consola trabaja una a la vez. Elige la tuya arriba para ver su cola en vivo."
+          />
+        </SectionMessage>
+      )}
+
+      {selected && queue.connectionErrorReason && queue.status !== 'ready' && (
+        <SectionMessage>
+          <ErrorState
+            title="No pudimos abrir la cola en vivo de esta puerta"
+            message={queueSocketErrorMessage(queue.connectionErrorReason)}
+            code={queue.connectionErrorReason}
+            onRetry={queue.reload}
+          />
+        </SectionMessage>
+      )}
+
+      {selected && !queue.connectionErrorReason && queue.status === 'error' && (
+        <SectionMessage>
+          <ErrorState
+            title="No pudimos cargar la cola de esta puerta"
+            message={queue.error ? queueListErrorMessage(queue.error.code) : undefined}
+            code={queue.error?.code}
+            onRetry={queue.reload}
+          />
+        </SectionMessage>
+      )}
+
+      {selected &&
+        !queue.connectionErrorReason &&
+        (queue.status === 'loading' || queue.status === 'ready') && (
+          <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+            {/* FILA DE SALIDA */}
+            <div
+              style={{
+                width: 452,
+                flexShrink: 0,
+                background: 'var(--surface-muted)',
+                borderRight: '1px solid var(--border-strong)',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+              }}
+            >
+              <div style={{ flexShrink: 0, padding: '20px 22px 14px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 800,
+                      color: 'var(--ink-900)',
+                      letterSpacing: '-.02em',
+                    }}
+                  >
+                    Fila de salida
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--ink-200)', fontWeight: 600 }}>
+                    {queue.rows.length} en fila
+                  </span>
+                </div>
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'var(--ink-900)',
+                    borderRadius: 13,
+                    padding: '11px 15px',
+                  }}
+                >
+                  {activeAnnounceRow ? (
+                    <>
+                      <Waveform size={17} />
+                      <span
+                        style={{ fontSize: 13, color: 'rgba(255,255,255,.78)', fontWeight: 500 }}
+                      >
+                        Voceando:{' '}
+                        <b style={{ color: '#fff', fontWeight: 800 }}>
+                          {activeAnnounceRow.studentFullName}
+                        </b>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,.3)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', fontWeight: 500 }}
+                      >
+                        Sin voceo activo
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  overflow: 'auto',
+                  padding: '4px 16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 9,
+                }}
+              >
+                {queue.status === 'loading' && (
+                  <>
+                    <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
+                  </>
+                )}
+
+                {queue.status === 'ready' && queue.rows.length === 0 && (
+                  <EmptyState
+                    icon={EMPTY_QUEUE_ICON}
+                    title="Sin recogidas pendientes"
+                    description={`Ningún tutor va en camino a ${selected.name} en este momento.`}
+                  />
+                )}
+
+                {queue.status === 'ready' &&
+                  queue.rows.map((row) => (
+                    <QueueListRow
+                      key={row.pickupRequestId}
+                      row={row}
+                      selected={row.pickupRequestId === selectedRowId}
+                      isAnnouncing={queue.announcingId === row.pickupRequestId}
+                      confirmed={confirmedRowId === row.pickupRequestId}
+                      onSelect={() => setSelectedRowId(row.pickupRequestId)}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            {/* DETALLE */}
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: 0,
+                background: 'var(--surface-sunken)',
+              }}
+            >
+              {!selectedRow ? (
+                <SectionMessage>
+                  <EmptyState
+                    icon={EMPTY_QUEUE_ICON}
+                    title="Selecciona una fila"
+                    description="Elige una recogida de la fila de salida para ver sus datos y operarla."
+                  />
+                </SectionMessage>
+              ) : (
+                <>
+                  <div style={{ flex: 1, overflow: 'auto', padding: '30px 36px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                      <Avatar name={selectedRow.studentFullName} size={78} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 32,
+                            fontWeight: 800,
+                            color: 'var(--ink-900)',
+                            letterSpacing: '-.02em',
+                            lineHeight: 1.05,
+                          }}
+                        >
+                          {selectedRow.studentFullName}
+                        </div>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 7 }}
+                        >
+                          <span style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 600 }}>
+                            {selectedRow.gradeOrGroup ?? 'Sin grupo'}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge
+                        tone={
+                          confirmedRowId === selectedRow.pickupRequestId
+                            ? 'delivered'
+                            : STATUS_TONES[selectedRow.status]
+                        }
+                      >
+                        {confirmedRowId === selectedRow.pickupRequestId
+                          ? STATUS_LABELS.delivered
+                          : STATUS_LABELS[selectedRow.status]}
+                      </Badge>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 14,
+                        fontSize: 15,
+                        color: 'var(--ink-300)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {confirmedRowId === selectedRow.pickupRequestId
+                        ? 'Entrega confirmada — sale de la fila con la próxima actualización en vivo.'
+                        : selectedRow.status === 'arrived'
+                          ? 'En el área de entrega · lista para vocear'
+                          : arrivalClock(selectedRow.estimatedArrivalAt)
+                            ? `Llega en ${etaLabel(selectedRow)} · aprox. ${arrivalClock(selectedRow.estimatedArrivalAt)}`
+                            : `Llega en ${etaLabel(selectedRow)}`}
+                    </div>
+
+                    <div style={{ height: 1, background: 'var(--border)', margin: '24px 0' }} />
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        letterSpacing: '.09em',
+                        textTransform: 'uppercase',
+                        color: 'var(--ink-200)',
+                        marginBottom: 12,
+                      }}
+                    >
+                      Quién recoge
+                    </div>
+                    <div
+                      style={{
+                        background: '#fff',
+                        border: '1px solid var(--border)',
+                        borderRadius: 16,
+                        padding: '20px 22px',
+                        boxShadow: 'var(--shadow-xs)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <Avatar name={selectedRow.guardianFullName} size={54} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--ink-900)' }}>
+                            {selectedRow.guardianFullName}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 14,
+                              color: 'var(--ink-300)',
+                              fontWeight: 500,
+                              marginTop: 1,
+                            }}
+                          >
+                            {relationshipLabel(selectedRow.guardianRelationship)}
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          height: 1,
+                          background: 'var(--border-hairline)',
+                          margin: '16px 0',
+                        }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        <span
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 9,
+                            background: 'var(--surface-muted)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="var(--ink-300)"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M5 13l1.5-4.5A2 2 0 018.4 7h7.2a2 2 0 011.9 1.5L19 13M5 13h14v4H5zM5 17v2M19 17v2" />
+                            <circle cx="7.5" cy="15" r="1" />
+                            <circle cx="16.5" cy="15" r="1" />
+                          </svg>
+                        </span>
+                        {/* No vehicle snapshot at all means the guardian walks up (ADR-014/ADR-025). */}
+                        <span style={{ fontSize: 15, color: 'var(--ink-600)', fontWeight: 600 }}>
+                          {selectedRow.vehicleDescription ?? 'A pie'}
+                        </span>
+                        {selectedRow.vehiclePlate && (
+                          <span
+                            style={{
+                              marginLeft: 'auto',
+                              fontSize: 14,
+                              fontWeight: 700,
+                              color: 'var(--ink-700)',
+                              fontFamily: 'var(--font-mono)',
+                              letterSpacing: '.05em',
+                              background: 'var(--surface-muted)',
+                              border: '1px solid var(--border)',
+                              padding: '5px 11px',
+                              borderRadius: 8,
+                            }}
+                          >
+                            {selectedRow.vehiclePlate}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* El código se despliega para que el operador lo compare con el
+                      que el tutor muestra en su app (ADR-024 punto 11); la
+                      verificación real la hace el servidor (ADR-024 punto 4). */}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        letterSpacing: '.09em',
+                        textTransform: 'uppercase',
+                        color: 'var(--ink-200)',
+                        margin: '22px 0 12px',
+                      }}
+                    >
+                      Código de entrega
+                    </div>
+                    <div
+                      style={{
+                        background: '#fff',
+                        border: '1px solid var(--border)',
+                        borderRadius: 16,
+                        padding: '18px 22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 20,
+                        boxShadow: 'var(--shadow-xs)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 40,
+                          fontWeight: 800,
+                          color: 'var(--ink-900)',
+                          fontFamily: 'var(--font-mono)',
+                          letterSpacing: '.18em',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {selectedRow.deliveryCode}
+                      </span>
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 14,
+                          color: 'var(--ink-300)',
+                          fontWeight: 500,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        El tutor muestra este código en su app. Verifica que coincida antes de
+                        entregar.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* PIE DE ACCIONES */}
+                  <div
+                    style={{
+                      flexShrink: 0,
+                      borderTop: '1px solid var(--border)',
+                      background: '#fff',
+                      padding: '18px 36px 20px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Vocear siempre visible junto al campo de código, no como
+                        paso previo obligatorio (a diferencia del flujo de dos
+                        pasos del kit) — ADR-073 point 5. */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <button
+                          type="button"
+                          disabled={queue.announcingId === selectedRow.pickupRequestId}
+                          onClick={() => queue.announce(selectedRow.pickupRequestId)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 11,
+                            height: 52,
+                            padding: '0 22px',
+                            borderRadius: 16,
+                            border: 'none',
+                            background: 'var(--status-arrived)',
+                            color: '#fff',
+                            fontSize: 16,
+                            fontWeight: 800,
+                            cursor:
+                              queue.announcingId === selectedRow.pickupRequestId
+                                ? 'not-allowed'
+                                : 'pointer',
+                            opacity: queue.announcingId === selectedRow.pickupRequestId ? 0.7 : 1,
+                            boxShadow: '0 8px 18px rgba(14,165,164,.28)',
+                            fontFamily: 'var(--font-sans)',
+                          }}
+                        >
+                          {queue.announcingId === selectedRow.pickupRequestId ? (
+                            <>
+                              <Waveform size={14} color="#fff" />
+                              Voceando…
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 01-5.8-1.6" />
+                              </svg>
+                              Vocear a {firstName(selectedRow.studentFullName)}
+                            </>
+                          )}
+                        </button>
+                        {/* Visible pero deshabilitado, sin handler ni llamada a la API: no
+                          existe entidad que respalde una incidencia (ADR-034). */}
+                        <span
+                          title="Estará disponible en una versión futura."
+                          style={{ marginLeft: 'auto' }}
+                        >
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 7,
+                              fontSize: 14,
+                              fontWeight: 700,
+                              color: 'var(--ink-200)',
+                              cursor: 'not-allowed',
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M10.3 3.8L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.8a2 2 0 00-3.4 0z" />
+                              <path d="M12 9v4M12 17h.01" />
+                            </svg>
+                            Reportar incidencia (próximamente)
+                          </span>
+                        </span>
+                      </div>
+
+                      {queue.announceError?.pickupRequestId === selectedRow.pickupRequestId && (
+                        <Alert
+                          message={announceErrorMessage(queue.announceError.error.code)}
+                          code={queue.announceError.error.code}
+                        />
+                      )}
+                      {queue.lastAnnouncedId === selectedRow.pickupRequestId &&
+                        queue.announcingId !== selectedRow.pickupRequestId && (
+                          <Alert
+                            tone="success"
+                            message="Voceo enviado. Escucha el tablero de la institución."
+                          />
+                        )}
+
+                      {selectedRow.status === 'arrived' ? (
+                        <DeliveryCodeForm
+                          key={selectedRow.pickupRequestId}
+                          row={selectedRow}
+                          busy={queue.busyId === selectedRow.pickupRequestId}
+                          errorMessage={
+                            queue.deliverError?.pickupRequestId === selectedRow.pickupRequestId
+                              ? deliverErrorMessage(queue.deliverError.error.code)
+                              : undefined
+                          }
+                          errorCode={
+                            queue.deliverError?.pickupRequestId === selectedRow.pickupRequestId
+                              ? queue.deliverError.error.code
+                              : undefined
+                          }
+                          onDeliver={(deliveryCode) =>
+                            queue.deliver(selectedRow.pickupRequestId, deliveryCode)
+                          }
+                        />
+                      ) : (
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-300)' }}>
+                          La entrega se confirma cuando el tutor marque que ya llegó.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+    </div>
   );
 }

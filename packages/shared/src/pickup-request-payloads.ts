@@ -26,9 +26,10 @@ export interface PickupRequestRealtimeSnapshot {
    */
   deliveryCode: string;
   /**
-   * Only `buildBoardMonitorPayload` copies these out (ADR-071 pt.2). Carril
-   * is a staff-only view — identifying the guardian and their vehicle would
-   * leak over the wire to a public kiosk if it traveled on `boardTopic`.
+   * `buildBoardMonitorPayload` (ADR-071 pt.2) and `buildQueuePayload`
+   * (ADR-073 amendment) copy these out — both are staff-only views. Never
+   * `buildBoardPayload`: identifying the guardian would leak over the wire to
+   * a public kiosk if it traveled on `boardTopic`.
    */
   guardianFullName: string;
   guardianRelationship: StudentGuardianRelationship;
@@ -90,6 +91,14 @@ export interface PickupRequestQueuePayload {
   deliveryCode: string;
   estimatedArrivalAt: string | null;
   etaSeconds: number | null;
+  /**
+   * Enmienda a ADR-073 (previo a la implementación del frontend): the gate
+   * console's "Quién recoge" panel needs the guardian's identity, not just
+   * their vehicle. Already resolved on the snapshot since ADR-071 — copied
+   * here rather than queried again.
+   */
+  guardianFullName: string;
+  guardianRelationship: StudentGuardianRelationship;
   updatedAt: string;
 }
 
@@ -128,6 +137,8 @@ export function buildQueuePayload(
     deliveryCode: snapshot.deliveryCode,
     estimatedArrivalAt: snapshot.estimatedArrivalAt,
     etaSeconds: snapshot.etaSeconds,
+    guardianFullName: snapshot.guardianFullName,
+    guardianRelationship: snapshot.guardianRelationship,
     updatedAt: snapshot.updatedAt,
   };
 }

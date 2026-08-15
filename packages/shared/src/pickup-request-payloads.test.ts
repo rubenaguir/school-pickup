@@ -105,6 +105,8 @@ describe('buildQueuePayload', () => {
       deliveryCode: '4821',
       estimatedArrivalAt: null,
       etaSeconds: null,
+      guardianFullName: 'Luis Pérez',
+      guardianRelationship: 'father',
       updatedAt: '2026-07-16T08:00:00.000Z',
     });
   });
@@ -119,10 +121,13 @@ describe('buildQueuePayload', () => {
     expect(payload).not.toHaveProperty('arrivalMode');
   });
 
-  it('does not leak the board-monitor-only guardian fields', () => {
+  // Enmienda a ADR-073: unlike the board (a public kiosk), the gate console
+  // is staff-only, same audience as Carril's board-monitor payload — the
+  // guardian's identity is a legitimate second check alongside the code.
+  it('carries the guardian fields (ADR-073 amendment)', () => {
     const payload = buildQueuePayload(snapshot);
-    expect(payload).not.toHaveProperty('guardianFullName');
-    expect(payload).not.toHaveProperty('guardianRelationship');
+    expect(payload.guardianFullName).toBe('Luis Pérez');
+    expect(payload.guardianRelationship).toBe('father');
   });
 });
 

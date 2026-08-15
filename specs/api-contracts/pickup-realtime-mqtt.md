@@ -225,12 +225,21 @@ school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
   "deliveryCode": "string (4 dígitos)",
   "estimatedArrivalAt": "string (timestamptz) | null",
   "etaSeconds": "number | null",
+  "guardianFullName": "string (join: student_guardians → user)",
+  "guardianRelationship": "mother | father | grandparent | driver | other",
   "updatedAt": "string (timestamptz)"
 }
 ```
 
 La consola muestra `vehicleDescription`/`vehiclePlate` (snapshot, ADR-014) para
 reconocer al vehículo en la puerta.
+
+**`guardianFullName`/`guardianRelationship` (enmienda a ADR-073, previa a la
+implementación del frontend)**: el panel "Quién recoge" de la consola de
+puerta los necesita. Ya resueltos en `PickupRequestRealtimeSnapshot` desde
+ADR-071 (para Carril/Dashboard) — `buildQueuePayload` los copia sin ninguna
+consulta nueva. Misma audiencia que el resto de este payload (staff de la
+institución, nunca el tablero público).
 
 **`deliveryCode` sí viaja en este payload, y solo en este** (ADR-051). La
 consola no puede cumplir su función sin él: el staff compara el código que

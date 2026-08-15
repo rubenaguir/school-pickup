@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, readAccessToken, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
-import { mergeQueueDelta, parseQueueDelta, sortQueueRows, type QueueRow } from './queue-rows';
+import {
+  isActiveQueueStatus,
+  mergeQueueDelta,
+  parseQueueDelta,
+  sortQueueRows,
+  type QueueRow,
+} from './queue-rows';
 import { buildQueueSocketUrl, fatalCloseReason, reconnectDelayMs } from './queue-socket';
 
 /**
@@ -35,6 +41,12 @@ export interface DeliverError {
   error: ApiError;
 }
 
+/** Row-level failure of an announce call: the row stays where it was. */
+export interface AnnounceError {
+  pickupRequestId: string;
+  error: ApiError;
+}
+
 export interface DeliveryPointQueueValue {
   status: QueueStatus;
   /** Active pickups of this gate, soonest ETA first. */
@@ -54,6 +66,17 @@ export interface DeliveryPointQueueValue {
   deliverError: DeliverError | null;
   /** Last row confirmed, until its delta takes it out of the queue. */
   deliveredId: string | null;
+  announce: (pickupRequestId: string) => void;
+  /** Id of the row whose announce call is in flight, if any. */
+  announcingId: string | null;
+  announceError: AnnounceError | null;
+  /**
+   * Last row announced — client-only, ephemeral state, no persistence
+   * (ADR-073 point 1: "vocear" writes no `pickup_request` row). Cleared when
+   * a new `announce()` fires on a different row, or when this row leaves
+   * `rows` entirely (delivered/cancelled).
+   */
+  lastAnnouncedId: string | null;
 }
 
 interface ListDeliveryPointQueueResponse {
@@ -97,7 +120,18 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deliverError, setDeliverError] = useState<DeliverError | null>(null);
   const [deliveredId, setDeliveredId] = useState<string | null>(null);
+  const [announcingId, setAnnouncingId] = useState<string | null>(null);
+  const [announceError, setAnnounceError] = useState<AnnounceError | null>(null);
+  const [lastAnnouncedId, setLastAnnouncedId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+
+  // Read inside the socket effect below without making it re-run every time
+  // a `announce()` call resolves — same pattern as `onAnnounceRef` in
+  // `useInstitutionBoard`.
+  const lastAnnouncedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    lastAnnouncedIdRef.current = lastAnnouncedId;
+  }, [lastAnnouncedId]);
 
   // Both tagged with the gate they belong to, so `status` below is derived
   // rather than reset by the effect: switching gates is already 'loading'
@@ -142,6 +176,15 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
         return;
       }
       setRows((current) => sortQueueRows(mergeQueueDelta(current, delta)));
+      // The announced row left the queue (delivered/cancelled) — the "Vocear"
+      // indicator has nothing left to point at (ADR-073 point 1: ephemeral,
+      // client-only state, no timeout).
+      if (
+        delta.pickupRequestId === lastAnnouncedIdRef.current &&
+        !isActiveQueueStatus(delta.status)
+      ) {
+        setLastAnnouncedId(null);
+      }
     }
 
     function loadSnapshot(id: string) {
@@ -159,6 +202,14 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
           // replayed (specs/api-contracts/delivery-point-queue-ws.md).
           const merged = pending.reduce(mergeQueueDelta, response.pickupRequests);
           setRows(sortQueueRows(merged));
+          // Covers the reconnect edge case: the announced row left the queue
+          // while the socket was down, so no delta ever carried the news.
+          if (
+            lastAnnouncedIdRef.current !== null &&
+            !merged.some((row) => row.pickupRequestId === lastAnnouncedIdRef.current)
+          ) {
+            setLastAnnouncedId(null);
+          }
           setFailure(null);
           setLoadedId(id);
         })
@@ -273,6 +324,26 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
       });
   }, []);
 
+  const announce = useCallback((pickupRequestId: string) => {
+    setAnnouncingId(pickupRequestId);
+    setAnnounceError(null);
+
+    // No `skipRefreshForCodes`, unlike `deliver()`: that exemption exists
+    // only for `INVALID_DELIVERY_CODE` (ADR-052 point 1), which this endpoint
+    // has no equivalent of. A 401 here is an ordinary expired session.
+    void apiClient
+      .post(`/pickup-requests/${encodeURIComponent(pickupRequestId)}/announce`)
+      .then(() => {
+        setLastAnnouncedId(pickupRequestId);
+      })
+      .catch((caught: unknown) => {
+        setAnnounceError({ pickupRequestId, error: asApiError(caught) });
+      })
+      .finally(() => {
+        setAnnouncingId((current) => (current === pickupRequestId ? null : current));
+      });
+  }, []);
+
   return {
     status,
     rows,
@@ -284,5 +355,9 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
     busyId,
     deliverError,
     deliveredId,
+    announce,
+    announcingId,
+    announceError,
+    lastAnnouncedId,
   };
 }

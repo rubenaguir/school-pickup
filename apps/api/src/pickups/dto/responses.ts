@@ -89,6 +89,9 @@ export interface PickupRequestQueueSummary {
   deliveryCode: string;
   estimatedArrivalAt: string | null;
   etaSeconds: number | null;
+  /** Enmienda a ADR-073 (previa a la implementación del frontend) — "Quién recoge" en la consola de puerta. */
+  guardianFullName: string;
+  guardianRelationship: StudentGuardianRelationship;
   updatedAt: string;
 }
 

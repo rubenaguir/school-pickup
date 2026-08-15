@@ -283,14 +283,21 @@ export class PickupsService {
       },
       // studentFullName and gradeOrGroup are joins, not columns of
       // pickup_requests — the console cannot render a queue row without them.
-      relations: { enrollment: { student: true } },
+      // guardian: true feeds toQueueSummary's guardianFullName (enmienda a
+      // ADR-073), same relation listByInstitutionMonitor already loads for
+      // the analogous Carril field.
+      relations: { enrollment: { student: true }, guardian: true },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
     });
 
+    const summaries = await Promise.all(
+      pickupRequests.map((pickupRequest) => this.toQueueSummary(pickupRequest)),
+    );
+
     return {
-      pickupRequests: pickupRequests.map((pickupRequest) => this.toQueueSummary(pickupRequest)),
+      pickupRequests: summaries,
       limit,
       offset,
       total,
@@ -963,9 +970,16 @@ export class PickupsService {
    * Field for field the same object `buildQueuePayload` publishes over MQTT
    * (ADR-051 pt.3) — keep the two in step: a field added to one and not the
    * other reintroduces exactly the snapshot/delta mismatch this shape exists
-   * to remove.
+   * to remove. `guardianFullName`/`guardianRelationship` follow the enmienda
+   * a ADR-073: same resolution as `toBoardMonitorSummary` — `guardianFullName`
+   * straight off the `guardian: true` relation `listByDeliveryPoint` loads,
+   * only `guardianRelationship` needs the per-row `student_guardians` lookup.
    */
-  private toQueueSummary(pickupRequest: PickupRequest): PickupRequestQueueSummary {
+  private async toQueueSummary(pickupRequest: PickupRequest): Promise<PickupRequestQueueSummary> {
+    const { relationship } = await this.resolveGuardianRelationship(
+      pickupRequest.enrollment.student.id,
+      pickupRequest.guardian.id,
+    );
     return {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
@@ -978,6 +992,8 @@ export class PickupsService {
         ? pickupRequest.estimatedArrivalAt.toISOString()
         : null,
       etaSeconds: pickupRequest.etaSeconds,
+      guardianFullName: pickupRequest.guardian.fullName ?? '',
+      guardianRelationship: relationship,
       updatedAt: pickupRequest.updatedAt.toISOString(),
     };
   }

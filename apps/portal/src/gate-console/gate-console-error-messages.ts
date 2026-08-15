@@ -35,6 +35,20 @@ const DELIVER_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * Codes reachable from POST /pickup-requests/:id/announce (ADR-073 point 2,
+ * specs/api-contracts/pickup-requests.md) — calco de autorización de
+ * `deliver`, mismos códigos salvo `INVALID_DELIVERY_CODE`/`INVALID_PAYLOAD`,
+ * que no aplican a un endpoint sin body.
+ */
+const ANNOUNCE_MESSAGES: Record<string, string> = {
+  INVALID_STATUS_TRANSITION:
+    'Esta recogida ya no está en puerta. Actualiza la cola para ver su estado real.',
+  NOT_INSTITUTION_MEMBER: 'No perteneces a la institución de esta recogida.',
+  RESOURCE_NOT_FOUND: 'Esta recogida ya no existe.',
+  NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
+};
+
+/**
  * Close codes of the WebSocket bridge (4400/4401/4403/4404,
  * specs/api-contracts/delivery-point-queue-ws.md). Translated by the `reason`
  * string, not by the numeric code, for the same reason as everything else here.
@@ -58,6 +72,10 @@ export function queueListErrorMessage(code: string): string {
 
 export function deliverErrorMessage(code: string): string {
   return DELIVER_MESSAGES[code] ?? FALLBACK;
+}
+
+export function announceErrorMessage(code: string): string {
+  return ANNOUNCE_MESSAGES[code] ?? FALLBACK;
 }
 
 export function queueSocketErrorMessage(reason: string): string {

@@ -357,6 +357,11 @@ describe('PickupsService', () => {
         deliveryCode: queuePayload.deliveryCode,
         estimatedArrivalAt: null,
         etaSeconds: null,
+        // Enmienda a ADR-073: resolveGuardianRelationship's own fallback for a
+        // fixture with no matching student_guardians link — untouched by this
+        // amendment, buildQueuePayload just started copying it through too.
+        guardianFullName: '',
+        guardianRelationship: 'other',
         updatedAt: '2026-07-16T08:00:00.000Z',
       });
 
@@ -867,6 +872,12 @@ describe('PickupsService', () => {
           deliveryCode: '4821',
           estimatedArrivalAt: null,
           etaSeconds: null,
+          // Enmienda a ADR-073: buildOwnedPickupRequest's `guardian` and the
+          // default studentGuardiansRepo mock carry neither a fullName nor a
+          // relationship, so resolveGuardianRelationship falls back to its
+          // own defaults — same fallback exercised in the `create` tests.
+          guardianFullName: '',
+          guardianRelationship: 'other',
           updatedAt: '2026-07-16T08:00:00.000Z',
         },
       ]);
@@ -900,6 +911,9 @@ describe('PickupsService', () => {
         vehicleDescription: pickupRequest.vehicleDescription,
         vehiclePlate: pickupRequest.vehiclePlate,
         deliveryCode: pickupRequest.deliveryCode,
+        // Same resolveGuardianRelationship fallback as the previous test.
+        guardianFullName: '',
+        guardianRelationship: 'other',
         updatedAt: pickupRequest.updatedAt.toISOString(),
       });
 
@@ -930,7 +944,7 @@ describe('PickupsService', () => {
           deliveryPoint: { id: DP_ID },
           status: In(['en_route', 'arriving', 'arrived']),
         },
-        relations: { enrollment: { student: true } },
+        relations: { enrollment: { student: true }, guardian: true },
         order: { createdAt: 'DESC' },
         take: 20,
         skip: 0,

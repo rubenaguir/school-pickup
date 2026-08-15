@@ -316,6 +316,8 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
       "deliveryCode": "string (4 dígitos)",
       "estimatedArrivalAt": "string (timestamptz) | null",
       "etaSeconds": "number | null",
+      "guardianFullName": "string (join: student_guardians → user)",
+      "guardianRelationship": "mother | father | grandparent | driver | other",
       "updatedAt": "string (timestamptz)"
     }
   ],
@@ -324,6 +326,13 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   "total": "number"
 }
 ```
+
+`guardianFullName`/`guardianRelationship` (enmienda a ADR-073): mismos dos
+campos y misma justificación que el payload MQTT equivalente
+(`specs/api-contracts/pickup-realtime-mqtt.md`, § "Topic — cola de un punto
+de entrega") — el snapshot REST y los deltas en tiempo real de este modo
+deben mantenerse forma-idénticos (ADR-051 pt.3), o la consola no podría
+fusionarlos sin transformación.
 
 **Response 200 — modo `institutionId`** (`PickupRequestBoardSummary`)
 ```json
