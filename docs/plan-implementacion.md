@@ -376,7 +376,7 @@ ventana de salida) a cambio de un beneficio no demostrado sin al menos una
 institución real usando el sistema. Ver Backlog técnico para la condición
 exacta que reabriría este ítem.
 
-## Fase 9 — Frontend: `apps/board` (kiosko) — reabierta tras auditoría contra el design system real
+## Fase 9 — Frontend: `apps/board` (kiosko) ✅ completo
 
 - [x] Plomería base: sesión (`institution_member` reutilizada, sin
       mecanismo nuevo), `InstitutionContext` (primera membresía, sin
@@ -384,41 +384,49 @@ exacta que reabriría este ítem.
       (ADR-068, commit `c659658`)
 - [x] Lógica de fusión de deltas con voceo/animación solo en cambio real
       de `status` — nunca en un recálculo de ETA (ADR-069), verificada en
-      vivo; **se mantiene sin cambios**, es correcta independientemente del
-      tema visual
+      vivo
 - [x] Voceo automático (TTS, Web Speech API) — solo transiciones a
-      `arriving`/`arrived` (ADR-069 punto 5), confirmado por audio real;
-      **se mantiene sin cambios**
-- [ ] **Reabierto (ADR-071): la pantalla implementada no correspondía al
-      mockup real del design system** — nunca se hizo el handoff desde
-      Claude Design antes de Fase 9; se construyó desde la descripción en
-      prosa de `design-brief.md`. Al importar el export real
-      (`design/casillego-design-system/`) se confirmó que el tablero tiene
-      **3 modos** (Andén/Sereno/Carril, selector de pastillas), no una
-      sola pantalla — y que el orden de filas correcto es prioridad de
-      estado, no ETA puro (ADR-071 punto 5)
-- [ ] Modo **Andén** (público, oscuro, tabla simple) — reconstrucción
-      visual fiel al kit; reutiliza el feed REST/WS ya existente sin
-      cambios de payload
-- [ ] Modo **Sereno** (público, claro, tarjetas, oculta
-      entregado/cancelado) — mismo feed que Andén
-- [ ] Modo **Carril** (staff autenticado, tabla densa con tutor/vehículo/
-      placa/barra de progreso) — requiere: tipo nuevo
-      `PickupRequestBoardMonitorPayload`, topic MQTT nuevo
-      (`board-monitor`), `BoardMonitorGateway` nuevo, snapshot REST con
-      `view=monitor`, `relationshipLabel` promovida de `apps/portal` a
-      `packages/shared` (ADR-071 puntos 2-3)
-- [ ] Barra de progreso de Carril, aproximada con `advance_notice_minutes`
-      de la institución (ADR-071 punto 4, sin migración)
-- [ ] Selector de modo persistido en `localStorage` por dispositivo
-      (ADR-071 punto 6)
+      `arriving`/`arrived` (ADR-069 punto 5), confirmado por audio real
+- [x] **Rediseño con los 3 modos reales del kit (ADR-071)**, tras corregir
+      el handoff desde Claude Design que nunca se hizo antes de la Fase 9
+      original — auditado línea por línea contra
+      `design/casillego-design-system/ui_kits/tablero-institucion/index.html`:
+  - [x] Modo **Andén** (público, oscuro, tabla simple, máx. 8 filas, pie
+        con voceo persistido + contador) — filas con `flex: 1` para llenar
+        la pantalla sin huecos, corregido tras auditoría
+  - [x] Modo **Sereno** (público, claro, tarjetas, máx. 4, oculta
+        entregado/cancelado)
+  - [x] Modo **Carril** (staff autenticado, tabla densa con tutor/
+        parentesco/vehículo/placa/barra de progreso, sin límite de filas,
+        botón de cerrar sesión) — canal propio `/ws/board-monitor` +
+        `view=monitor`, separado del feed público por seguridad (ADR-071
+        punto 2); se conecta y desconecta según el modo activo, verificado
+        por el ciclo de vida del `useEffect`
+  - [x] Selector de modo (pastillas flotantes) persistido en `localStorage`
+        por dispositivo (ADR-071 punto 6)
+  - [x] Orden de filas corregido: prioridad de estado, ETA como desempate
+        (ADR-071 punto 5), no ETA puro
+  - [x] Barra de progreso de Carril aproximada con `advance_notice_minutes`
+        de la institución (ADR-071 punto 4, sin migración)
+  - [x] Subtítulo de ventana de salida vigente (`useDismissalWindow`), sin
+        entidad nueva — reutiliza `dismissal_windows` ya existente
+  - [x] `relationshipLabel` promovida de `apps/portal` a `packages/shared`
+        — Carril es su segundo consumidor real (ADR-071 punto 3)
 - [x] Filtro por punto de entrega en cliente (pastillas por `id`, catálogo
-      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8) — la
-      **lógica** se mantiene, pendiente re-skinnear contra los 3 temas
-      nuevos
-- [ ] Estado vacío/inactivo (`EmptyState` de `packages/ui`) — pendiente
-      adaptar visualmente a cada tema; hoy solo existe en el tema claro
-      heredado de Fase 9 original
+      vía `GET /institutions/:id/delivery-points`, ADR-069 punto 8) —
+      re-skinneado con variante `light`/`dark` para los 3 temas
+- [x] Estado vacío/inactivo (`EmptyState` de `packages/ui` en Sereno/
+      Carril, bloque propio tematizado en Andén — sin tokens oscuros
+      nuevos en `packages/ui`, ADR-071 punto 7)
+
+**Fase 9 completa.** `npm run check` en verde de punta a punta (78 archivos
+de test, 919 tests) — incluyendo `format:check`, tras excluir
+`design/casillego-design-system/` de Prettier (export de solo lectura, no
+código del repo). Auditada dos veces contra el mockup real, con una
+corrección de fidelidad visual real encontrada y aplicada (`AndenBoard`:
+filas sin `flex: 1` dejaban un hueco vacío con pocas recogidas activas —
+el caso más común en producción).
+
 
 **No completa.** El trabajo de Fase 9 original (voceo, fusión de deltas,
 filtro por punto de entrega) era funcionalmente correcto y se conserva —
