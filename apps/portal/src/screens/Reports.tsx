@@ -19,14 +19,7 @@ import {
   type DeliveriesByDayEntry,
   type InstitutionReport,
 } from '../reports/useInstitutionReports';
-import {
-  DELIVERY_POINTS_PATH,
-  DISMISSAL_SCHEDULE_PATH,
-  GATE_CONSOLE_PATH,
-  INSTITUTION_PROFILE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  PERSONNEL_PATH,
-} from '../routes/paths';
+import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -227,155 +220,116 @@ export function Reports() {
   );
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
-            >
-              <span style={EYEBROW_STYLE}>Operación</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Reportes
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-                Consola de puerta
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
-              >
-                Perfil de la institución
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
-            }}
-          >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
-          </div>
-        </Card>
-
-        {!canView && (
-          <Card>
-            <EmptyState
-              icon={LOCKED_ICON}
-              title="Solo para administradores"
-              description={NOT_ADMIN_REASON}
-            />
-          </Card>
-        )}
-
-        {canView && (
-          <Card>
-            <SegmentedTabs
-              options={REPORT_PERIODS.map(reportPeriodLabel)}
-              value={reportPeriodLabel(period)}
-              onChange={(label) => {
-                const next = REPORT_PERIODS.find(
-                  (candidate) => reportPeriodLabel(candidate) === label,
-                );
-                if (next) setPeriod(next);
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={EYEBROW_STYLE}>Operación</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
               }}
-            />
-          </Card>
-        )}
+            >
+              Reportes
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — Consola de puerta stays
+                  here since GateConsole is deliberately outside the shell. */}
+            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
+              Consola de puerta
+            </Button>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
 
-        {canView && status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {current && (
+            <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
+          )}
+        </div>
+      </Card>
 
-        {canView && status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar el reporte"
-              message={error ? institutionReportsErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
+      {!canView && (
+        <Card>
+          <EmptyState
+            icon={LOCKED_ICON}
+            title="Solo para administradores"
+            description={NOT_ADMIN_REASON}
+          />
+        </Card>
+      )}
 
-        {canView && status === 'ready' && report && <ReportSections report={report} />}
-      </div>
-    </main>
+      {canView && (
+        <Card>
+          <SegmentedTabs
+            options={REPORT_PERIODS.map(reportPeriodLabel)}
+            value={reportPeriodLabel(period)}
+            onChange={(label) => {
+              const next = REPORT_PERIODS.find(
+                (candidate) => reportPeriodLabel(candidate) === label,
+              );
+              if (next) setPeriod(next);
+            }}
+          />
+        </Card>
+      )}
+
+      {canView && status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </Card>
+      )}
+
+      {canView && status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar el reporte"
+            message={error ? institutionReportsErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
+          />
+        </Card>
+      )}
+
+      {canView && status === 'ready' && report && <ReportSections report={report} />}
+    </div>
   );
 }

@@ -1,6 +1,13 @@
 export const LOGIN_PATH = '/login';
 
 /**
+ * Dashboard of the Institución role (ADR-072) — real-time KPI cards plus the
+ * live activity table, inside `InstitutionShell`. Where a signed-in
+ * institution member lands now that a real landing screen exists.
+ */
+export const DASHBOARD_PATH = '/dashboard';
+
+/**
  * Enrollment approval inbox — the first real screen of the portal
  * (specs/features/006-aprobacion-enrollment.md). Only a placeholder lives here
  * for now; the route exists so the next slice mounts onto a real path
@@ -73,7 +80,7 @@ export const ADMIN_METRICS_PATH = '/admin/metrics';
 export const REPORTS_PATH = '/reports';
 
 /** Where a signed-in user lands. */
-export const HOME_PATH = PENDING_ENROLLMENTS_PATH;
+export const HOME_PATH = DASHBOARD_PATH;
 
 /**
  * Landing screen of the tutor (parent) view — "Mis hijos", the first of the

@@ -7,6 +7,8 @@ export interface InstitutionMemberListItem {
   role: InstitutionMemberRole;
   fullName: string | null;
   email: string;
+  /** `users.phone`, nullable (ADR-072 pt.4 — backs "Coordinación de salida"). */
+  phone: string | null;
   userStatus: UserStatus;
   createdAt: string;
 }

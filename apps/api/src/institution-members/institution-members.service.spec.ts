@@ -9,6 +9,7 @@ function buildUser(overrides?: Partial<User>): User {
     email: 'existing@example.com',
     passwordHash: 'hash',
     fullName: 'Existing User',
+    phone: null,
     status: 'active',
     ...overrides,
   } as User;
@@ -122,6 +123,7 @@ describe('InstitutionMembersService', () => {
           id: 'user-1',
           fullName: 'Ana',
           email: 'ana@example.com',
+          phone: '55 1290 8845',
           status: 'active',
         }),
       });
@@ -139,6 +141,7 @@ describe('InstitutionMembersService', () => {
         role: 'admin',
         fullName: 'Ana',
         email: 'ana@example.com',
+        phone: '55 1290 8845',
         userStatus: 'active',
       });
     });

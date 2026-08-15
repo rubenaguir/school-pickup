@@ -21,6 +21,8 @@ export interface InstitutionMemberRow {
   /** `null` for an invited user who has not accepted yet (ADR-030). */
   fullName: string | null;
   email: string;
+  /** `users.phone`, nullable (ADR-072 pt.4 — backs "Coordinación de salida"). */
+  phone: string | null;
   userStatus: UserStatus;
   createdAt: string;
 }

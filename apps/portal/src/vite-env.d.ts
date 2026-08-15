@@ -12,6 +12,12 @@ interface ImportMetaEnv {
    * renders an explanatory panel instead of a blank canvas.
    */
   readonly VITE_MAPBOX_TOKEN?: string;
+  /**
+   * URL of `apps/board`, for the Dashboard's "Abrir tablero" button
+   * (ADR-072 point 6). No other screen in the portal resolves a link to
+   * `apps/board`; without this value the button stays disabled.
+   */
+  readonly VITE_BOARD_URL?: string;
 }
 
 interface ImportMeta {

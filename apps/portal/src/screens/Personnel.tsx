@@ -22,14 +22,7 @@ import { usePersonnel, type InvitationDraft } from '../institution-personnel/use
 import type { InstitutionMemberRow } from '../institution-personnel/useInstitutionMembers';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import {
-  DELIVERY_POINTS_PATH,
-  DISMISSAL_SCHEDULE_PATH,
-  GATE_CONSOLE_PATH,
-  INSTITUTION_PROFILE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
+import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -417,246 +410,205 @@ export function Personnel() {
   const canManage = current?.role === 'admin';
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 940,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 940,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={EYEBROW_STYLE}>Configuración</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
             >
-              <span style={EYEBROW_STYLE}>Configuración</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Personal
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-                Consola de puerta
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
-              >
-                Perfil de la institución
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
+              Personal
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — Consola de puerta stays
+                  here since GateConsole is deliberately outside the shell. */}
+            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
+              Consola de puerta
+            </Button>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {current && (
+            <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={EYEBROW_STYLE}>Directorio de la institución</span>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
+              {canManage ? (
+                'Quién puede entrar al portal de esta institución y con qué rol. Dar de baja a alguien le quita el acceso aquí, no borra su cuenta.'
+              ) : (
+                <>
+                  {NOT_ADMIN_REASON}
+                  {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
+                  {current && ', así que las acciones están deshabilitadas.'}
+                </>
+              )}
+            </span>
           </div>
 
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
+              justifyContent: 'flex-end',
             }}
           >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
+            <span title={canManage ? undefined : NOT_ADMIN_REASON}>
+              <Button
+                variant={inviteOpen ? 'outline' : 'primary'}
+                size="md"
+                disabled={!canManage || inviteOpen}
+                onClick={openInvite}
+              >
+                Invitar persona
+              </Button>
+            </span>
           </div>
-        </Card>
+        </div>
+      </Card>
 
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={EYEBROW_STYLE}>Directorio de la institución</span>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
-                {canManage ? (
-                  'Quién puede entrar al portal de esta institución y con qué rol. Dar de baja a alguien le quita el acceso aquí, no borra su cuenta.'
-                ) : (
-                  <>
-                    {NOT_ADMIN_REASON}
-                    {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
-                    {current && ', así que las acciones están deshabilitadas.'}
-                  </>
-                )}
-              </span>
-            </div>
+      {inviteOpen && (
+        <InviteForm
+          submitting={inviting}
+          submitErrorMessage={inviteError ? personnelInviteErrorMessage(inviteError.code) : null}
+          submitErrorCode={inviteError?.code ?? null}
+          onSubmit={invite}
+          onCancel={closeInvite}
+        />
+      )}
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <span title={canManage ? undefined : NOT_ADMIN_REASON}>
-                <Button
-                  variant={inviteOpen ? 'outline' : 'primary'}
-                  size="md"
-                  disabled={!canManage || inviteOpen}
-                  onClick={openInvite}
-                >
-                  Invitar persona
-                </Button>
-              </span>
-            </div>
-          </div>
-        </Card>
-
-        {inviteOpen && (
-          <InviteForm
-            submitting={inviting}
-            submitErrorMessage={inviteError ? personnelInviteErrorMessage(inviteError.code) : null}
-            submitErrorCode={inviteError?.code ?? null}
-            onSubmit={invite}
-            onCancel={closeInvite}
-          />
-        )}
-
-        {/* Los tres caminos del endpoint terminan distinto para la persona
+      {/* Los tres caminos del endpoint terminan distinto para la persona
             invitada, así que el aviso lo dice con esas palabras (ADR-054
             punto 2). */}
-        {invitationResult && (
-          <Alert
-            tone="success"
-            message={inviteOutcomeMessage(invitationResult.outcome, invitationResult.email)}
+      {invitationResult && (
+        <Alert
+          tone="success"
+          message={inviteOutcomeMessage(invitationResult.outcome, invitationResult.email)}
+        />
+      )}
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </Card>
+      )}
+
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar el personal"
+            message={error ? institutionMembersErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
           />
-        )}
+        </Card>
+      )}
 
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
-
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar el personal"
-              message={error ? institutionMembersErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {/* No debería ocurrir —una institución nace con su primer admin
+      {/* No debería ocurrir —una institución nace con su primer admin
             (feature 001) y el último no se puede dar de baja—, pero un listado
             vacío no puede quedar en blanco. */}
-        {status === 'ready' && members.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_LIST_ICON}
-              title="Sin personal registrado"
-              description="Esta institución no tiene a nadie en su directorio. Invita al menos a un administrador para poder operarla."
-            />
-          </Card>
-        )}
+      {status === 'ready' && members.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={EMPTY_LIST_ICON}
+            title="Sin personal registrado"
+            description="Esta institución no tiene a nadie en su directorio. Invita al menos a un administrador para poder operarla."
+          />
+        </Card>
+      )}
 
-        {status === 'ready' && members.length > 0 && (
-          <Card padding={0}>
-            <div style={{ overflowX: 'auto' }}>
-              <div style={{ minWidth: LIST_MIN_WIDTH }}>
-                <div style={{ ...ROW_GRID, padding: '14px 22px 12px' }}>
-                  <span style={EYEBROW_STYLE}>Persona</span>
-                  <span style={EYEBROW_STYLE}>Rol</span>
-                  <span style={EYEBROW_STYLE}>Estado</span>
-                  <span style={EYEBROW_STYLE}>Último acceso</span>
-                  <span />
-                </div>
-
-                {members.map((member, index) => (
-                  <MemberRow
-                    key={member.id}
-                    member={member}
-                    index={index}
-                    self={member.userId === session?.sub}
-                    soleAdmin={isSoleAdmin(members, member.id)}
-                    canManage={canManage}
-                    busy={busyId === member.id}
-                    confirming={confirmingId === member.id}
-                    rowErrorMessage={
-                      rowError?.memberId === member.id
-                        ? personnelMemberErrorMessage(rowError.error.code)
-                        : undefined
-                    }
-                    rowErrorCode={
-                      rowError?.memberId === member.id ? rowError.error.code : undefined
-                    }
-                    onChangeRole={(role) => {
-                      setConfirmingId(null);
-                      changeRole(member.id, role);
-                    }}
-                    onAskRemove={() => setConfirmingId(member.id)}
-                    onCancelRemove={() => setConfirmingId(null)}
-                    onRemove={() => {
-                      setConfirmingId(null);
-                      remove(member.id);
-                    }}
-                  />
-                ))}
+      {status === 'ready' && members.length > 0 && (
+        <Card padding={0}>
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: LIST_MIN_WIDTH }}>
+              <div style={{ ...ROW_GRID, padding: '14px 22px 12px' }}>
+                <span style={EYEBROW_STYLE}>Persona</span>
+                <span style={EYEBROW_STYLE}>Rol</span>
+                <span style={EYEBROW_STYLE}>Estado</span>
+                <span style={EYEBROW_STYLE}>Último acceso</span>
+                <span />
               </div>
+
+              {members.map((member, index) => (
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  index={index}
+                  self={member.userId === session?.sub}
+                  soleAdmin={isSoleAdmin(members, member.id)}
+                  canManage={canManage}
+                  busy={busyId === member.id}
+                  confirming={confirmingId === member.id}
+                  rowErrorMessage={
+                    rowError?.memberId === member.id
+                      ? personnelMemberErrorMessage(rowError.error.code)
+                      : undefined
+                  }
+                  rowErrorCode={rowError?.memberId === member.id ? rowError.error.code : undefined}
+                  onChangeRole={(role) => {
+                    setConfirmingId(null);
+                    changeRole(member.id, role);
+                  }}
+                  onAskRemove={() => setConfirmingId(member.id)}
+                  onCancelRemove={() => setConfirmingId(null)}
+                  onRemove={() => {
+                    setConfirmingId(null);
+                    remove(member.id);
+                  }}
+                />
+              ))}
             </div>
-          </Card>
-        )}
-      </div>
-    </main>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }

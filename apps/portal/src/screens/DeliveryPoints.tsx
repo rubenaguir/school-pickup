@@ -33,14 +33,7 @@ import {
 } from '../institution-personnel/useInstitutionMembers';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import {
-  DISMISSAL_SCHEDULE_PATH,
-  GATE_CONSOLE_PATH,
-  INSTITUTION_PROFILE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  PERSONNEL_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
+import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -706,249 +699,212 @@ export function DeliveryPoints() {
   }
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          {/* Con el quinto destino ("Horarios de salida") el bloque de
+      <Card>
+        {/* Con el quinto destino ("Horarios de salida") el bloque de
               navegación ya no cabe junto al título en 820px: el encabezado
               envuelve y baja entero en vez de encimarse sobre el h1. */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={EYEBROW_STYLE}>Configuración</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
             >
-              <span style={EYEBROW_STYLE}>Configuración</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Puntos de entrega
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-                Consola de puerta
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
-              >
-                Perfil de la institución
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
+              Puntos de entrega
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — Consola de puerta stays
+                  here since GateConsole is deliberately outside the shell. */}
+            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
+              Consola de puerta
+            </Button>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {current && (
+            <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={EYEBROW_STYLE}>Accesos de la institución</span>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
+              {canManage ? (
+                'Define por dónde sale cada grupo. Las recogidas se asignan solas al punto cuyo grupo coincide con el del alumno; el tutor no lo elige.'
+              ) : (
+                <>
+                  {NOT_ADMIN_REASON}
+                  {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
+                  {current && ', así que las acciones están deshabilitadas.'}
+                </>
+              )}
+            </span>
           </div>
 
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
+              justifyContent: 'space-between',
+              gap: 16,
               flexWrap: 'wrap',
-              marginTop: 16,
             }}
           >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={EYEBROW_STYLE}>Accesos de la institución</span>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
-                {canManage ? (
-                  'Define por dónde sale cada grupo. Las recogidas se asignan solas al punto cuyo grupo coincide con el del alumno; el tutor no lo elige.'
-                ) : (
-                  <>
-                    {NOT_ADMIN_REASON}
-                    {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
-                    {current && ', así que las acciones están deshabilitadas.'}
-                  </>
-                )}
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 16,
-                flexWrap: 'wrap',
-              }}
-            >
-              {/* Filtro en cliente sobre la lista completa: un punto recién
+            {/* Filtro en cliente sobre la lista completa: un punto recién
                   desactivado tiene que seguir a la vista, no desaparecer
                   (ADR-049 punto 1). */}
-              <SegmentedTabs options={FILTERS} value={filter} onChange={setFilter} />
-              <span title={canManage ? undefined : NOT_ADMIN_REASON}>
-                <Button
-                  variant={editor ? 'outline' : 'primary'}
-                  size="md"
-                  disabled={!canManage || editor !== null}
-                  onClick={openCreate}
-                >
-                  Nuevo punto de entrega
-                </Button>
-              </span>
-            </div>
+            <SegmentedTabs options={FILTERS} value={filter} onChange={setFilter} />
+            <span title={canManage ? undefined : NOT_ADMIN_REASON}>
+              <Button
+                variant={editor ? 'outline' : 'primary'}
+                size="md"
+                disabled={!canManage || editor !== null}
+                onClick={openCreate}
+              >
+                Nuevo punto de entrega
+              </Button>
+            </span>
           </div>
+        </div>
+      </Card>
+
+      {editor && (
+        <DeliveryPointForm
+          // Reseeds the form from the row it edits — one form open at a time.
+          key={editor.target === 'new' ? 'new' : editor.deliveryPoint.id}
+          deliveryPoint={editor.target === 'new' ? null : editor.deliveryPoint}
+          members={members.members}
+          membersLoading={members.status === 'loading'}
+          membersErrorMessage={
+            members.error ? institutionMembersErrorMessage(members.error.code) : null
+          }
+          membersErrorCode={members.error?.code ?? null}
+          onRetryMembers={members.reload}
+          submitting={submitting}
+          submitErrorMessage={submitError ? deliveryPointSaveErrorMessage(submitError.code) : null}
+          submitErrorCode={submitError?.code ?? null}
+          onSubmit={submit}
+          onCancel={closeEditor}
+        />
+      )}
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </Card>
+      )}
 
-        {editor && (
-          <DeliveryPointForm
-            // Reseeds the form from the row it edits — one form open at a time.
-            key={editor.target === 'new' ? 'new' : editor.deliveryPoint.id}
-            deliveryPoint={editor.target === 'new' ? null : editor.deliveryPoint}
-            members={members.members}
-            membersLoading={members.status === 'loading'}
-            membersErrorMessage={
-              members.error ? institutionMembersErrorMessage(members.error.code) : null
-            }
-            membersErrorCode={members.error?.code ?? null}
-            onRetryMembers={members.reload}
-            submitting={submitting}
-            submitErrorMessage={
-              submitError ? deliveryPointSaveErrorMessage(submitError.code) : null
-            }
-            submitErrorCode={submitError?.code ?? null}
-            onSubmit={submit}
-            onCancel={closeEditor}
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar los puntos de entrega"
+            message={error ? deliveryPointListErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
           />
-        )}
+        </Card>
+      )}
 
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
-
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar los puntos de entrega"
-              message={error ? deliveryPointListErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {/* Cero puntos es un estado válido, no un error: la institución opera
+      {/* Cero puntos es un estado válido, no un error: la institución opera
             con delivery_point_id = null (ADR-012, feature 009). */}
-        {status === 'ready' && deliveryPoints.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_LIST_ICON}
-              title="Sin puntos de entrega"
-              description="Tu institución todavía no tiene accesos configurados. Mientras no haya ninguno, las recogidas se registran sin punto de entrega asignado."
-            />
-          </Card>
-        )}
+      {status === 'ready' && deliveryPoints.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={EMPTY_LIST_ICON}
+            title="Sin puntos de entrega"
+            description="Tu institución todavía no tiene accesos configurados. Mientras no haya ninguno, las recogidas se registran sin punto de entrega asignado."
+          />
+        </Card>
+      )}
 
-        {status === 'ready' && deliveryPoints.length > 0 && visible.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_LIST_ICON}
-              title={filter === ACTIVE_FILTER ? 'Sin puntos activos' : 'Sin puntos inactivos'}
-              description={
-                filter === ACTIVE_FILTER
-                  ? `Los ${inactiveCount} puntos de esta institución están inactivos.`
-                  : 'Todos los puntos de esta institución están activos.'
-              }
-            />
-          </Card>
-        )}
+      {status === 'ready' && deliveryPoints.length > 0 && visible.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={EMPTY_LIST_ICON}
+            title={filter === ACTIVE_FILTER ? 'Sin puntos activos' : 'Sin puntos inactivos'}
+            description={
+              filter === ACTIVE_FILTER
+                ? `Los ${inactiveCount} puntos de esta institución están inactivos.`
+                : 'Todos los puntos de esta institución están activos.'
+            }
+          />
+        </Card>
+      )}
 
-        {status === 'ready' &&
-          visible.map((deliveryPoint) => (
-            <DeliveryPointRow
-              key={deliveryPoint.id}
-              deliveryPoint={deliveryPoint}
-              operatorName={operatorName(deliveryPoint)}
-              canManage={canManage}
-              busy={busyId === deliveryPoint.id}
-              confirming={confirmingId === deliveryPoint.id}
-              rowErrorMessage={
-                rowError?.deliveryPointId === deliveryPoint.id
-                  ? deliveryPointSaveErrorMessage(rowError.error.code)
-                  : undefined
-              }
-              rowErrorCode={
-                rowError?.deliveryPointId === deliveryPoint.id ? rowError.error.code : undefined
-              }
-              onEdit={() => {
-                setConfirmingId(null);
-                openEdit(deliveryPoint);
-              }}
-              onAskDeactivate={() => setConfirmingId(deliveryPoint.id)}
-              onCancelDeactivate={() => setConfirmingId(null)}
-              onChangeStatus={(next) => {
-                setConfirmingId(null);
-                changeStatus(deliveryPoint.id, next);
-              }}
-            />
-          ))}
-      </div>
-    </main>
+      {status === 'ready' &&
+        visible.map((deliveryPoint) => (
+          <DeliveryPointRow
+            key={deliveryPoint.id}
+            deliveryPoint={deliveryPoint}
+            operatorName={operatorName(deliveryPoint)}
+            canManage={canManage}
+            busy={busyId === deliveryPoint.id}
+            confirming={confirmingId === deliveryPoint.id}
+            rowErrorMessage={
+              rowError?.deliveryPointId === deliveryPoint.id
+                ? deliveryPointSaveErrorMessage(rowError.error.code)
+                : undefined
+            }
+            rowErrorCode={
+              rowError?.deliveryPointId === deliveryPoint.id ? rowError.error.code : undefined
+            }
+            onEdit={() => {
+              setConfirmingId(null);
+              openEdit(deliveryPoint);
+            }}
+            onAskDeactivate={() => setConfirmingId(deliveryPoint.id)}
+            onCancelDeactivate={() => setConfirmingId(null)}
+            onChangeStatus={(next) => {
+              setConfirmingId(null);
+              changeStatus(deliveryPoint.id, next);
+            }}
+          />
+        ))}
+    </div>
   );
 }

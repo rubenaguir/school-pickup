@@ -67,6 +67,7 @@ export class InstitutionMembersService {
         role: member.role,
         fullName: member.user.fullName,
         email: member.user.email,
+        phone: member.user.phone,
         userStatus: member.user.status,
         createdAt: member.createdAt.toISOString(),
       })),

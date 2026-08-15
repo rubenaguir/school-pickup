@@ -44,14 +44,7 @@ import {
 } from '../dismissal-schedule/useDismissalExceptions';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import {
-  DELIVERY_POINTS_PATH,
-  GATE_CONSOLE_PATH,
-  INSTITUTION_PROFILE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  PERSONNEL_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
+import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -894,337 +887,294 @@ export function DismissalSchedule() {
   const anyEditorOpen = windows.editor !== null || exceptions.editor !== null;
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          {/* Cinco destinos no caben junto al título en 820px: el encabezado
+      <Card>
+        {/* Cinco destinos no caben junto al título en 820px: el encabezado
               envuelve y el bloque de navegación baja entero a la línea de
               abajo en vez de encimarse sobre el h1. */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={EYEBROW_STYLE}>Configuración</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
             >
-              <span style={EYEBROW_STYLE}>Configuración</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Horarios de salida
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-                Consola de puerta
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
-              >
-                Perfil de la institución
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
+              Horarios de salida
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+            </span>
           </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
-            }}
-          >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — Consola de puerta stays
+                  here since GateConsole is deliberately outside the shell. */}
+            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
+              Consola de puerta
+            </Button>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
           </div>
-        </Card>
+        </div>
 
-        {/* ---------------- Sección 1 — Horarios recurrentes ---------------- */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {current && (
+            <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
+          )}
+        </div>
+      </Card>
 
-        <SectionHeader
-          eyebrow="Horarios recurrentes"
-          description={
-            canManage ? (
-              'La regla de fondo: a qué hora sale cada nivel, cada semana. Pausar apaga un horario sin borrarlo.'
-            ) : (
-              <>
-                {NOT_ADMIN_WINDOWS}
-                {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
-                {current && ', así que las acciones están deshabilitadas.'}
-              </>
-            )
-          }
-          filters={
-            /* Filtro en cliente sobre la lista completa: un horario recién
+      {/* ---------------- Sección 1 — Horarios recurrentes ---------------- */}
+
+      <SectionHeader
+        eyebrow="Horarios recurrentes"
+        description={
+          canManage ? (
+            'La regla de fondo: a qué hora sale cada nivel, cada semana. Pausar apaga un horario sin borrarlo.'
+          ) : (
+            <>
+              {NOT_ADMIN_WINDOWS}
+              {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
+              {current && ', así que las acciones están deshabilitadas.'}
+            </>
+          )
+        }
+        filters={
+          /* Filtro en cliente sobre la lista completa: un horario recién
                pausado tiene que seguir a la vista, no desaparecer (ADR-049
                punto 1, mismo criterio). */
-            <SegmentedTabs
-              options={WINDOW_FILTERS}
-              value={windowFilter}
-              onChange={setWindowFilter}
-            />
+          <SegmentedTabs options={WINDOW_FILTERS} value={windowFilter} onChange={setWindowFilter} />
+        }
+        actionLabel="Nuevo horario"
+        actionDisabled={!canManage || windows.editor !== null}
+        actionPrimary={!anyEditorOpen}
+        actionReason={canManage ? undefined : NOT_ADMIN_WINDOWS}
+        onAction={windows.openCreate}
+      />
+
+      {windows.editor && (
+        <DismissalWindowForm
+          // Reseeds the form from the row it edits — one window form open at
+          // a time.
+          key={windows.editor.target === 'new' ? 'new' : windows.editor.dismissalWindow.id}
+          dismissalWindow={windows.editor.target === 'new' ? null : windows.editor.dismissalWindow}
+          submitting={windows.submitting}
+          submitErrorMessage={
+            windows.submitError ? dismissalWindowSaveErrorMessage(windows.submitError.code) : null
           }
-          actionLabel="Nuevo horario"
-          actionDisabled={!canManage || windows.editor !== null}
-          actionPrimary={!anyEditorOpen}
-          actionReason={canManage ? undefined : NOT_ADMIN_WINDOWS}
-          onAction={windows.openCreate}
+          submitErrorCode={windows.submitError?.code ?? null}
+          onSubmit={windows.submit}
+          onCancel={windows.closeEditor}
         />
+      )}
 
-        {windows.editor && (
-          <DismissalWindowForm
-            // Reseeds the form from the row it edits — one window form open at
-            // a time.
-            key={windows.editor.target === 'new' ? 'new' : windows.editor.dismissalWindow.id}
-            dismissalWindow={
-              windows.editor.target === 'new' ? null : windows.editor.dismissalWindow
+      {windows.status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+        </Card>
+      )}
+
+      {windows.status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar los horarios recurrentes"
+            message={
+              windows.error ? dismissalScheduleListErrorMessage(windows.error.code) : undefined
             }
-            submitting={windows.submitting}
-            submitErrorMessage={
-              windows.submitError ? dismissalWindowSaveErrorMessage(windows.submitError.code) : null
-            }
-            submitErrorCode={windows.submitError?.code ?? null}
-            onSubmit={windows.submit}
-            onCancel={windows.closeEditor}
+            code={windows.error?.code}
+            onRetry={windows.reload}
           />
-        )}
+        </Card>
+      )}
 
-        {windows.status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
+      {/* Vacío por sección, independiente del de días especiales. */}
+      {windows.status === 'ready' && windows.dismissalWindows.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={CLOCK_ICON}
+            title="Sin horarios recurrentes"
+            description="Tu institución todavía no tiene ventanas de salida configuradas. Sin ellas no se calculan los recordatorios de anticipación."
+          />
+        </Card>
+      )}
 
-        {windows.status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar los horarios recurrentes"
-              message={
-                windows.error ? dismissalScheduleListErrorMessage(windows.error.code) : undefined
-              }
-              code={windows.error?.code}
-              onRetry={windows.reload}
-            />
-          </Card>
-        )}
-
-        {/* Vacío por sección, independiente del de días especiales. */}
-        {windows.status === 'ready' && windows.dismissalWindows.length === 0 && (
+      {windows.status === 'ready' &&
+        windows.dismissalWindows.length > 0 &&
+        visibleWindows.length === 0 && (
           <Card>
             <EmptyState
               icon={CLOCK_ICON}
-              title="Sin horarios recurrentes"
-              description="Tu institución todavía no tiene ventanas de salida configuradas. Sin ellas no se calculan los recordatorios de anticipación."
+              title={
+                windowFilter === ACTIVE_FILTER ? 'Sin horarios activos' : 'Sin horarios pausados'
+              }
+              description={
+                windowFilter === ACTIVE_FILTER
+                  ? `Los ${pausedCount} horarios de esta institución están pausados.`
+                  : 'Todos los horarios de esta institución están activos.'
+              }
             />
           </Card>
         )}
 
-        {windows.status === 'ready' &&
-          windows.dismissalWindows.length > 0 &&
-          visibleWindows.length === 0 && (
-            <Card>
-              <EmptyState
-                icon={CLOCK_ICON}
-                title={
-                  windowFilter === ACTIVE_FILTER ? 'Sin horarios activos' : 'Sin horarios pausados'
-                }
-                description={
-                  windowFilter === ACTIVE_FILTER
-                    ? `Los ${pausedCount} horarios de esta institución están pausados.`
-                    : 'Todos los horarios de esta institución están activos.'
-                }
-              />
-            </Card>
-          )}
-
-        {windows.status === 'ready' &&
-          visibleWindows.map((dismissalWindow) => (
-            <DismissalWindowRow
-              key={dismissalWindow.id}
-              dismissalWindow={dismissalWindow}
-              canManage={canManage}
-              busy={windows.busyId === dismissalWindow.id}
-              rowErrorMessage={
-                windows.rowError?.dismissalWindowId === dismissalWindow.id
-                  ? dismissalWindowSaveErrorMessage(windows.rowError.error.code)
-                  : undefined
-              }
-              rowErrorCode={
-                windows.rowError?.dismissalWindowId === dismissalWindow.id
-                  ? windows.rowError.error.code
-                  : undefined
-              }
-              onEdit={() => windows.openEdit(dismissalWindow)}
-              onChangeStatus={(next) => windows.changeStatus(dismissalWindow.id, next)}
-            />
-          ))}
-
-        {/* ---------------- Sección 2 — Días especiales ---------------- */}
-
-        <SectionHeader
-          eyebrow="Días especiales"
-          description={
-            canManage ? (
-              <>
-                Fechas puntuales que sobreescriben el horario recurrente. Un día especial sin nivel
-                aplica a {ALL_LEVELS_LABEL.toLowerCase()} y ocupa la fecha entera.
-              </>
-            ) : (
-              <>
-                {NOT_ADMIN_EXCEPTIONS}
-                {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
-                {current && ', así que las acciones están deshabilitadas.'}
-              </>
-            )
-          }
-          actionLabel="Nuevo día especial"
-          actionDisabled={!canManage || exceptions.editor !== null}
-          actionPrimary={!anyEditorOpen && windows.dismissalWindows.length === 0}
-          actionReason={canManage ? undefined : NOT_ADMIN_EXCEPTIONS}
-          onAction={exceptions.openCreate}
-        />
-
-        {exceptions.editor && (
-          <DismissalExceptionForm
-            key={
-              exceptions.editor.target === 'new' ? 'new' : exceptions.editor.dismissalException.id
+      {windows.status === 'ready' &&
+        visibleWindows.map((dismissalWindow) => (
+          <DismissalWindowRow
+            key={dismissalWindow.id}
+            dismissalWindow={dismissalWindow}
+            canManage={canManage}
+            busy={windows.busyId === dismissalWindow.id}
+            rowErrorMessage={
+              windows.rowError?.dismissalWindowId === dismissalWindow.id
+                ? dismissalWindowSaveErrorMessage(windows.rowError.error.code)
+                : undefined
             }
-            dismissalException={
-              exceptions.editor.target === 'new' ? null : exceptions.editor.dismissalException
+            rowErrorCode={
+              windows.rowError?.dismissalWindowId === dismissalWindow.id
+                ? windows.rowError.error.code
+                : undefined
             }
-            submitting={exceptions.submitting}
-            submitErrorMessage={
-              exceptions.submitError
-                ? dismissalExceptionSaveErrorMessage(exceptions.submitError.code)
-                : null
-            }
-            submitErrorCode={exceptions.submitError?.code ?? null}
-            onSubmit={exceptions.submit}
-            onCancel={exceptions.closeEditor}
+            onEdit={() => windows.openEdit(dismissalWindow)}
+            onChangeStatus={(next) => windows.changeStatus(dismissalWindow.id, next)}
           />
-        )}
+        ))}
 
-        {exceptions.status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
+      {/* ---------------- Sección 2 — Días especiales ---------------- */}
 
-        {exceptions.status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar los días especiales"
-              message={
-                exceptions.error
-                  ? dismissalScheduleListErrorMessage(exceptions.error.code)
-                  : undefined
-              }
-              code={exceptions.error?.code}
-              onRetry={exceptions.reload}
-            />
-          </Card>
-        )}
+      <SectionHeader
+        eyebrow="Días especiales"
+        description={
+          canManage ? (
+            <>
+              Fechas puntuales que sobreescriben el horario recurrente. Un día especial sin nivel
+              aplica a {ALL_LEVELS_LABEL.toLowerCase()} y ocupa la fecha entera.
+            </>
+          ) : (
+            <>
+              {NOT_ADMIN_EXCEPTIONS}
+              {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
+              {current && ', así que las acciones están deshabilitadas.'}
+            </>
+          )
+        }
+        actionLabel="Nuevo día especial"
+        actionDisabled={!canManage || exceptions.editor !== null}
+        actionPrimary={!anyEditorOpen && windows.dismissalWindows.length === 0}
+        actionReason={canManage ? undefined : NOT_ADMIN_EXCEPTIONS}
+        onAction={exceptions.openCreate}
+      />
 
-        {exceptions.status === 'ready' && exceptions.dismissalExceptions.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={CALENDAR_ICON}
-              title="Sin días especiales"
-              description="No hay fechas que sobreescriban el horario recurrente. Mientras no las haya, todos los días siguen las ventanas de arriba."
-            />
-          </Card>
-        )}
+      {exceptions.editor && (
+        <DismissalExceptionForm
+          key={exceptions.editor.target === 'new' ? 'new' : exceptions.editor.dismissalException.id}
+          dismissalException={
+            exceptions.editor.target === 'new' ? null : exceptions.editor.dismissalException
+          }
+          submitting={exceptions.submitting}
+          submitErrorMessage={
+            exceptions.submitError
+              ? dismissalExceptionSaveErrorMessage(exceptions.submitError.code)
+              : null
+          }
+          submitErrorCode={exceptions.submitError?.code ?? null}
+          onSubmit={exceptions.submit}
+          onCancel={exceptions.closeEditor}
+        />
+      )}
 
-        {exceptions.status === 'ready' &&
-          exceptions.dismissalExceptions.map((dismissalException) => (
-            <DismissalExceptionRow
-              key={dismissalException.id}
-              dismissalException={dismissalException}
-              canManage={canManage}
-              busy={exceptions.busyId === dismissalException.id}
-              confirming={confirmingDeleteId === dismissalException.id}
-              rowErrorMessage={
-                exceptions.rowError?.dismissalExceptionId === dismissalException.id
-                  ? dismissalExceptionSaveErrorMessage(exceptions.rowError.error.code)
-                  : undefined
-              }
-              rowErrorCode={
-                exceptions.rowError?.dismissalExceptionId === dismissalException.id
-                  ? exceptions.rowError.error.code
-                  : undefined
-              }
-              onEdit={() => {
-                setConfirmingDeleteId(null);
-                exceptions.openEdit(dismissalException);
-              }}
-              onAskDelete={() => setConfirmingDeleteId(dismissalException.id)}
-              onCancelDelete={() => setConfirmingDeleteId(null)}
-              onDelete={() => {
-                setConfirmingDeleteId(null);
-                exceptions.remove(dismissalException.id);
-              }}
-            />
-          ))}
-      </div>
-    </main>
+      {exceptions.status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+        </Card>
+      )}
+
+      {exceptions.status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar los días especiales"
+            message={
+              exceptions.error
+                ? dismissalScheduleListErrorMessage(exceptions.error.code)
+                : undefined
+            }
+            code={exceptions.error?.code}
+            onRetry={exceptions.reload}
+          />
+        </Card>
+      )}
+
+      {exceptions.status === 'ready' && exceptions.dismissalExceptions.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={CALENDAR_ICON}
+            title="Sin días especiales"
+            description="No hay fechas que sobreescriban el horario recurrente. Mientras no las haya, todos los días siguen las ventanas de arriba."
+          />
+        </Card>
+      )}
+
+      {exceptions.status === 'ready' &&
+        exceptions.dismissalExceptions.map((dismissalException) => (
+          <DismissalExceptionRow
+            key={dismissalException.id}
+            dismissalException={dismissalException}
+            canManage={canManage}
+            busy={exceptions.busyId === dismissalException.id}
+            confirming={confirmingDeleteId === dismissalException.id}
+            rowErrorMessage={
+              exceptions.rowError?.dismissalExceptionId === dismissalException.id
+                ? dismissalExceptionSaveErrorMessage(exceptions.rowError.error.code)
+                : undefined
+            }
+            rowErrorCode={
+              exceptions.rowError?.dismissalExceptionId === dismissalException.id
+                ? exceptions.rowError.error.code
+                : undefined
+            }
+            onEdit={() => {
+              setConfirmingDeleteId(null);
+              exceptions.openEdit(dismissalException);
+            }}
+            onAskDelete={() => setConfirmingDeleteId(dismissalException.id)}
+            onCancelDelete={() => setConfirmingDeleteId(null)}
+            onDelete={() => {
+              setConfirmingDeleteId(null);
+              exceptions.remove(dismissalException.id);
+            }}
+          />
+        ))}
+    </div>
   );
 }

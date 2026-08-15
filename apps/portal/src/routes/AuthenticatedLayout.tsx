@@ -116,11 +116,23 @@ function ModeSwitcher() {
   const activeLabel = location.pathname.startsWith(STUDENTS_PATH) ? TUTOR_LABEL : INSTITUTION_LABEL;
 
   return (
+    // `position: fixed` rather than a normal flow element: the institution
+    // side now renders `InstitutionShell`, a full-viewport (minHeight: 100vh)
+    // sidebar layout (ADR-072). A switcher in flow above it added its own
+    // height on top of that 100vh, pushing the sidebar below the fold instead
+    // of anchoring it to the top of the viewport. Floating it removes it from
+    // flow entirely. Anchored top-right rather than top-center: centered, it
+    // overlapped the top of the tutor screens' centered card (both share the
+    // same horizontal middle of the viewport) — the top-right corner is empty
+    // in both layouts (InstitutionShell's header has no right-side content by
+    // design, ADR-072 point 1; the tutor cards are centered with margin to
+    // spare on either side).
     <div
       style={{
-        display: 'flex',
-        justifyContent: 'center',
-        padding: 'var(--space-6) var(--space-6) 0',
+        position: 'fixed',
+        top: 'var(--space-6)',
+        right: 'var(--space-6)',
+        zIndex: 40,
       }}
     >
       <SegmentedTabs

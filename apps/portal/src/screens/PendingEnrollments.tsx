@@ -1,20 +1,13 @@
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import { useNavigate } from 'react-router';
+import { useOutletContext } from 'react-router';
 import { Alert } from '../components/Alert';
-import {
-  DELIVERY_POINTS_PATH,
-  DISMISSAL_SCHEDULE_PATH,
-  INSTITUTION_PROFILE_PATH,
-  PERSONNEL_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
 import { enrollmentListErrorMessage } from '../enrollments/enrollment-error-messages';
-import {
-  usePendingEnrollments,
-  type PendingEnrollment,
+import type {
+  PendingEnrollment,
+  PendingEnrollmentsValue,
 } from '../enrollments/usePendingEnrollments';
 
 /** es-MX, 24h clock (.claude/rules/design-system.md). */
@@ -180,176 +173,143 @@ function EnrollmentRow({
 
 export function PendingEnrollments() {
   const { session, logout } = useAuth();
-  const navigate = useNavigate();
   const { current, memberships } = useInstitution();
+  // Lifted to InstitutionShell (ADR-072 §3): the sidebar's "Aprobaciones"
+  // counter needs the same list, so the fetch happens once, up there, and
+  // this screen reads it back through the layout's Outlet context instead of
+  // issuing a second GET.
   const { status, enrollments, error, banner, rowError, busyId, reload, review } =
-    usePendingEnrollments(current?.institutionId ?? null);
+    useOutletContext<PendingEnrollmentsValue>();
 
   // Feature 006, preconditions: reading the inbox is open to any member, but
   // only `admin` may resolve a request (ADR-019 point 5).
   const canReview = current?.role === 'admin';
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-              <span style={EYEBROW_STYLE}>Aprobaciones</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                {current?.institutionName ?? 'Institución'}
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                Sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(INSTITUTION_PROFILE_PATH)}
-              >
-                Perfil de la institución
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
-            }}
-          >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {current && (
-              <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
-            )}
-            {memberships.length > 1 && (
-              <Badge tone="neutral">{memberships.length} membresías</Badge>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={EYEBROW_STYLE}>Solicitudes pendientes</span>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
-              {canReview ? (
-                'Revisa cada solicitud de asociación y decide si el alumno queda asociado a la institución.'
-              ) : (
-                <>
-                  {NOT_ADMIN_REASON}
-                  {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
-                  {current && ', así que las acciones están deshabilitadas.'}
-                </>
-              )}
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <span style={EYEBROW_STYLE}>Aprobaciones</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
+            >
+              {current?.institutionName ?? 'Institución'}
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              Sesión de {session?.email}
             </span>
           </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — only sign-out stays here. */}
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {current && (
+            <Badge tone="neutral">{institutionStatusLabel(current.institutionStatus)}</Badge>
+          )}
+          {memberships.length > 1 && <Badge tone="neutral">{memberships.length} membresías</Badge>}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={EYEBROW_STYLE}>Solicitudes pendientes</span>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
+            {canReview ? (
+              'Revisa cada solicitud de asociación y decide si el alumno queda asociado a la institución.'
+            ) : (
+              <>
+                {NOT_ADMIN_REASON}
+                {current && ` Tu rol es ${roleLabel(current.role).toLowerCase()}`}
+                {current && ', así que las acciones están deshabilitadas.'}
+              </>
+            )}
+          </span>
+        </div>
+      </Card>
+
+      {banner && <Alert message={banner.message} code={banner.code} />}
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </Card>
+      )}
 
-        {banner && <Alert message={banner.message} code={banner.code} />}
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar las solicitudes"
+            message={error ? enrollmentListErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
+          />
+        </Card>
+      )}
 
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
+      {status === 'ready' && enrollments.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={EMPTY_INBOX_ICON}
+            title="Sin solicitudes pendientes"
+            description="Cuando un tutor solicite asociar a un alumno con tu institución, la solicitud aparecerá aquí."
+          />
+        </Card>
+      )}
 
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar las solicitudes"
-              message={error ? enrollmentListErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {status === 'ready' && enrollments.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_INBOX_ICON}
-              title="Sin solicitudes pendientes"
-              description="Cuando un tutor solicite asociar a un alumno con tu institución, la solicitud aparecerá aquí."
-            />
-          </Card>
-        )}
-
-        {status === 'ready' &&
-          enrollments.map((enrollment, index) => (
-            <EnrollmentRow
-              key={enrollment.id}
-              enrollment={enrollment}
-              index={index}
-              canReview={canReview}
-              busy={busyId === enrollment.id}
-              rowErrorMessage={
-                rowError?.enrollmentId === enrollment.id ? rowError.message : undefined
-              }
-              rowErrorCode={rowError?.enrollmentId === enrollment.id ? rowError.code : undefined}
-              onReview={(action) => review(enrollment.id, action)}
-            />
-          ))}
-      </div>
-    </main>
+      {status === 'ready' &&
+        enrollments.map((enrollment, index) => (
+          <EnrollmentRow
+            key={enrollment.id}
+            enrollment={enrollment}
+            index={index}
+            canReview={canReview}
+            busy={busyId === enrollment.id}
+            rowErrorMessage={
+              rowError?.enrollmentId === enrollment.id ? rowError.message : undefined
+            }
+            rowErrorCode={rowError?.enrollmentId === enrollment.id ? rowError.code : undefined}
+            onReview={(action) => review(enrollment.id, action)}
+          />
+        ))}
+    </div>
   );
 }

@@ -10,6 +10,7 @@ function member(overrides?: Partial<InstitutionMemberRow>): InstitutionMemberRow
     role: 'teacher',
     fullName: 'Ana Ruiz',
     email: 'ana@example.com',
+    phone: null,
     userStatus: 'active',
     createdAt: '2026-08-01T12:00:00.000Z',
     ...overrides,

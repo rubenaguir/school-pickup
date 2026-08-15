@@ -1,5 +1,4 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
 import { Badge, Button, Card, ErrorState, GeofenceMap, SkeletonRow } from '@casillego/ui';
 import type { LatLng } from '@casillego/ui';
 import type { ApiError } from '@casillego/shared';
@@ -17,13 +16,11 @@ import {
 } from '../institution/useInstitutionProfile';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
+import { memberDisplayName } from '../institution-personnel/personnel-labels';
 import {
-  DELIVERY_POINTS_PATH,
-  DISMISSAL_SCHEDULE_PATH,
-  PENDING_ENROLLMENTS_PATH,
-  PERSONNEL_PATH,
-  REPORTS_PATH,
-} from '../routes/paths';
+  useInstitutionMembers,
+  type InstitutionMemberRow,
+} from '../institution-personnel/useInstitutionMembers';
 
 /**
  * Every editable field as text: an `<input type="number">` cannot hold a
@@ -488,12 +485,91 @@ function ProfileForm({
   );
 }
 
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join('')
+      .toUpperCase() || '·'
+  );
+}
+
+/**
+ * "Coordinación de salida" (ADR-072 §8/§4) — dark card, same treatment as
+ * the kit's (line ~405: `background: var(--ink-900)`), hand-rolled rather
+ * than `packages/ui`'s `Avatar` (its accent palette is calibrated for a
+ * light surface, ADR-071 §7's "no dark tokens without a second consumer"
+ * criterion). Lists every `role === 'coordinator'` member — the kit shows
+ * one, but nothing stops an institution from naming more than one. Omitted
+ * entirely by the caller when there is none; this component assumes at
+ * least one exists.
+ */
+function DismissalCoordinationCard({ coordinators }: { coordinators: InstitutionMemberRow[] }) {
+  return (
+    <Card style={{ background: 'var(--ink-900)', border: 'none' }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          letterSpacing: '.08em',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,.5)',
+          marginBottom: 14,
+        }}
+      >
+        Coordinación de salida
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {coordinators.map((coordinator) => {
+          const name = memberDisplayName(coordinator);
+          return (
+            <div key={coordinator.id} style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+              <span
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,.14)',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  flexShrink: 0,
+                }}
+              >
+                {initialsOf(name)}
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{name}</span>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,.6)' }}>
+                  Coordinador/a{coordinator.phone ? ` · ${coordinator.phone}` : ''}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 export function InstitutionProfile() {
   const { session, logout } = useAuth();
-  const navigate = useNavigate();
   const { current } = useInstitution();
   const { status, profile, error, reload, save, saving, saveError, savedCount } =
     useInstitutionProfile(current?.institutionId ?? null);
+  // Read-only reuse of the same GET the personnel screen manages
+  // (`useInstitutionMembers`'s own docstring already names this as a
+  // legitimate second consumer) — just to find who has `role: 'coordinator'`
+  // for the card below (ADR-072 §8). No `usePersonnel`: that hook also wires
+  // up invite/role-change/remove state this screen has no use for.
+  const { members } = useInstitutionMembers(current?.institutionId ?? null);
+  const coordinators = members.filter((member) => member.role === 'coordinator');
 
   // Feature 008, preconditions: any member may read the profile, only `admin`
   // may edit it (ADR-022 point 1) — same restriction as the approval inbox.
@@ -506,146 +582,114 @@ export function InstitutionProfile() {
   const blockedReason = !isAdmin ? NOT_ADMIN_REASON : !isApproved ? NOT_APPROVED_REASON : undefined;
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-              <span style={EYEBROW_STYLE}>Configuración</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                {profile?.name ?? current?.institutionName ?? 'Perfil de la institución'}
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                Sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(PENDING_ENROLLMENTS_PATH)}
-              >
-                Aprobaciones
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DELIVERY_POINTS_PATH)}
-              >
-                Puntos de entrega
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void navigate(DISMISSAL_SCHEDULE_PATH)}
-              >
-                Horarios de salida
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(PERSONNEL_PATH)}>
-                Personal
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(REPORTS_PATH)}>
-                Reportes
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <span style={EYEBROW_STYLE}>Configuración</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
+            >
+              {profile?.name ?? current?.institutionName ?? 'Perfil de la institución'}
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              Sesión de {session?.email}
+            </span>
           </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
+                  to every other institution screen — only sign-out stays here. */}
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 16,
-            }}
-          >
-            {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
-            {profile && <Badge tone="neutral">{institutionStatusLabel(profile.status)}</Badge>}
-            {profile && (
-              <Badge tone="neutral">
-                {profile.type === 'school' ? 'Escuela' : 'Actividad extracurricular'}
-              </Badge>
-            )}
-            {profile && (
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--ink-300)',
-                }}
-              >
-                {profile.joinCode}
-              </span>
-            )}
-          </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 16,
+          }}
+        >
+          {current && <Badge tone="brand">{roleLabel(current.role)}</Badge>}
+          {profile && <Badge tone="neutral">{institutionStatusLabel(profile.status)}</Badge>}
+          {profile && (
+            <Badge tone="neutral">
+              {profile.type === 'school' ? 'Escuela' : 'Actividad extracurricular'}
+            </Badge>
+          )}
+          {profile && (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-2xs)',
+                color: 'var(--ink-300)',
+              }}
+            >
+              {profile.joinCode}
+            </span>
+          )}
+        </div>
+      </Card>
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </Card>
+      )}
 
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
-
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar el perfil"
-              message={error ? institutionProfileErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {status === 'ready' && profile && (
-          <ProfileForm
-            // Reseeds the form from the profile the server confirmed.
-            key={savedCount}
-            profile={profile}
-            canEdit={Boolean(isAdmin && isApproved)}
-            blockedReason={blockedReason}
-            saving={saving}
-            saveError={saveError}
-            justSaved={savedCount > 0}
-            onSave={save}
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar el perfil"
+            message={error ? institutionProfileErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
           />
-        )}
-      </div>
-    </main>
+        </Card>
+      )}
+
+      {status === 'ready' && profile && (
+        <ProfileForm
+          // Reseeds the form from the profile the server confirmed.
+          key={savedCount}
+          profile={profile}
+          canEdit={Boolean(isAdmin && isApproved)}
+          blockedReason={blockedReason}
+          saving={saving}
+          saveError={saveError}
+          justSaved={savedCount > 0}
+          onSave={save}
+        />
+      )}
+
+      {coordinators.length > 0 && <DismissalCoordinationCard coordinators={coordinators} />}
+    </div>
   );
 }

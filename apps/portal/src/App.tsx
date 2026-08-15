@@ -6,6 +6,7 @@ import {
   ADMIN_INSTITUTIONS_PATH,
   ADMIN_METRICS_PATH,
   ASSOCIATE_INSTITUTION_PATH,
+  DASHBOARD_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
   GATE_CONSOLE_PATH,
@@ -22,12 +23,14 @@ import {
   VEHICLES_PATH,
 } from './routes/paths';
 import { AssociateInstitution } from './screens/AssociateInstitution';
+import { Dashboard } from './screens/Dashboard';
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
 import { GateConsole } from './screens/GateConsole';
 import { GlobalMetrics } from './screens/GlobalMetrics';
 import { InstitutionApproval } from './screens/InstitutionApproval';
 import { InstitutionProfile } from './screens/InstitutionProfile';
+import { InstitutionShell } from './institution/InstitutionShell';
 import { Login } from './screens/Login';
 import { NewStudent } from './screens/NewStudent';
 import { PendingEnrollments } from './screens/PendingEnrollments';
@@ -49,13 +52,18 @@ export function App() {
                 route below has no institution membership to wait for and
                 must not be blocked by it (ADR-056 point 3). */}
             <Route element={<InstitutionGate />}>
-              <Route path={PENDING_ENROLLMENTS_PATH} element={<PendingEnrollments />} />
-              <Route path={INSTITUTION_PROFILE_PATH} element={<InstitutionProfile />} />
-              <Route path={DELIVERY_POINTS_PATH} element={<DeliveryPoints />} />
-              <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />
+              {/* GateConsole stays outside the shell: it is a separate kiosk
+                  screen, no sidebar in the kit either (ADR-072). */}
               <Route path={GATE_CONSOLE_PATH} element={<GateConsole />} />
-              <Route path={PERSONNEL_PATH} element={<Personnel />} />
-              <Route path={REPORTS_PATH} element={<Reports />} />
+              <Route element={<InstitutionShell />}>
+                <Route path={DASHBOARD_PATH} element={<Dashboard />} />
+                <Route path={PENDING_ENROLLMENTS_PATH} element={<PendingEnrollments />} />
+                <Route path={INSTITUTION_PROFILE_PATH} element={<InstitutionProfile />} />
+                <Route path={DELIVERY_POINTS_PATH} element={<DeliveryPoints />} />
+                <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />
+                <Route path={PERSONNEL_PATH} element={<Personnel />} />
+                <Route path={REPORTS_PATH} element={<Reports />} />
+              </Route>
             </Route>
             <Route path={STUDENTS_PATH} element={<Students />} />
             <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
