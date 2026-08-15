@@ -10,6 +10,7 @@ import {
 } from '@casillego/shared/entities';
 import { resolveMetricsWindow, type MetricsWindow } from './metrics-window';
 import type { AdminMetricsResponse, TopInstitutionByUsage } from './dto/responses';
+import type { DeliveriesByDayEntry } from '../institution-reports/dto/responses';
 
 const INSTITUTION_STATUS_VALUES: readonly InstitutionStatus[] = [
   'pending',
@@ -39,6 +40,10 @@ export class AdminMetricsService {
 
   async get(now: Date = new Date()): Promise<AdminMetricsResponse> {
     const window = resolveMetricsWindow(now);
+    // Independent of `window`: a fixed 14-day trailing window for the
+    // deliveries chart, not the calendar-month comparison above (ADR-074
+    // point 2 — the two serve different purposes).
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
     const [
       institutionsByStatus,
@@ -48,6 +53,7 @@ export class AdminMetricsService {
       previousPeriod,
       topInstitutionsByUsage,
       averagePickupDurationSeconds,
+      recentDeliveries,
     ] = await Promise.all([
       this.countInstitutionsByStatus(),
       this.enrollmentsRepository.count({ where: { status: 'pending' } }),
@@ -56,6 +62,9 @@ export class AdminMetricsService {
       this.countPickupRequestsBetween(window.previousStart, window.previousEnd),
       this.findTopInstitutionsByUsage(window),
       this.averagePickupDurationSeconds(window),
+      this.pickupRequestsRepository.find({
+        where: { status: 'delivered', completedAt: Between(fourteenDaysAgo, now) },
+      }),
     ]);
 
     return {
@@ -71,6 +80,7 @@ export class AdminMetricsService {
       pickupRequestsTotal: { currentPeriod, previousPeriod },
       topInstitutionsByUsage,
       averagePickupDurationSeconds,
+      deliveriesByDay: this.deliveriesByDay(recentDeliveries),
     };
   }
 
@@ -163,4 +173,28 @@ export class AdminMetricsService {
     // mean nothing on a dashboard.
     return Math.round(Number(average));
   }
+
+  /**
+   * Same grouping as `InstitutionReportsService.deliveriesByDay`, platform-wide
+   * instead of scoped to one institution. Duplicated rather than promoted to a
+   * shared util: a 5-line function used in two places doesn't clear the "no
+   * abstraction without a clear need" bar (ADR-036).
+   */
+  private deliveriesByDay(pickups: readonly PickupRequest[]): DeliveriesByDayEntry[] {
+    const counts = new Map<string, number>();
+    for (const pickup of pickups) {
+      const date = toCalendarDate(pickup.completedAt!);
+      counts.set(date, (counts.get(date) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([date, count]) => ({ date, count }));
+  }
+}
+
+function toCalendarDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

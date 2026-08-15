@@ -39,6 +39,7 @@ function buildService(options?: {
   pickupCounts?: number[];
   topRows?: { institutionId: string; name: string; pickupRequestsCount: string }[];
   averageSeconds?: string | null;
+  recentDeliveries?: { completedAt: Date }[];
 }) {
   const institutionsRepo = {
     createQueryBuilder: vi.fn(() => buildQueryBuilder({ rawMany: options?.institutionRows ?? [] })),
@@ -56,6 +57,7 @@ function buildService(options?: {
   let countCall = 0;
   const pickupRequestsRepo = {
     count: vi.fn(() => Promise.resolve(pickupCounts[countCall++] ?? 0)),
+    find: vi.fn().mockResolvedValue(options?.recentDeliveries ?? []),
     createQueryBuilder: vi
       .fn()
       // First call is the top-5 leaderboard, second is the average.
@@ -101,6 +103,7 @@ describe('AdminMetricsService', () => {
         { institutionId: 'inst-1', name: 'Colegio A', pickupRequestsCount: 60 },
       ],
       averagePickupDurationSeconds: 432,
+      deliveriesByDay: [],
     });
   });
 
@@ -135,5 +138,40 @@ describe('AdminMetricsService', () => {
     expect(current[0]).toEqual(new Date(2026, 6, 1, 0, 0, 0, 0));
     expect(previous[0]).toEqual(new Date(2026, 5, 1, 0, 0, 0, 0));
     expect(previous[1].getTime()).toBeLessThan(current[0].getTime());
+  });
+
+  describe('deliveriesByDay (ADR-074)', () => {
+    it('groups the platform-wide deliveries of the 14-day window by calendar day', async () => {
+      const recentDeliveries = [
+        { completedAt: new Date(2026, 6, 18, 9, 0) },
+        { completedAt: new Date(2026, 6, 18, 15, 0) },
+        { completedAt: new Date(2026, 6, 19, 8, 0) },
+      ];
+      const { service } = buildService({ recentDeliveries });
+
+      const metrics = await service.get(new Date(2026, 6, 19, 12, 0, 0));
+
+      expect(metrics.deliveriesByDay).toEqual([
+        { date: '2026-07-18', count: 2 },
+        { date: '2026-07-19', count: 1 },
+      ]);
+    });
+
+    it('queries a 14-day trailing window, not the calendar-month window used by pickupRequestsTotal', async () => {
+      const { service, pickupRequestsRepo } = buildService();
+      const now = new Date(2026, 6, 19, 12, 0, 0);
+
+      await service.get(now);
+
+      const [findArgs] = pickupRequestsRepo.find.mock.calls[0] as [
+        { where: { status: string; completedAt: { value: [Date, Date] } } },
+      ];
+      expect(findArgs.where.status).toBe('delivered');
+      const [start, end] = findArgs.where.completedAt.value;
+      expect(end).toEqual(now);
+      expect(start).toEqual(new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000));
+      // Distinct from the calendar-month window: July 1st, not 14 days back.
+      expect(start).not.toEqual(new Date(2026, 6, 1, 0, 0, 0, 0));
+    });
   });
 });

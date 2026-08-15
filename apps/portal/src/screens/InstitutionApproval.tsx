@@ -8,7 +8,6 @@ import {
   SegmentedTabs,
   SkeletonRow,
 } from '@casillego/ui';
-import { AdminNav } from '../admin/AdminNav';
 import { Alert } from '../components/Alert';
 import { institutionListErrorMessage } from '../admin/institution-queue-error-messages';
 import { institutionStatusLabel } from '../institution/institution-labels';
@@ -196,110 +195,100 @@ export function InstitutionApproval() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <AdminNav active="institutions" />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={EYEBROW_STYLE}>Operación</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Aprobación de instituciones
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
-                Revisa las altas de nuevas instituciones y administra su estado en la plataforma.
-              </span>
-            </div>
-            <SegmentedTabs
-              options={FILTER_OPTIONS.map((option) => option.label)}
-              value={filterLabel(filter)}
-              onChange={(nextLabel) => {
-                const next = FILTER_OPTIONS.find((option) => option.label === nextLabel)?.value;
-                if (next) {
-                  setConfirmingId(null);
-                  setFilter(next);
-                }
+      <Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={EYEBROW_STYLE}>Operación</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
               }}
-            />
+            >
+              Aprobación de instituciones
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
+              Revisa las altas de nuevas instituciones y administra su estado en la plataforma.
+            </span>
           </div>
-        </Card>
-
-        {banner && <Alert message={banner.message} code={banner.code} />}
-
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
-
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar las instituciones"
-              message={error ? institutionListErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {status === 'ready' && institutions.length === 0 && (
-          <Card>
-            <EmptyState
-              icon={EMPTY_QUEUE_ICON}
-              title={`Sin instituciones en "${filterLabel(filter)}"`}
-              description="Cuando una institución nueva se registre o cambie de estado, aparecerá en esta lista."
-            />
-          </Card>
-        )}
-
-        {status === 'ready' &&
-          institutions.map((institution) => (
-            <InstitutionRow
-              key={institution.id}
-              institution={institution}
-              busy={busyId === institution.id}
-              confirmingSuspend={confirmingId === institution.id}
-              rowErrorMessage={
-                rowError?.institutionId === institution.id ? rowError.message : undefined
-              }
-              rowErrorCode={rowError?.institutionId === institution.id ? rowError.code : undefined}
-              onApprove={() => transition(institution.id, 'approve')}
-              onReactivate={() => transition(institution.id, 'reactivate')}
-              onRequestSuspend={() => setConfirmingId(institution.id)}
-              onCancelSuspend={() => setConfirmingId(null)}
-              onConfirmSuspend={() => {
+          <SegmentedTabs
+            options={FILTER_OPTIONS.map((option) => option.label)}
+            value={filterLabel(filter)}
+            onChange={(nextLabel) => {
+              const next = FILTER_OPTIONS.find((option) => option.label === nextLabel)?.value;
+              if (next) {
                 setConfirmingId(null);
-                transition(institution.id, 'suspend');
-              }}
-            />
-          ))}
-      </div>
-    </main>
+                setFilter(next);
+              }
+            }}
+          />
+        </div>
+      </Card>
+
+      {banner && <Alert message={banner.message} code={banner.code} />}
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </Card>
+      )}
+
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar las instituciones"
+            message={error ? institutionListErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
+          />
+        </Card>
+      )}
+
+      {status === 'ready' && institutions.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={EMPTY_QUEUE_ICON}
+            title={`Sin instituciones en "${filterLabel(filter)}"`}
+            description="Cuando una institución nueva se registre o cambie de estado, aparecerá en esta lista."
+          />
+        </Card>
+      )}
+
+      {status === 'ready' &&
+        institutions.map((institution) => (
+          <InstitutionRow
+            key={institution.id}
+            institution={institution}
+            busy={busyId === institution.id}
+            confirmingSuspend={confirmingId === institution.id}
+            rowErrorMessage={
+              rowError?.institutionId === institution.id ? rowError.message : undefined
+            }
+            rowErrorCode={rowError?.institutionId === institution.id ? rowError.code : undefined}
+            onApprove={() => transition(institution.id, 'approve')}
+            onReactivate={() => transition(institution.id, 'reactivate')}
+            onRequestSuspend={() => setConfirmingId(institution.id)}
+            onCancelSuspend={() => setConfirmingId(null)}
+            onConfirmSuspend={() => {
+              setConfirmingId(null);
+              transition(institution.id, 'suspend');
+            }}
+          />
+        ))}
+    </div>
   );
 }

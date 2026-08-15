@@ -33,6 +33,7 @@ import { InstitutionProfile } from './screens/InstitutionProfile';
 import { InstitutionShell } from './institution/InstitutionShell';
 import { Login } from './screens/Login';
 import { NewStudent } from './screens/NewStudent';
+import { OpsShell } from './admin/OpsShell';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Profile } from './screens/Profile';
@@ -75,8 +76,10 @@ export function App() {
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}
           <Route element={<SuperAdminRoute />}>
-            <Route path={ADMIN_INSTITUTIONS_PATH} element={<InstitutionApproval />} />
-            <Route path={ADMIN_METRICS_PATH} element={<GlobalMetrics />} />
+            <Route element={<OpsShell />}>
+              <Route path={ADMIN_INSTITUTIONS_PATH} element={<InstitutionApproval />} />
+              <Route path={ADMIN_METRICS_PATH} element={<GlobalMetrics />} />
+            </Route>
           </Route>
           {/* Includes "/": every unknown path lands on the home route, which
               redirects to /login when there is no session. */}

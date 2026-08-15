@@ -1,6 +1,7 @@
 /**
- * Sidebar/nav icon set of `InstitutionShell` — transcribed from `Icon()`
- * in `design/casillego-design-system/ui_kits/portal-admin/index.html` (line
+ * Sidebar/nav icon set of `InstitutionShell` and `OpsShell` — transcribed
+ * from `Icon()` in
+ * `design/casillego-design-system/ui_kits/portal-admin/index.html` (line
  * ~19). `pin` is not one of the kit's `Icon()` names: it is the same marker
  * glyph the kit draws inline for a "Puntos de entrega" row (line ~378), since
  * the kit's own `NAV` has no item for that screen (ADR-072 point 2 keeps it
@@ -10,7 +11,8 @@
  */
 import type { SVGProps } from 'react';
 
-export type IconName = 'inbox' | 'users' | 'grid' | 'school' | 'clock' | 'chart' | 'pin';
+export type IconName =
+  'inbox' | 'users' | 'grid' | 'school' | 'clock' | 'chart' | 'pin' | 'building';
 
 interface IconProps {
   name: IconName;
@@ -61,6 +63,15 @@ export function Icon({ name, size = 20 }: IconProps) {
       <svg {...props}>
         <path d="M3 21h18M5 21V7l8-4 7 4v13" />
         <path d="M9 9v.01M9 13v.01M9 17v.01" />
+      </svg>
+    );
+  }
+
+  if (name === 'building') {
+    return (
+      <svg {...props}>
+        <path d="M3 21h18M5 21V8l7-4 7 4v13" />
+        <path d="M9 21v-5h6v5" />
       </svg>
     );
   }

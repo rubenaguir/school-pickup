@@ -25,6 +25,8 @@ export interface AdminMetrics {
   }[];
   /** `null` when no `delivered` pickup exists in the window — not an error. */
   averagePickupDurationSeconds: number | null;
+  /** Last 14 calendar days up to now, platform-wide — only days with at least one delivery. */
+  deliveriesByDay: { date: string; count: number }[];
 }
 
 export type AdminMetricsStatus = 'loading' | 'ready' | 'error';

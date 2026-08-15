@@ -1,4 +1,5 @@
 import type { InstitutionStatus, InstitutionType } from '@casillego/shared';
+import type { DeliveriesByDayEntry } from '../../institution-reports/dto/responses';
 
 /** `GET /admin/metrics` (specs/api-contracts/admin-metrics.md). */
 export interface AdminMetricsResponse {
@@ -15,6 +16,8 @@ export interface AdminMetricsResponse {
   topInstitutionsByUsage: TopInstitutionByUsage[];
   /** `null` when no pickup was delivered in the window — no data, not an error. */
   averagePickupDurationSeconds: number | null;
+  /** Last 14 calendar days up to now, platform-wide — a fixed window, not the calendar-month one above (ADR-074 point 2). */
+  deliveriesByDay: DeliveriesByDayEntry[];
 }
 
 export interface TopInstitutionByUsage {
