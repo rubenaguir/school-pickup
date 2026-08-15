@@ -321,13 +321,39 @@ obsoleto en migración 401) corregido.
         Esperados ni %), "Por nivel" como conteo simple, "Requiere
         atención" con datos fijos (a poblar después), tabla de actividad
         en vivo reutilizando el feed `view=monitor` de Carril (ADR-071)
-        sin backend nuevo
-  - [ ] "Coordinación de salida" en la página de Institución, con dato
+        sin backend nuevo — incluye conteo de entregados persistido
+        contra refresh (`GET /institutions/:id/delivered-today`, sin
+        restricción de `role` a diferencia de `/reports`)
+  - [x] "Coordinación de salida" en la página de Institución, con dato
         real (`institution_member.role = coordinator` + `users.phone`,
-        agregar `phone` a `InstitutionMemberListItem`)
-- [ ] **Fase B (pendiente de ADR)** — Consola de puerta: layout de dos
+        agregado a `InstitutionMemberListItem`)
+
+  **Fase A completa** — auditada dos veces (implementación inicial +
+  corrección de persistencia del conteo de entregados), `npm run check`
+  en verde (941 tests).
+- [ ] **Fase B (ADR-073, en curso)** — Consola de puerta: layout de dos
       paneles fiel al kit `puerta-consola` (hoy tarjeta centrada
-      `max-width: 820px`)
+      `max-width: 820px`), más "Vocear" como evento cruzado hacia
+      `apps/board`:
+  - [ ] Endpoint nuevo `POST /pickup-requests/:id/announce` (calco de
+        `PickupDeliveryController`, sin restricción de `role`,
+        `audit_log.action = pickup_request.announced`)
+  - [ ] Topic MQTT nuevo `board-announce`, multiplexado sobre la misma
+        conexión `/ws/board` que Andén/Sereno ya mantienen (discriminador
+        `kind: 'row' | 'announce'` nuevo en el wire format — **no** un
+        sexto canal WS duplicado, ADR-072 punto 5 ya lo señaló como
+        límite)
+  - [ ] `apps/board`: `parseBoardDelta`/`parseBoardAnnounce` con el
+        discriminador nuevo, voceo manual reutiliza el mismo mecanismo de
+        TTS + pulso que el automático (ADR-069)
+  - [ ] `apps/portal`: layout de dos paneles (barra superior con conteos +
+        reloj, lista de fila de salida 452px, panel de detalle), selector
+        de puerta integrado al encabezado (el kit no lo necesita, nuestra
+        realidad multi-puerta sí), código de entrega con captura real
+        (se mantiene sin cambios de lógica, ADR-024 puntos 4/11 — **no**
+        se adopta el flujo "Entrega directa sin código" del kit)
+  - [ ] "Reportar incidencia" se conserva deshabilitado en el nuevo
+        layout (ADR-024 punto 5, ADR-034 — sin cambios)
 - [ ] **Fase C (pendiente de ADR)** — shell de navegación del rol
       Operador/OPS envolviendo `InstitutionApproval`/`GlobalMetrics`
       existentes
@@ -483,4 +509,4 @@ Ver ADR-071 para la especificación completa.
 | Sin `eslint-plugin-react` en `packages/ui/src` ni en los 3 frontends — solo hay reglas de `eslint-hooks` (ADR-036). Pérdida real de cobertura, no cosmética: sin `react/jsx-key` no se detecta `key` faltante en listas (`SegmentedTabs` ya mapea un array), sin `react/no-unescaped-entities`/`react/jsx-no-duplicate-props`/etc. no se detecta JSX mal formado | ADR-036 — última versión publicada de `eslint-plugin-react` (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 | Revisar en cada fase nueva de frontend (Fase 7 pantallas, Fase 8, Fase 9) si ya hay versión compatible con ESLint 10; si no, evaluar `@eslint-react/eslint-plugin` (peer `eslint: '*'`, ya confirmado disponible en el registro) como alternativa nativa de flat config |
 | ~~`npm run dev:api` falla con `Cannot find module .../dist/main`~~ — `incremental: true` + `deleteOutDir: true` dejaban un `.tsbuildinfo` obsoleto **fuera** de `dist/` (la ruta por defecto colapsa a `dist/../tsconfig.build.tsbuildinfo` porque `rootDir` es `./src`); `tsc` lo leía, creía que todo estaba al día y emitía 0 archivos saliendo con código 0 | Reincidente: se "resolvió" una primera vez borrando el `.tsbuildinfo` a mano, sin dejar registro, y volvió a aparecer | ✅ Resuelto — ADR-046, `incremental` retirado de `apps/api` y `apps/worker` (+ comentario de advertencia en ambos `tsconfig.json`). **Precedente a no repetir:** un síntoma de build que se arregla borrando un archivo a mano no está arreglado; si vuelve a aparecer un `dist/` vacío o incompleto, revisar la interacción caché/`deleteOutDir` antes de borrar nada |
 | Tests de integración contra Postgres real (`*.integration.spec.ts`, `npm run test:integration`) quedan **fuera de `npm run check`** a propósito (el gate principal no debe exigir una base de datos disponible) — nada obliga a correrlos antes de cerrar una fase | ADR-044 — primera categoría de test de este tipo en el proyecto, introducida al diagnosticar y corregir el defecto de `institution_id` en `NULL` | Correr `npm run test:integration` explícitamente antes de cerrar cualquier fase que toque escritura de entidades con relaciones (no solo confiar en `npm run check`); evaluar más adelante si conviene integrarlo a CI si el proyecto adopta CI |
-| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **cinco veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069), `apps/board/src/board` de nuevo para Carril (ADR-071 punto 2), y ahora `apps/portal` para el Dashboard institucional (ADR-072 punto 5, reutilizando el feed de Carril) | ADR-069 punto 6, confirmado de nuevo en ADR-071 y ADR-072 — decisión consciente de no extraer todavía, no descuido | **Señal cada vez más fuerte de que ya es momento de extraerlo** — 5 instancias. Evaluar un hook/factory genérico en `packages/shared` en cuanto se cierre la Fase A del portal (ADR-072); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |
+| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **cinco veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069), `apps/board/src/board` de nuevo para Carril (ADR-071 punto 2), y `apps/portal` para el Dashboard institucional (ADR-072 punto 5, reutilizando el feed de Carril) — **ADR-073 evitó deliberadamente una sexta instancia** para "Vocear" multiplexando sobre el canal `/ws/board` ya existente en vez de abrir otro | ADR-069 punto 6, confirmado de nuevo en ADR-071/072/073 — decisión consciente de no extraer todavía, no descuido | **Señal cada vez más fuerte de que ya es momento de extraerlo** — 5 instancias, y ADR-073 tuvo que activamente evitar una sexta. Evaluar un hook/factory genérico en `packages/shared` en cuanto se cierre la Fase B del portal (ADR-073); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |

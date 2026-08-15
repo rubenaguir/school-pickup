@@ -4889,3 +4889,166 @@ fuera obvio por qué.
 **Consecuencias.** Es una consulta más por carga/reconexión del
 Dashboard, sin nueva tabla ni migración — reutiliza una columna y un
 patrón de consulta ya probados en producción (`institution-reports`).
+
+## ADR-073 — Fase B: Consola de puerta a dos paneles, y "Vocear" como evento cruzado hacia el tablero
+
+**Contexto.** Barrido del kit `puerta-consola`
+(`design/casillego-design-system/ui_kits/puerta-consola/`) contra
+`apps/portal/src/screens/GateConsole.tsx` real (mismo ejercicio que
+ADR-071/072). Confirmado con el humano: seguimos con esta pantalla tras
+cerrar la Fase A del portal.
+
+A diferencia del Dashboard, la mayoría de lo que parecía "faltante" ya
+tenía una decisión documentada:
+
+- **"Reportar incidencia"** ya existe en el código real, visible pero
+  deshabilitado (ADR-024 punto 5, ADR-034) — se conserva igual, solo se
+  reubica dentro del nuevo layout.
+- **El código de entrega no se simplifica al modelo del kit.** El kit solo
+  *muestra* el código para verificación visual; el código real además lo
+  **escribe** el operador, verificado por el servidor, sin bloqueo tras
+  error (ADR-024 puntos 4 y 11). Se mantiene sin cambios de lógica — solo
+  se re-diseña visualmente.
+- **Selector de puerta**: el kit asume una sola puerta fija (su demo no
+  lo necesita); la app real opera instituciones con varias puertas
+  activas simultáneas. Se conserva la necesidad de elegir puerta, movida
+  al encabezado del nuevo layout en vez de una tarjeta previa aparte.
+
+Lo único genuinamente nuevo es **"Vocear"**: un botón de dos pasos en el
+kit (Vocear → estado "voceando" animado → Confirmar entrega) que no
+aparece en ningún ADR ni spec. Confirmado con el humano: no es una ayuda
+visual local para el operador — **debe hacer sonar el voceo real en el
+tablero** (`apps/board`, modos Andén/Sereno, TTS de ADR-068/069). Esto es
+un evento en tiempo real cruzando de `apps/portal` a `apps/board`, algo
+que el proyecto no ha construido todavía en esa dirección (hasta ahora
+todo el tiempo real fluye de `pickup_request` hacia sus consumidores, no
+de una acción manual de un frontend hacia otro).
+
+**Decisión.**
+
+### 1. "Vocear" es una acción efímera, sin escritura en base de datos
+
+No es una transición de estado de `pickup_request` (ADR-024 punto 8 no
+cambia — sigue con sus 5 transiciones, "vocear" no es una de ellas) ni
+necesita sobrevivir una reconexión del tablero: si un Andén se reconecta
+justo después de un voceo, simplemente no lo escucha — igual que nadie
+espera "reproducir" un anuncio de audio que ya pasó. Sin tabla nueva, sin
+columna nueva. Sí se registra en `audit_log`
+(`action = pickup_request.announced`, convención `entity.verb`, ADR-018
+punto 9 — participio, mismo criterio que `delivery_code_mismatched`,
+ADR-031 punto 7) para trazabilidad de quién voceó a quién y cuándo — barato
+de agregar, mismo patrón ya usado para los intentos de código fallidos.
+
+### 2. Endpoint nuevo: `POST /pickup-requests/:id/announce`
+
+Calco exacto de `PickupDeliveryController` (mismo
+`InstitutionMembershipGuard` + `@InstitutionResource({ entity: PickupRequest })`,
+sin restricción de `role` — ADR-011, cualquier `institution_member` opera
+la consola). Válido solo para `pickup_request` en estado activo
+(`en_route`/`arriving`/`arrived` — ADR-024 punto 8's
+`ACTIVE_STATUSES`); 409 si ya está `delivered`/`cancelled` (mismo criterio
+de estado que ya usa `deliver()`). Sin cuerpo — no hay nada que el
+cliente deba enviar más que el `id` en la ruta. Publica a un topic MQTT
+nuevo (punto 3) y escribe el `audit_log` (punto 1); no toca la fila del
+`pickup_request` en sí.
+
+### 3. Topic nuevo, mismo socket que ya existe — no un sexto canal
+
+**No se abre una cuarta/quinta/sexta conexión WS duplicada** (el proyecto
+ya señaló esto como una preocupación creciente, ADR-072 punto 5 — 5
+instancias del patrón "snapshot + deltas"). "Vocear" no tiene snapshot que
+sentido tenga replayar, así que no es ese patrón de todas formas — se
+multiplexa sobre la **misma conexión `/ws/board`** que Andén/Sereno ya
+mantienen abierta.
+
+- `boardAnnounceTopic(institutionId)` →
+  `school-pickup/institution/{institutionId}/board-announce`
+  (`packages/shared/src/index.ts`, junto a `boardTopic`, con su
+  `parseBoardAnnounceTopic` inverso, mismo contrato defensivo).
+- **Se agrega un discriminador `kind` a los mensajes que ya viajan por
+  `/ws/board`.** Es la primera vez que este canal necesita distinguir más
+  de una forma de mensaje — momento correcto para hacerlo bien, y sin
+  costo de compatibilidad hacia atrás real: el proyecto está en fase
+  piloto, sin clientes en producción dependiendo hoy del formato viejo
+  (ningún tablero real desplegado todavía fuera de las cuentas de
+  verificación). `PickupRequestBoardPayload` (fila) gana
+  `kind: 'row'`; el mensaje de voceo es un tipo nuevo,
+  `PickupRequestBoardAnnouncePayload` (`kind: 'announce'`,
+  `pickupRequestId`, `studentFullName`, `announcedAt`) — **sin** datos de
+  tutor/vehículo (mismo criterio de privacidad de ADR-051/068: el tablero
+  es público, este mensaje viaja por el mismo canal que ya respeta esa
+  regla).
+- `BoardGateway` se extiende para suscribirse también a
+  `school-pickup/institution/+/board-announce` y reenviar ambos tipos de
+  mensaje por la misma conexión ya autorizada por institución — sin
+  gateway nuevo, sin ruta WS nueva.
+- `parseBoardDelta` (`apps/board/src/board/board-rows.ts`) se actualiza
+  para exigir `kind === 'row'` (rechaza cualquier otro valor, incluyendo
+  uno que no reconozca — a prueba de futuro). Nuevo
+  `parseBoardAnnounce`, mismo criterio defensivo.
+
+### 4. El voceo manual suena igual que un voceo automático, con el mismo mecanismo
+
+`useInstitutionBoard` (`apps/board`) ya tiene `onAnnounce` (ADR-069) para
+transiciones automáticas a `arriving`/`arrived`. Un mensaje `kind: 'announce'`
+dispara el mismo callback, con el mismo texto de `tts.ts` — se decide
+**reutilizar la frase de "en puerta"** ("{nombre} en puerta") en vez de
+inventar una tercera redacción: semánticamente el operador está llamando
+al alumno porque su tutor ya está esperando, el mismo contexto que un
+voceo automático de llegada. Si en el uso real esta frase no encaja bien
+para un llamado manual, es un ajuste de texto trivial, no arquitectónico.
+La fila también entra al conjunto de `recentlyChangedIds` (ADR-069 punto
+10, animación de pulso) aunque su `status` no haya cambiado — mismo
+tratamiento visual que un cambio real, y el pie de Andén ("Voceando:…")
+se actualiza igual que con un voceo automático.
+
+Sin límite de repetición ni debounce: `SpeechSynthesis` ya encola
+utterances en orden (ADR-069), un doble clic simplemente repite el
+anuncio dos veces seguidas — no se justifica lógica adicional para un
+caso de uso de bajo riesgo.
+
+### 5. Consola de puerta — layout de dos paneles, fiel al kit
+
+- Barra superior oscura (`var(--ink-900)`): isotipo + institución + puerta
+  seleccionada (con manera de cambiarla — el kit no lo necesita, nuestra
+  realidad multi-puerta sí), 3 pastillas de conteo (en puerta/en camino/
+  entregados), reloj+fecha, avatar de usuario.
+- Panel izquierdo (452px, "Fila de salida"): lista de tarjetas, orden
+  **prioridad de estado + voceo activo primero** (mismo criterio que
+  Andén, ADR-071 punto 5, con "voceando" como nueva capa de prioridad más
+  alta), indicador de voceo activo arriba de la lista.
+- Panel derecho (detalle de la fila seleccionada): alumno + matrícula,
+  "Quién recoge" (tutor/chofer, parentesco, vehículo+placa — mismos datos
+  que `QueueRow` ya trae), código de entrega (mostrado **y** con el campo
+  de captura real, punto 5 de arriba), pie de acciones: Vocear/Entrega
+  directa **sin código no se construye** — la acción "Entrega directa" del
+  kit se reemplaza por el flujo real (escribir código → Confirmar
+  entrega), disponible en cualquier momento, no solo tras vocear.
+  "Reportar incidencia" se conserva deshabilitado.
+
+**Consecuencias.** Primera vez que un evento cruza en tiempo real de
+`apps/portal` hacia `apps/board` — establece el patrón (topic dedicado +
+discriminador `kind` sobre un canal ya existente) para cualquier evento
+similar futuro, en vez de seguir sumando conexiones WS completas por cada
+nueva idea.
+
+## Referencias
+
+- ADR-011 (autorización sin restricción de `role` — la base de quién
+  puede vocear/entregar).
+- ADR-018 punto 9 (convención `entity.verb` de `audit_log.action`).
+- ADR-024 puntos 4, 5, 8, 11 (verificación de código, incidencia fuera de
+  alcance, máquina de estados, exposición de `delivery_code` — ninguno
+  cambia, todos se citan como restricciones que este ADR respeta).
+- ADR-031 punto 7 (forma participio de `audit_log.action`).
+- ADR-034 (botón de incidencia deshabilitado — precedente exacto para no
+  reabrir esa discusión aquí).
+- ADR-050/051 (patrón de gateway WS y separación de payload por
+  consumidor — la base del punto 3, aplicado ahora *dentro* de un canal
+  existente en vez de crear uno nuevo).
+- ADR-068/069 (TTS del tablero — el mecanismo que "Vocear" reutiliza sin
+  inventar uno nuevo).
+- ADR-072 punto 5 (la señal de "van demasiadas conexiones WS duplicadas"
+  que motivó multiplexar en vez de abrir una sexta).
+- `design/casillego-design-system/ui_kits/puerta-consola/index.html`
+  (fuente visual de este ADR).
