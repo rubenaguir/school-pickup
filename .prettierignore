@@ -11,3 +11,8 @@ package-lock.json
 # La documentacion (docs/, specs/, *.md) es prosa hecha a mano y fuente de
 # verdad del proyecto: Prettier gobierna codigo, no documentos. Ver ADR-021.
 **/*.md
+
+# Export crudo de Claude Design (design/casillego-design-system/): material
+# de referencia de solo lectura, con sus propias convenciones de formato.
+# Prettier no debe tocarlo ni bloquear el check por el.
+design/casillego-design-system/
