@@ -142,13 +142,40 @@ export function mergeBoardDelta(rows: readonly BoardRow[], delta: BoardRow): Mer
 }
 
 /**
- * Soonest arrival first, same criterion exactly as `sortQueueRows` (ADR-069
- * point 2): a row with no ETA yet sinks to the bottom rather than the top,
- * and ties break by student name so the order never reshuffles between two
- * renders of the same data.
+ * Status priority the real kit uses (`arrived` → `arriving` → `en_route`),
+ * ETA as the tiebreak within each group (ADR-071 point 5, amending ADR-069
+ * point 2's "ETA ascending only"). In practice the two orders coincide
+ * almost always — `arrived`/`arriving` already carry a low ETA by
+ * definition — but with enough simultaneous active rows they can diverge,
+ * and the kit's rule is status first.
  */
-export function sortBoardRows(rows: readonly BoardRow[]): BoardRow[] {
+const STATUS_PRIORITY: Record<BoardRow['status'], number> = {
+  arrived: 0,
+  arriving: 1,
+  en_route: 2,
+  delivered: 3,
+  cancelled: 4,
+};
+
+interface SortableBoardRow {
+  status: PickupRequestStatus;
+  etaSeconds: number | null;
+  studentFullName: string;
+}
+
+/**
+ * Status priority first, ETA ascending as the tiebreak within a status (a
+ * row with no ETA yet sinks to the bottom of its group), student name as the
+ * final tiebreak so the order never reshuffles between two renders of the
+ * same data. Generic over any row shape that carries the three sorted-on
+ * fields, so Carril's `BoardMonitorRow` (`board-monitor-rows.ts`) can reuse
+ * this exact comparator without widening down to `BoardRow` and losing its
+ * extra fields.
+ */
+export function sortBoardRows<T extends SortableBoardRow>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
+    const byStatus = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
+    if (byStatus !== 0) return byStatus;
     if (a.etaSeconds === null && b.etaSeconds !== null) return 1;
     if (a.etaSeconds !== null && b.etaSeconds === null) return -1;
     if (a.etaSeconds !== null && b.etaSeconds !== null && a.etaSeconds !== b.etaSeconds) {

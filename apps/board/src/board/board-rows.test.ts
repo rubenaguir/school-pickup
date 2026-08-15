@@ -126,7 +126,7 @@ describe('mergeBoardDelta', () => {
 });
 
 describe('sortBoardRows', () => {
-  it('puts the soonest ETA first', () => {
+  it('puts the soonest ETA first within the same status', () => {
     const sorted = sortBoardRows([
       row({ pickupRequestId: 'pr-1', etaSeconds: 600 }),
       row({ pickupRequestId: 'pr-2', etaSeconds: 60 }),
@@ -135,7 +135,7 @@ describe('sortBoardRows', () => {
     expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-2', 'pr-3', 'pr-1']);
   });
 
-  it('sinks the rows with no ETA yet to the bottom', () => {
+  it('sinks the rows with no ETA yet to the bottom of their status group', () => {
     const sorted = sortBoardRows([
       row({ pickupRequestId: 'pr-1', etaSeconds: null }),
       row({ pickupRequestId: 'pr-2', etaSeconds: 900 }),
@@ -158,6 +158,23 @@ describe('sortBoardRows', () => {
     ];
     sortBoardRows(rows);
     expect(rows.map((item) => item.pickupRequestId)).toEqual(['pr-1', 'pr-2']);
+  });
+
+  it('puts status priority ahead of ETA — arrived first even with a higher ETA than an en_route row', () => {
+    const sorted = sortBoardRows([
+      row({ pickupRequestId: 'pr-1', status: 'en_route', etaSeconds: 30 }),
+      row({ pickupRequestId: 'pr-2', status: 'arrived', etaSeconds: 600 }),
+    ]);
+    expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-2', 'pr-1']);
+  });
+
+  it('orders arrived before arriving before en_route regardless of ETA', () => {
+    const sorted = sortBoardRows([
+      row({ pickupRequestId: 'pr-1', status: 'en_route', etaSeconds: 60 }),
+      row({ pickupRequestId: 'pr-2', status: 'arriving', etaSeconds: 120 }),
+      row({ pickupRequestId: 'pr-3', status: 'arrived', etaSeconds: 300 }),
+    ]);
+    expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-3', 'pr-2', 'pr-1']);
   });
 });
 

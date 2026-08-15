@@ -1,110 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import type { PickupRequestStatus } from '@casillego/shared';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { boardListErrorMessage, boardSocketErrorMessage } from '../board/board-error-messages';
-import type { BoardRow } from '../board/board-rows';
-import { announcePickup } from '../board/tts';
-import { useDeliveryPoints } from '../board/useDeliveryPoints';
-import { useInstitutionBoard, type ConnectionState } from '../board/useInstitutionBoard';
+import { AndenBoard, type LastAnnounced } from '../board/AndenBoard';
+import { SerenoBoard } from '../board/SerenoBoard';
+import { CarrilBoard } from '../board/CarrilBoard';
+import { ModeSwitcher } from '../board/ModeSwitcher';
 import { DeliveryPointFilter } from '../board/DeliveryPointFilter';
-
-const EYEBROW_STYLE = {
-  fontSize: 'var(--text-2xs)',
-  letterSpacing: 'var(--tracking-eyebrow)',
-  textTransform: 'uppercase',
-  fontWeight: 700,
-  color: 'var(--ink-200)',
-} as const;
-
-/**
- * The five-state system is shared by the three frontends and never
- * recoloured (.claude/rules/design-system.md); only three of them ever
- * reach the board (ADR-068 point 2), the other two are here because the
- * type has five members.
- */
-const STATUS_LABELS: Record<PickupRequestStatus, string> = {
-  en_route: 'En camino',
-  arriving: 'Llegando',
-  arrived: 'En puerta',
-  delivered: 'Entregado',
-  cancelled: 'Cancelada',
-};
-
-const STATUS_TONES: Record<
-  PickupRequestStatus,
-  'en-route' | 'arriving' | 'arrived' | 'delivered' | 'cancelled'
-> = {
-  en_route: 'en-route',
-  arriving: 'arriving',
-  arrived: 'arrived',
-  delivered: 'delivered',
-  cancelled: 'cancelled',
-};
-
-/** 24h clock, es-MX (.claude/rules/design-system.md, ADR-069 point 9). */
-function clockLabel(iso: string | null): string | null {
-  if (!iso) return null;
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return null;
-  return at.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-/** ETA in minutes if known, else the estimated clock time, else an em dash. */
-function etaOrClockLabel(row: BoardRow): string {
-  if (row.etaSeconds !== null) {
-    const minutes = Math.max(1, Math.round(row.etaSeconds / 60));
-    return `~${minutes} min`;
-  }
-  return clockLabel(row.estimatedArrivalAt) ?? '—';
-}
-
-const CONNECTION_LABELS: Record<ConnectionState, string> = {
-  connecting: 'Conectando…',
-  live: 'En vivo',
-  reconnecting: 'Reconectando…',
-  closed: 'Sin conexión en vivo',
-};
-
-const CONNECTION_COLORS: Record<ConnectionState, string> = {
-  connecting: 'var(--ink-300)',
-  live: 'var(--success)',
-  reconnecting: 'var(--warning)',
-  closed: 'var(--danger)',
-};
-
-/**
- * A discreet dot + label, never a banner: a kiosk running unattended all day
- * must not alarm the staff over a socket blip that reconnects in a few
- * seconds (ADR-069 point 7, `docs/plan-implementacion.md` Fase 9 §7).
- */
-function ConnectionIndicator({ connection }: { connection: ConnectionState }) {
-  return (
-    <span
-      role="status"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        fontSize: 13,
-        fontWeight: 700,
-        color: 'var(--ink-400)',
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: CONNECTION_COLORS[connection],
-          flexShrink: 0,
-        }}
-      />
-      {CONNECTION_LABELS[connection]}
-    </span>
-  );
-}
+import { STATUS_META } from '../board/board-display';
+import { announcePickup } from '../board/tts';
+import { readStoredBoardMode, writeStoredBoardMode, type BoardMode } from '../board/board-mode';
+import { useClock } from '../board/useClock';
+import { useDismissalWindow } from '../board/useDismissalWindow';
+import { useInstitutionProfile } from '../board/useInstitutionProfile';
+import { useDeliveryPoints } from '../board/useDeliveryPoints';
+import { useInstitutionBoard } from '../board/useInstitutionBoard';
+import { useInstitutionBoardMonitor } from '../board/useInstitutionBoardMonitor';
+import type { BoardRow } from '../board/board-rows';
 
 const EMPTY_BOARD_ICON = (
   <svg
@@ -121,211 +34,295 @@ const EMPTY_BOARD_ICON = (
   </svg>
 );
 
-interface BoardRowCardProps {
-  row: BoardRow;
-  animate: boolean;
-}
+const EMPTY_TITLE = 'Sin recogidas en curso';
+const EMPTY_DESCRIPTION =
+  'Las recogidas activas aparecerán aquí en cuanto un tutor avise que va en camino.';
 
 /**
- * One hero row. Font sizes lean on the design system's largest display
- * tokens (`packages/ui/src/tokens/typography.css`) — this screen is read
- * from several meters away, unlike any other in the product.
+ * Andén's own loading/error/empty look (dark) — `packages/ui`'s `ErrorState`/
+ * `EmptyState`/`SkeletonRow` assume a light surface (`.claude/rules/design-system.md`
+ * doesn't define a dark variant, ADR-071 §7/§11: no dark tokens added to
+ * `packages/ui` for a single consumer), so Andén builds its own instead of a
+ * light block floating unreadably on `#0A1622`.
  */
-function BoardRowCard({ row, animate }: BoardRowCardProps) {
+function DarkLoading() {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 24,
-        padding: '20px 28px',
-        borderBottom: '1px solid var(--border-hairline)',
-        background: animate ? 'var(--brand-soft)' : 'var(--surface)',
-        animation: animate ? 'clg-board-pulse 1.8s ease-out' : undefined,
-      }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-        <span
-          style={{
-            fontSize: 'var(--text-display-lg)',
-            fontWeight: 800,
-            color: 'var(--ink-900)',
-            letterSpacing: '-.02em',
-            lineHeight: 1.1,
-          }}
-        >
-          {row.studentFullName}
-        </span>
-        <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--ink-400)' }}>
-          {row.gradeOrGroup ?? 'Sin grupo'}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexShrink: 0 }}>
-        <Badge tone={STATUS_TONES[row.status]}>{STATUS_LABELS[row.status]}</Badge>
-        <span
-          style={{
-            fontSize: 'var(--text-display)',
-            fontWeight: 800,
-            color: 'var(--ink-900)',
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1,
-            minWidth: 120,
-            textAlign: 'right',
-          }}
-        >
-          {etaOrClockLabel(row)}
-        </span>
-      </div>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontSize: 15, color: 'rgba(255,255,255,.5)', fontWeight: 600 }}>
+        Cargando…
+      </span>
     </div>
   );
 }
 
+function DarkError({
+  title,
+  message,
+  code,
+  onRetry,
+}: {
+  title: string;
+  message?: string;
+  code?: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        textAlign: 'center',
+        padding: 24,
+      }}
+    >
+      <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{title}</span>
+      <span style={{ fontSize: 14, color: 'rgba(255,255,255,.6)', maxWidth: 360, lineHeight: 1.5 }}>
+        {message ?? 'Error desconocido'}
+      </span>
+      {code && (
+        <span
+          style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', fontFamily: 'var(--font-mono)' }}
+        >
+          {code}
+        </span>
+      )}
+      <span
+        onClick={onRetry}
+        style={{
+          marginTop: 10,
+          padding: '10px 18px',
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--brand)',
+          color: '#fff',
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        Reintentar
+      </span>
+    </div>
+  );
+}
+
+function DarkEmpty() {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        textAlign: 'center',
+        padding: 24,
+      }}
+    >
+      <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{EMPTY_TITLE}</span>
+      <span style={{ fontSize: 14, color: 'rgba(255,255,255,.5)', maxWidth: 340, lineHeight: 1.5 }}>
+        {EMPTY_DESCRIPTION}
+      </span>
+    </div>
+  );
+}
+
+/** Shared shape a live channel (public board or Carril's monitor) exposes for the loading/error/empty override below. */
+interface ChannelState {
+  status: 'loading' | 'ready' | 'error';
+  error: { code: string } | null;
+  connectionErrorReason: string | null;
+  reload: () => void;
+}
+
+function contentOverrideFor(
+  channel: ChannelState,
+  visibleCount: number,
+  dark: boolean,
+): ReactNode | undefined {
+  if (channel.connectionErrorReason && channel.status !== 'ready') {
+    const message = boardSocketErrorMessage(channel.connectionErrorReason);
+    return dark ? (
+      <DarkError
+        title="No pudimos abrir el tablero en vivo"
+        message={message}
+        code={channel.connectionErrorReason}
+        onRetry={channel.reload}
+      />
+    ) : (
+      <ErrorState
+        title="No pudimos abrir el tablero en vivo"
+        message={message}
+        code={channel.connectionErrorReason}
+        onRetry={channel.reload}
+      />
+    );
+  }
+
+  if (channel.status === 'loading') {
+    return dark ? (
+      <DarkLoading />
+    ) : (
+      <>
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </>
+    );
+  }
+
+  if (channel.status === 'error') {
+    const message = channel.error ? boardListErrorMessage(channel.error.code) : undefined;
+    return dark ? (
+      <DarkError
+        title="No pudimos cargar las recogidas de esta institución"
+        message={message}
+        code={channel.error?.code}
+        onRetry={channel.reload}
+      />
+    ) : (
+      <ErrorState
+        title="No pudimos cargar las recogidas de esta institución"
+        message={message}
+        code={channel.error?.code}
+        onRetry={channel.reload}
+      />
+    );
+  }
+
+  if (visibleCount === 0) {
+    return dark ? (
+      <DarkEmpty />
+    ) : (
+      <EmptyState icon={EMPTY_BOARD_ICON} title={EMPTY_TITLE} description={EMPTY_DESCRIPTION} />
+    );
+  }
+
+  return undefined;
+}
+
 /**
- * The board's single hero screen (feature Fase 9, ADR-068, ADR-069): live
- * feed of the institution's active pickups, "llegadas de aeropuerto" style.
+ * The board's single screen, now orchestrating the 3 real modes of the kit
+ * (ADR-071): Andén (public, dark), Sereno (public, light), Carril (staff).
+ * Andén/Sereno share the public feed (`useInstitutionBoard`); Carril opens
+ * its own channel (`useInstitutionBoardMonitor`) only while active, by
+ * simply not handing it an `institutionId` otherwise — same pattern the
+ * public hook already uses while the institution itself is still loading.
  */
 export function Home() {
   const { logout } = useAuth();
   const { current, institutionId } = useInstitution();
-  const [now, setNow] = useState(() => new Date());
-  const [selectedDeliveryPointId, setSelectedDeliveryPointId] = useState<string | null>(null);
+  const institutionName = current?.institutionName ?? 'Institución';
 
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1_000);
-    return () => clearInterval(timer);
+  const [mode, setMode] = useState<BoardMode>(() => readStoredBoardMode());
+  const changeMode = useCallback((next: BoardMode) => {
+    setMode(next);
+    writeStoredBoardMode(next);
   }, []);
+
+  const [selectedDeliveryPointId, setSelectedDeliveryPointId] = useState<string | null>(null);
+  const [lastAnnounced, setLastAnnounced] = useState<LastAnnounced | null>(null);
+
+  const { clock, dateText } = useClock();
+  const dismissalWindow = useDismissalWindow(institutionId);
+  const subtitle = dismissalWindow.window
+    ? `${dismissalWindow.window.label} · ${dismissalWindow.window.startTime}–${dismissalWindow.window.endTime}`
+    : null;
+
+  const profile = useInstitutionProfile(institutionId);
+  const points = useDeliveryPoints(institutionId);
 
   const onAnnounce = useCallback((row: BoardRow) => {
     if (row.status !== 'arriving' && row.status !== 'arrived') return;
     announcePickup({ studentFullName: row.studentFullName, status: row.status });
+    setLastAnnounced({
+      studentFullName: row.studentFullName,
+      statusLabel: STATUS_META[row.status].label,
+    });
   }, []);
 
-  const board = useInstitutionBoard(institutionId, onAnnounce);
-  const points = useDeliveryPoints(institutionId);
+  // Carril opens its own channel only while it's the active mode (ADR-071
+  // point 6) — passing `null` the rest of the time lets each hook's own
+  // `useEffect` no-op, the exact mechanism `useInstitutionBoard` already uses
+  // while the institution is still loading.
+  const board = useInstitutionBoard(mode === 'carril' ? null : institutionId, onAnnounce);
+  const monitor = useInstitutionBoardMonitor(mode === 'carril' ? institutionId : null);
 
-  const visibleRows =
-    selectedDeliveryPointId === null
-      ? board.rows
-      : board.rows.filter((row) => row.deliveryPointId === selectedDeliveryPointId);
+  const visibleBoardRows = useMemo(
+    () =>
+      selectedDeliveryPointId === null
+        ? board.rows
+        : board.rows.filter((row) => row.deliveryPointId === selectedDeliveryPointId),
+    [board.rows, selectedDeliveryPointId],
+  );
+  const visibleMonitorRows = useMemo(
+    () =>
+      selectedDeliveryPointId === null
+        ? monitor.rows
+        : monitor.rows.filter((row) => row.deliveryPointId === selectedDeliveryPointId),
+    [monitor.rows, selectedDeliveryPointId],
+  );
+
+  const deliveryPointFilter =
+    points.status === 'ready' && points.deliveryPoints.length > 0 ? (
+      <DeliveryPointFilter
+        deliveryPoints={points.deliveryPoints}
+        value={selectedDeliveryPointId}
+        onChange={setSelectedDeliveryPointId}
+        variant={mode === 'sereno' ? 'light' : 'dark'}
+      />
+    ) : undefined;
+
+  let screen: ReactNode;
+
+  if (mode === 'anden') {
+    screen = (
+      <AndenBoard
+        institutionName={institutionName}
+        subtitle={subtitle}
+        clock={clock}
+        dateText={dateText}
+        rows={visibleBoardRows}
+        lastAnnounced={lastAnnounced}
+        deliveryPointFilter={deliveryPointFilter}
+        contentOverride={contentOverrideFor(board, visibleBoardRows.length, true)}
+      />
+    );
+  } else if (mode === 'sereno') {
+    screen = (
+      <SerenoBoard
+        institutionName={institutionName}
+        subtitle={subtitle}
+        clock={clock}
+        dateText={dateText}
+        rows={visibleBoardRows}
+        deliveryPointFilter={deliveryPointFilter}
+        contentOverride={contentOverrideFor(board, visibleBoardRows.length, false)}
+      />
+    );
+  } else {
+    screen = (
+      <CarrilBoard
+        institutionName={institutionName}
+        subtitle={subtitle}
+        clock={clock}
+        rows={visibleMonitorRows}
+        advanceNoticeMinutes={profile.advanceNoticeMinutes}
+        deliveryPointFilter={deliveryPointFilter}
+        contentOverride={contentOverrideFor(monitor, visibleMonitorRows.length, false)}
+        onLogout={logout}
+      />
+    );
+  }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'var(--font-sans)',
-      }}
-    >
-      <style>
-        {
-          '@keyframes clg-board-pulse{0%{background:var(--brand-soft)}100%{background:var(--surface)}}'
-        }
-      </style>
-
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 20,
-          flexWrap: 'wrap',
-          padding: '24px 32px',
-          background: 'var(--surface)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <span style={EYEBROW_STYLE}>Tablero</span>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 'var(--text-display-sm)',
-              fontWeight: 800,
-              color: 'var(--ink-900)',
-              letterSpacing: '-.02em',
-            }}
-          >
-            {current?.institutionName ?? 'Institución'}
-          </h1>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-          {points.status === 'ready' && points.deliveryPoints.length > 0 && (
-            <DeliveryPointFilter
-              deliveryPoints={points.deliveryPoints}
-              value={selectedDeliveryPointId}
-              onChange={setSelectedDeliveryPointId}
-            />
-          )}
-
-          <span
-            style={{
-              fontSize: 'var(--text-display-sm)',
-              fontWeight: 800,
-              color: 'var(--ink-900)',
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1,
-            }}
-          >
-            {now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })}
-          </span>
-
-          <ConnectionIndicator connection={board.connection} />
-
-          <Button variant="ghost" size="sm" onClick={logout}>
-            Cerrar sesión
-          </Button>
-        </div>
-      </header>
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {board.status === 'loading' && !board.connectionErrorReason && (
-          <>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </>
-        )}
-
-        {board.connectionErrorReason && board.status !== 'ready' && (
-          <ErrorState
-            title="No pudimos abrir el tablero en vivo"
-            message={boardSocketErrorMessage(board.connectionErrorReason)}
-            code={board.connectionErrorReason}
-            onRetry={board.reload}
-          />
-        )}
-
-        {board.status === 'error' && !board.connectionErrorReason && (
-          <ErrorState
-            title="No pudimos cargar las recogidas de esta institución"
-            message={board.error ? boardListErrorMessage(board.error.code) : undefined}
-            code={board.error?.code}
-            onRetry={board.reload}
-          />
-        )}
-
-        {board.status === 'ready' && visibleRows.length === 0 && (
-          <EmptyState
-            icon={EMPTY_BOARD_ICON}
-            title="Sin recogidas en curso"
-            description="Las recogidas activas aparecerán aquí en cuanto un tutor avise que va en camino."
-          />
-        )}
-
-        {board.status === 'ready' &&
-          visibleRows.map((row) => (
-            <BoardRowCard
-              key={row.pickupRequestId}
-              row={row}
-              animate={board.recentlyChangedIds.has(row.pickupRequestId)}
-            />
-          ))}
-      </div>
-    </main>
+    <div style={{ position: 'relative' }}>
+      {screen}
+      <ModeSwitcher value={mode} onChange={changeMode} />
+    </div>
   );
 }

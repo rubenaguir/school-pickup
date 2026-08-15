@@ -4,6 +4,14 @@ export interface DeliveryPointFilterProps {
   deliveryPoints: DeliveryPointResponse[];
   value: string | null;
   onChange: (deliveryPointId: string | null) => void;
+  /**
+   * `'light'` (default) is the original chip, meant for a light page (the
+   * default board layout, Sereno). `'dark'` is a translucent-on-navy variant
+   * for Andén/Carril's dark headers (ADR-071 §11) — same shape, different
+   * tokens, so the filter reads on all 3 modes instead of floating a light
+   * box on a dark bar.
+   */
+  variant?: 'light' | 'dark';
 }
 
 /**
@@ -15,14 +23,20 @@ export interface DeliveryPointFilterProps {
  * (`--surface-muted`, `--ink-900`, `--radius-lg`), a local component instead
  * of touching the design system for this one screen's need.
  */
-export function DeliveryPointFilter({ deliveryPoints, value, onChange }: DeliveryPointFilterProps) {
+export function DeliveryPointFilter({
+  deliveryPoints,
+  value,
+  onChange,
+  variant = 'light',
+}: DeliveryPointFilterProps) {
+  const dark = variant === 'dark';
   return (
     <div
       style={{
         display: 'flex',
         gap: 5,
-        background: 'var(--surface-muted)',
-        border: '1px solid var(--border)',
+        background: dark ? 'rgba(255,255,255,.08)' : 'var(--surface-muted)',
+        border: dark ? '1px solid rgba(255,255,255,.15)' : '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         padding: 4,
         width: 'max-content',
@@ -44,9 +58,9 @@ export function DeliveryPointFilter({ deliveryPoints, value, onChange }: Deliver
               fontWeight: 700,
               cursor: 'pointer',
               fontFamily: 'var(--font-sans)',
-              background: active ? 'var(--ink-900)' : 'transparent',
-              color: active ? '#fff' : 'var(--ink-300)',
-              boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              background: active ? (dark ? 'var(--brand)' : 'var(--ink-900)') : 'transparent',
+              color: active ? '#fff' : dark ? 'rgba(255,255,255,.6)' : 'var(--ink-300)',
+              boxShadow: active && !dark ? 'var(--shadow-sm)' : 'none',
             }}
           >
             {option.label}
