@@ -4837,3 +4837,55 @@ esta fase.
   visual de este ADR).
 - `apps/api/src/institution-members/dto/responses.ts` (`phone` agregado a
   `InstitutionMemberListItem`, punto 4).
+
+**Enmienda a ADR-072 punto 3 (verificación en vivo, post-implementación).**
+El conteo de "Entregados"/"Por nivel" del Dashboard, tal como se
+implementó primero, solo acumulaba entregas ocurridas *mientras la
+pantalla estaba abierta y conectada* (`deliveredSinceConnect`, hallazgo
+correcto de Claude Code: el canal `board-monitor` descarta
+`delivered`/`cancelled` en cuanto llega el delta, ADR-071, así que no hay
+snapshot que contarlos de otra forma) — un refresh de página reiniciaba el
+contador a cero aunque ya se hubieran entregado alumnos antes. Confirmado
+con el humano: debe sobrevivir un refresh.
+
+`pickup_requests.completed_at` ya persiste este dato — `apps/api/src/institution-reports/institution-reports.service.ts`
+ya prueba exactamente esta consulta (`status = 'delivered' AND completedAt
+BETWEEN :start AND :end`) para su período `'today'`. **No se reutiliza ese
+endpoint tal cual**: `GET /institutions/:id/reports` exige `role = admin`
+(ADR-060 punto 6), mientras que el Dashboard es visible para cualquier
+`institution_member` sin restricción de rol (mismo criterio de ADR-071
+punto 1) — reutilizarlo habría filtrado el conteo solo para admins,
+rompiendo la pantalla para coordinador/docente/operador de puerta sin que
+fuera obvio por qué.
+
+**Decisión.**
+
+1. **Endpoint nuevo**: `GET /institutions/:id/delivered-today`
+   (`apps/api/src/pickups/`, mismo controller/guard que ya usa
+   `view=monitor` — cualquier `institution_member`, sin restricción de
+   `role`). Respuesta:
+   ```json
+   { "asOf": "2026-08-15T20:03:00.000Z", "total": 12, "byGroup": [{ "label": "3°A", "count": 4 }] }
+   ```
+   `asOf` es el instante en que el servidor ejecutó la consulta (no un
+   valor enviado por el cliente) — mismo query (`completedAt` entre inicio
+   del día calendario y `asOf`) que `institution-reports.service.ts` ya
+   valida, agrupado además por `enrollment.gradeOrGroup` (mismo criterio
+   de `dashboard-grouping.ts`: sin inventar un campo "nivel" que no
+   existe, agrupa por lo que sí hay).
+2. **El cliente siembra su acumulador con esta línea base al montar y en
+   cada reconexión** (mismo punto del ciclo donde ya recarga el snapshot
+   REST del canal `board-monitor`) — no solo una vez al inicio.
+3. **Sin doble conteo en la ventana de carrera**: un delta en vivo de
+   `status: 'delivered'` solo se suma al acumulador si su `updatedAt` es
+   **posterior** a `asOf` — evita contar dos veces una entrega que ocurrió
+   justo en el instante en que el servidor ya la había capturado en la
+   línea base pero el socket todavía no había entregado ese mismo evento
+   como delta.
+4. **Copy revertido**: "Entregas registradas desde que se abrió este
+   panel" vuelve a "Entregados hoy" — ya es una afirmación honesta con la
+   línea base real detrás.
+
+**Consecuencias.** Es una consulta más por carga/reconexión del
+Dashboard, sin nueva tabla ni migración — reutiliza una columna y un
+patrón de consulta ya probados en producción (`institution-reports`).
