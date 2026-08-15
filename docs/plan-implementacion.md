@@ -288,56 +288,65 @@ manual OR (tutor dueño / institution_member) ya documentado en
 nueva decisión de arquitectura, sin ADR nuevo. Hallazgo 2 (comentario
 obsoleto en migración 401) corregido.
 
-## Fase 7 — Frontend: `apps/portal`
+## Fase 7 — Frontend: `apps/portal` — reabierta tras auditoría contra el design system real
 
 - [x] Resolver tokens del design system antes de esta fase — el proyecto
       "CasiLlego Design System" (`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`)
       ya existe; tokens, fuentes y los 10 componentes base se portaron a
-      `packages/ui` (`@casillego/ui`, ver ADR-036). Pendiente aún: construir
-      las pantallas reales de `ui_kits/portal-admin` (ver ítem de abajo).
+      `packages/ui` (`@casillego/ui`, ver ADR-036).
 - [x] `.claude/rules/design-system.md` con los tokens reales
-- [x] Plomería base de `apps/portal` (ADR-042 y ADR-043): `react-router` v7 con
-      `<ProtectedRoute>`, cliente de API compartido en
-      `packages/shared/src/api-client/` (JWT en `localStorage`, refresh
-      transparente ante 401), `AuthContext`, `InstitutionContext` sobre
-      `GET /institution-members/mine`, y la pantalla de login siguiendo
-      `ui_kits/acceso`. Incluye el endpoint `/mine` del lado del `api` —
-      ADR-041 lo había especificado sin implementarlo — y CORS por allowlist.
-      La ruta de la bandeja de aprobación ya existe como placeholder:
-      `/enrollments/pending`.
-- [x] Pantallas en orden de prioridad del `design-brief.md`: bandeja de
-      aprobación de alumnos ★ (`/enrollments/pending`, Capa 3b) → perfil de
-      institución/geocerca (Capa 3c, con mapa Mapbox — ADR-048) → puntos de
-      entrega (Capa 3d) → consola de puerta (Capa 3e, con puente WebSocket
-      en tiempo real — ADR-050/051/052) → horarios (Capa 3f, recurrentes +
-      días especiales) → personal (Capa 3g) → reportes (Capa 3o, ADR-060,
-      `specs/features/027-reportes-institucion.md` — incluye el algoritmo
-      de puntualidad contra horarios de salida)
-- [x] Vistas de super-admin: plomería (`isSuperAdmin` en `AuthContext`,
-      `SuperAdminRoute`, ADR-055) + aprobación/suspensión/reactivación de
-      instituciones + métricas globales (Capa 3h). El slice diferido de
-      Fase 1 ya se especificó e implementó (ADR-038, ADR-040) — este ítem
-      ya no depende de nada externo.
-- [x] Plomería de vistas de tutor: `TutorContext`, `AuthenticatedLayout`
-      combinado con switcher institución/tutor (ADR-056)
-- [x] Vistas de tutor: mis hijos (Capa 3i, requirió enriquecer
-      `GET /enrollments/mine` — ADR-057), alta de alumno (Capa 3j, sin foto
-      a propósito — ADR-058), asociar institución (Capa 3k, incluyó
-      implementar `GET /institutions?search=...`, que estaba especificado
-      desde ADR-037 pero nunca construido), tutores autorizados (Capa 3l),
-      mis vehículos (Capa 3m)
-- [x] Resto de "Perfil" de tutor (datos personales, preferencias de
-      notificación, cambio de contraseña — Capa 3n, ADR-059,
-      `specs/features/026-perfil-tutor.md`). Biometría confirmada fuera de
-      alcance del backend, sin pendiente.
+- [x] Plomería base de `apps/portal` (ADR-042 y ADR-043)
+- [x] Pantallas en orden de prioridad del `design-brief.md` — funcionalmente
+      completas y verificadas contra el backend real
+- [x] Vistas de super-admin (Capa 3h) y de tutor (Capas 3i–3n) —
+      funcionalmente completas
+- [ ] **Reabierto (ADR-072): el propio checklist original de esta fase ya
+      señalaba "pendiente construir las pantallas reales de
+      `ui_kits/portal-admin`" (ítem de arriba) — la fase se cerró de todas
+      formas sin resolverlo, mismo patrón de fondo que se encontró y
+      corrigió en Fase 9 (ADR-069/071).** Barrido rápido contra
+      `design/casillego-design-system/ui_kits/portal-admin/` (agosto 2026)
+      confirmó el hallazgo: no existe ningún shell de navegación
+      persistente en ningún rol (cada pantalla es una tarjeta centrada
+      independiente, sin la sidebar oscura del kit), y no existe ninguna
+      pantalla de Dashboard — `HOME_PATH` es un alias literal de la
+      bandeja de aprobación. Ver también el mismo patrón en la Consola de
+      puerta (kit `puerta-consola`, layout de dos paneles vs. tarjeta
+      centrada actual).
+- [ ] **Fase A (ADR-072, en curso)** — shell de navegación del rol
+      Institución + Dashboard real:
+  - [ ] `InstitutionShell`: sidebar 250px + header, envolviendo las 7
+        pantallas de institución (Dashboard nuevo incluido)
+  - [ ] Dashboard: 3 tarjetas KPI (En camino/En puerta/Entregados, sin
+        Esperados ni %), "Por nivel" como conteo simple, "Requiere
+        atención" con datos fijos (a poblar después), tabla de actividad
+        en vivo reutilizando el feed `view=monitor` de Carril (ADR-071)
+        sin backend nuevo
+  - [ ] "Coordinación de salida" en la página de Institución, con dato
+        real (`institution_member.role = coordinator` + `users.phone`,
+        agregar `phone` a `InstitutionMemberListItem`)
+- [ ] **Fase B (pendiente de ADR)** — Consola de puerta: layout de dos
+      paneles fiel al kit `puerta-consola` (hoy tarjeta centrada
+      `max-width: 820px`)
+- [ ] **Fase C (pendiente de ADR)** — shell de navegación del rol
+      Operador/OPS envolviendo `InstitutionApproval`/`GlobalMetrics`
+      existentes
+- [ ] "Usuarios" y "Configuración" del rol Operador (secciones del kit
+      OPS) — **diferido indefinidamente, no es un pendiente de esta
+      reapertura.** Confirmado con el humano: el concepto de roles ya
+      vive donde importa (`Personnel.tsx`, roles a nivel institución); la
+      configuración global que el kit imaginaba ya está resuelta de otra
+      forma (puntos de entrega y perfil de institución por separado,
+      notificaciones que cada tutor controla en `apps/parent`). Requeriría
+      además modelo de roles nuevo para el equipo interno de CasiLlego
+      (hoy `is_super_admin` es un booleano simple) — funcionalidad de
+      producto nueva, no una corrección visual. Mismo criterio que el QR
+      (ADR-070): se documenta, no se construye especulativamente.
 
-**Fase 7 completa.** Las 14 pantallas de `apps/portal` (9 de institución +
-2 de super-admin + 5 de tutor — sí, 16 conteos nominales pero 2 pares
-comparten módulo/ruta) están construidas y verificadas de punta a punta
-contra el backend real, junto con la plomería de sesión, el puente
-WebSocket de tiempo real (base ya lista para Fase 8/9), y el design system
-completo en `packages/ui`. Sin pendientes abiertos en el checklist
-original de `docs/design-brief.md` para este frontend.
+**No completa.** El trabajo funcional de Fase 7 (pantallas, plomería,
+verificación contra backend) se conserva — lo que se rehace es la capa de
+navegación/layout que nunca se construyó pese a estar señalada desde el
+cierre original de la fase.
 
 ## Fase 8 — Frontend: `apps/parent` (PWA) ✅ completo
 
@@ -474,4 +483,4 @@ Ver ADR-071 para la especificación completa.
 | Sin `eslint-plugin-react` en `packages/ui/src` ni en los 3 frontends — solo hay reglas de `eslint-hooks` (ADR-036). Pérdida real de cobertura, no cosmética: sin `react/jsx-key` no se detecta `key` faltante en listas (`SegmentedTabs` ya mapea un array), sin `react/no-unescaped-entities`/`react/jsx-no-duplicate-props`/etc. no se detecta JSX mal formado | ADR-036 — última versión publicada de `eslint-plugin-react` (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 | Revisar en cada fase nueva de frontend (Fase 7 pantallas, Fase 8, Fase 9) si ya hay versión compatible con ESLint 10; si no, evaluar `@eslint-react/eslint-plugin` (peer `eslint: '*'`, ya confirmado disponible en el registro) como alternativa nativa de flat config |
 | ~~`npm run dev:api` falla con `Cannot find module .../dist/main`~~ — `incremental: true` + `deleteOutDir: true` dejaban un `.tsbuildinfo` obsoleto **fuera** de `dist/` (la ruta por defecto colapsa a `dist/../tsconfig.build.tsbuildinfo` porque `rootDir` es `./src`); `tsc` lo leía, creía que todo estaba al día y emitía 0 archivos saliendo con código 0 | Reincidente: se "resolvió" una primera vez borrando el `.tsbuildinfo` a mano, sin dejar registro, y volvió a aparecer | ✅ Resuelto — ADR-046, `incremental` retirado de `apps/api` y `apps/worker` (+ comentario de advertencia en ambos `tsconfig.json`). **Precedente a no repetir:** un síntoma de build que se arregla borrando un archivo a mano no está arreglado; si vuelve a aparecer un `dist/` vacío o incompleto, revisar la interacción caché/`deleteOutDir` antes de borrar nada |
 | Tests de integración contra Postgres real (`*.integration.spec.ts`, `npm run test:integration`) quedan **fuera de `npm run check`** a propósito (el gate principal no debe exigir una base de datos disponible) — nada obliga a correrlos antes de cerrar una fase | ADR-044 — primera categoría de test de este tipo en el proyecto, introducida al diagnosticar y corregir el defecto de `institution_id` en `NULL` | Correr `npm run test:integration` explícitamente antes de cerrar cualquier fase que toque escritura de entidades con relaciones (no solo confiar en `npm run check`); evaluar más adelante si conviene integrarlo a CI si el proyecto adopta CI |
-| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **cuatro veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069), y `apps/board/src/board` de nuevo para el canal de Carril (ADR-071 punto 2) | ADR-069 punto 6, confirmado de nuevo en ADR-071 — decisión consciente de no extraer todavía, no descuido | Evaluar un hook/factory genérico en `packages/shared` cuando se retome Fase 10 (pulido); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |
+| El patrón "canal WS con snapshot REST + deltas" (fusión pura, orden, parseo defensivo, reconexión con backoff) está reimplementado app-local **cinco veces**: `apps/portal/src/gate-console` (ADR-052), `apps/parent/src/pickup-requests` (ADR-064), `apps/board/src/board` (ADR-069), `apps/board/src/board` de nuevo para Carril (ADR-071 punto 2), y ahora `apps/portal` para el Dashboard institucional (ADR-072 punto 5, reutilizando el feed de Carril) | ADR-069 punto 6, confirmado de nuevo en ADR-071 y ADR-072 — decisión consciente de no extraer todavía, no descuido | **Señal cada vez más fuerte de que ya es momento de extraerlo** — 5 instancias. Evaluar un hook/factory genérico en `packages/shared` en cuanto se cierre la Fase A del portal (ADR-072); requiere decidir cómo parametrizar la fusión (criterio de "estado terminal" y de "delta viejo" difieren ligeramente entre consumidores) antes de unificar |

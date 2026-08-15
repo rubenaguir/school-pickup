@@ -4692,3 +4692,148 @@ que se mantiene intacto y se re-skinnea para los 3 temas.
   promovida a `packages/shared` por este ADR).
 - `specs/entities/institution.md` (`advance_notice_minutes`, campo
   reutilizado sin migración).
+
+## ADR-072 — Portal admin, Fase A: shell de navegación del rol Institución + Dashboard real
+
+**Contexto.** El barrido rápido de `apps/portal` contra
+`design/casillego-design-system/ui_kits/portal-admin/` (mismo ejercicio de
+handoff que ADR-071 hizo para el tablero) encontró un problema estructural,
+no de estilo: **no existe ningún shell de navegación persistente** en
+ningún rol. Cada pantalla de institución (`InstitutionProfile`,
+`DeliveryPoints`, `DismissalSchedule`, `Personnel`, `Reports`,
+`PendingEnrollments`) es una tarjeta centrada independiente
+(`max-width` ~800px sobre `var(--bg-app)`), sin la barra lateral oscura de
+250px que el kit usa consistentemente. Tampoco existe una pantalla de
+Dashboard — `HOME_PATH` es un alias literal de `PENDING_ENROLLMENTS_PATH`.
+
+Alcance de este ADR: **solo el rol Institución** (Fase A del plan
+acordado con el humano: A → B → C, dejando el shell de OPS para un ADR
+propio más adelante, y "Usuarios"/"Configuración" del rol operador
+diferidos indefinidamente — ver Backlog técnico).
+
+**Decisión.**
+
+### 1. `InstitutionShell` — sidebar + header, envuelve las pantallas existentes
+
+Componente nuevo (`apps/portal/src/institution/InstitutionShell.tsx`),
+calco de la sidebar del kit: 250px, `var(--ink-900)`, isotipo + wordmark,
+nombre de institución, 7 ítems de navegación (ver punto 2), contador de
+pendientes sobre "Aprobaciones" (mismo dato que ya resuelve
+`PendingEnrollments`), pie con iniciales + nombre + rol del usuario en
+sesión. Header superior: 68px, blanco, breadcrumb
+"Institución / {sección activa}" — **sin la caja de búsqueda del kit**:
+no hay ninguna funcionalidad de búsqueda especificada para lo que
+buscaría (¿alumnos? ¿solicitudes? ¿personal?, cada pantalla ya tiene su
+propio filtro), así que agregar el control visualmente sin que haga nada
+sería peor que omitirlo — mismo criterio que ya se aplicó a "Esperados"
+en este mismo ADR (punto 3): no se construye un elemento que sugiere una
+función que no existe.
+
+`InstitutionShell` envuelve las rutas de institución como layout de React
+Router (mismo mecanismo que `AuthenticatedLayout`/`InstitutionGate` ya
+usan), no como wrapper manual en cada pantalla — una sola inserción en
+`App.tsx`.
+
+### 2. Navegación: 7 ítems, no los 6 del kit — se conserva la IA real ya construida
+
+El kit consolida "puntos de entrega" como una tarjeta dentro de la página
+"Institución" (junto con "Tolerancia y avisos" y "Coordinación de
+salida"), sin ítem propio de navegación. La app real ya tiene
+`DeliveryPoints` como pantalla independiente, con gestión completa
+(asignación de grupos, operador, activar/desactivar) — mucho más que la
+tarjeta de solo lectura del kit. **Se mantiene como ítem propio de
+navegación**, no se consolida dentro de "Institución": replicar
+literalmente el kit aquí significaría degradar una pantalla ya construida
+y verificada a una tarjeta más simple, sin ninguna razón funcional para
+hacerlo. Nav final: Dashboard, Aprobaciones, Institución, Puntos de
+entrega, Horarios, Personal, Reportes.
+
+### 3. Dashboard — alcance negociado con el humano, sin inventar datos que no existen
+
+El kit muestra: 4 tarjetas KPI (Esperados/En camino/En puerta/Entregados
+con %), un panel grande de "Avance de la salida" (barra + desglose
+proporcional), "Por nivel" (barra de progreso por nivel), "Requiere
+atención" (alertas), y una tabla de actividad en vivo filtrable.
+
+Confirmado con el humano, campo por campo:
+
+- **"Esperados" se omite por completo.** No existe ninguna lista de
+  asistencia esperada — no hay entidad ni cálculo que determine cuántos
+  alumnos se espera recoger en la ventana activa. Inventar un
+  aproximado sería un dato falso presentado como real.
+- **Tarjetas KPI: 3, no 4** — En camino / En puerta / Entregados, conteos
+  simples derivados del feed en vivo (punto 5). La tarjeta de Entregados
+  **no lleva el sub-texto de porcentaje** (dependía de "esperados").
+- **El panel grande "Avance de la salida" (barra + desglose proporcional)
+  se omite por completo** — depende del mismo denominador que "Esperados"
+  para tener sentido; sin él, una barra de "% completado" sería engañosa,
+  no solo incompleta.
+- **"Por nivel" se conserva, pero como conteo simple, sin barra ni
+  porcentaje** (ej. "Primaria: 12 entregados hoy") — no implica ningún
+  total, solo cuenta lo que sí es real: cuántas recogidas de ese nivel se
+  completaron hoy. Comparte fila con "Requiere atención" en el layout
+  (ambos paneles quedaron más modestos que el original del kit, `1fr 1fr`
+  en vez de `2fr 1fr`).
+- **"Requiere atención" se conserva con datos fijos/placeholder** — el
+  humano confirmó que le parece un panel importante, a poblar con datos
+  reales más adelante (no existe todavía ningún concepto de alerta en el
+  dominio — "lleva mucho tiempo en camino", geocerca sin activar, etc. —
+  eso es una decisión de producto aparte, no de esta fase). El panel
+  queda visualmente presente, con el mismo contenido de ejemplo del kit,
+  explícitamente marcado en el código como no-funcional todavía.
+- **Tabla de actividad en vivo: real**, ver punto 5.
+
+### 4. "Coordinación de salida" — sí tiene dato real, se agrega a Institución (no al Dashboard)
+
+A diferencia de "Esperados", esta tarjeta **sí es construible**:
+`institution_member.role` ya incluye `coordinator` (ADR-011), y
+`users.phone` ya existe en el esquema (nullable). El kit la ubica dentro
+de la página "Institución", no del Dashboard — se respeta esa ubicación.
+Pequeño ajuste de backend necesario: `InstitutionMemberListItem`
+(`apps/api/src/institution-members/dto/responses.ts`) no expone `phone`
+hoy, solo `fullName`/`email` — se agrega el campo (columna ya existente en
+`users`, sin migración). Si no hay ningún miembro con `role: 'coordinator'`
+en la institución, la tarjeta se omite — no es un estado de error, muchas
+instituciones no habrán designado uno todavía.
+
+### 5. Tabla de actividad en vivo del Dashboard reutiliza el canal de Carril
+
+El feed `view=monitor` (`GET /pickup-requests?institutionId=&view=monitor`
++ `/ws/board-monitor`, ADR-071 punto 2) ya expone exactamente los campos
+que esta tabla necesita (alumno, grupo, tutor, parentesco, vehículo,
+placa, estado, ETA) y ya está autorizado para cualquier `institution_member`
+sin importar `role` — el mismo criterio de acceso que necesita el
+Dashboard. **Se reutiliza sin cambios de backend.** Los conteos de las 3
+tarjetas KPI (punto 3) se derivan del mismo feed en cliente, no piden
+nada aparte.
+
+Esta es la **quinta** reimplementación del patrón "canal WS con snapshot
+REST + deltas" (`gate-console`, `pickup-requests` de `apps/parent`,
+`board` y `board-monitor` de `apps/board`, y ahora esta) — ver Backlog
+técnico, la nota ya existente se actualiza para reflejar el conteo nuevo.
+Se decide **no extraer todavía** en este ADR (mismo criterio de ADR-069/
+071: sin bloquear una fase funcional por un refactor transversal), pero
+esta quinta instancia es la señal más fuerte hasta ahora de que vale la
+pena revisarlo pronto.
+
+**Consecuencias.** El Dashboard queda deliberadamente más simple que el
+mockup — tres piezas omitidas (Esperados, % de Entregados, el panel
+grande de avance) por falta de dato real, no por alcance de tiempo. Puede
+ampliarse más adelante si se decide construir una fuente real de
+"esperados" (ej. lista de asistencia, o inferirlo de horarios recurrentes
++ matrícula) — eso es una decisión de producto nueva, no un pendiente de
+esta fase.
+
+## Referencias
+
+- ADR-011 (roles de `institution_member`, incluye `coordinator` — la base
+  del punto 4).
+- ADR-042 (`InstitutionGate`, mecanismo de layout que `InstitutionShell`
+  reutiliza).
+- ADR-052/069/071 (precedentes del patrón de canal WS reutilizado en el
+  punto 5, y del criterio de "no inventar datos sin fuente real" ya usado
+  para el QR — ADR-070 — y para el timbre de voz del tablero).
+- `design/casillego-design-system/ui_kits/portal-admin/index.html` (fuente
+  visual de este ADR).
+- `apps/api/src/institution-members/dto/responses.ts` (`phone` agregado a
+  `InstitutionMemberListItem`, punto 4).
