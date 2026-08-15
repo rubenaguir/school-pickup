@@ -15,7 +15,7 @@ import { useClock } from '../board/useClock';
 import { useDismissalWindow } from '../board/useDismissalWindow';
 import { useInstitutionProfile } from '../board/useInstitutionProfile';
 import { useDeliveryPoints } from '../board/useDeliveryPoints';
-import { useInstitutionBoard } from '../board/useInstitutionBoard';
+import { useInstitutionBoard, type ManualAnnouncePayload } from '../board/useInstitutionBoard';
 import { useInstitutionBoardMonitor } from '../board/useInstitutionBoardMonitor';
 import type { BoardRow } from '../board/board-rows';
 
@@ -245,11 +245,23 @@ export function Home() {
     });
   }, []);
 
+  const onManualAnnounce = useCallback((payload: ManualAnnouncePayload) => {
+    announcePickup({ studentFullName: payload.studentFullName, status: 'arrived' });
+    setLastAnnounced({
+      studentFullName: payload.studentFullName,
+      statusLabel: STATUS_META.arrived.label,
+    });
+  }, []);
+
   // Carril opens its own channel only while it's the active mode (ADR-071
   // point 6) — passing `null` the rest of the time lets each hook's own
   // `useEffect` no-op, the exact mechanism `useInstitutionBoard` already uses
   // while the institution is still loading.
-  const board = useInstitutionBoard(mode === 'carril' ? null : institutionId, onAnnounce);
+  const board = useInstitutionBoard(
+    mode === 'carril' ? null : institutionId,
+    onAnnounce,
+    onManualAnnounce,
+  );
   const monitor = useInstitutionBoardMonitor(mode === 'carril' ? institutionId : null);
 
   const visibleBoardRows = useMemo(

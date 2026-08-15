@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, readAccessToken, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
-import { mergeBoardDelta, parseBoardDelta, sortBoardRows, type BoardRow } from './board-rows';
+import {
+  mergeBoardDelta,
+  parseBoardAnnounce,
+  parseBoardDelta,
+  sortBoardRows,
+  type BoardRow,
+} from './board-rows';
 import { buildBoardSocketUrl, fatalCloseReason, reconnectDelayMs } from './board-socket';
 
 /**
@@ -59,13 +65,9 @@ function asApiError(caught: unknown): ApiError {
     : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
-function parseMessage(data: unknown): BoardRow | null {
-  if (typeof data !== 'string') return null;
-  try {
-    return parseBoardDelta(JSON.parse(data));
-  } catch {
-    return null;
-  }
+export interface ManualAnnouncePayload {
+  pickupRequestId: string;
+  studentFullName: string;
 }
 
 /**
@@ -82,10 +84,19 @@ function parseMessage(data: unknown): BoardRow | null {
  * state, not re-announce transitions the kiosk already voiced before the
  * drop. Kept out of the hook's own concerns (no `SpeechSynthesis` call in
  * here) so the merge logic stays testable without a browser TTS engine.
+ *
+ * `onManualAnnounce`, when given, fires once per `kind: 'announce'` message
+ * — the "Vocear" event an operator triggers from the gate console (ADR-073
+ * point 4). Unlike `onAnnounce` it carries no `status` gate: the backend
+ * already restricts the action to active pickups (ADR-073 point 2), so any
+ * message that reaches this channel is voiced. The announced row is also
+ * flagged in `recentlyChangedIds` for the pulse animation, same treatment
+ * as a real status change, even though its `status` did not change.
  */
 export function useInstitutionBoard(
   institutionId: string | null,
   onAnnounce?: (row: BoardRow) => void,
+  onManualAnnounce?: (payload: ManualAnnouncePayload) => void,
 ): InstitutionBoardValue {
   const [rows, setRows] = useState<BoardRow[]>([]);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
@@ -105,6 +116,11 @@ export function useInstitutionBoard(
   useEffect(() => {
     onAnnounceRef.current = onAnnounce;
   }, [onAnnounce]);
+
+  const onManualAnnounceRef = useRef(onManualAnnounce);
+  useEffect(() => {
+    onManualAnnounceRef.current = onManualAnnounce;
+  }, [onManualAnnounce]);
 
   const status: BoardStatus =
     institutionId === null
@@ -227,9 +243,29 @@ export function useInstitutionBoard(
 
       opened.onmessage = (event: MessageEvent) => {
         if (cancelled) return;
-        const delta = parseMessage(event.data);
-        // A message that is not a board payload is discarded, never applied:
-        // one malformed publication cannot corrupt the board on screen.
+        if (typeof event.data !== 'string') return;
+
+        let raw: unknown;
+        try {
+          raw = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        const record = raw as { kind?: unknown } | null;
+        if (record && record.kind === 'announce') {
+          const announce = parseBoardAnnounce(raw);
+          if (announce) {
+            flagChanged(new Set([announce.pickupRequestId]));
+            onManualAnnounceRef.current?.(announce);
+          }
+          return;
+        }
+
+        const delta = parseBoardDelta(raw);
+        // A message that is not a recognized board payload is discarded,
+        // never applied: one malformed publication cannot corrupt the board
+        // on screen.
         if (delta) applyLiveDelta(delta);
       };
 
