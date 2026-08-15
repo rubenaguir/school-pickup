@@ -18,6 +18,7 @@ import {
 } from '@casillego/shared/entities';
 import { PickupsController } from './pickups.controller';
 import { PickupDeliveryController } from './pickup-delivery.controller';
+import { PickupAnnounceController } from './pickup-announce.controller';
 import { DeliveredTodayController } from './delivered-today.controller';
 import { PickupsService } from './pickups.service';
 import { PickupRequestAccessService } from './pickup-request-access.service';
@@ -41,7 +42,12 @@ import { PickupRequestAccessService } from './pickup-request-access.service';
     DeliveryPointsModule,
     InstitutionsModule,
   ],
-  controllers: [PickupsController, PickupDeliveryController, DeliveredTodayController],
+  controllers: [
+    PickupsController,
+    PickupDeliveryController,
+    PickupAnnounceController,
+    DeliveredTodayController,
+  ],
   providers: [PickupsService, PickupRequestAccessService],
   exports: [PickupRequestAccessService],
 })

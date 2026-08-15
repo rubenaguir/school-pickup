@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildBoardAnnouncePayload,
   buildBoardMonitorPayload,
   buildBoardPayload,
   buildQueuePayload,
@@ -26,6 +27,7 @@ const snapshot: PickupRequestRealtimeSnapshot = {
 describe('buildBoardPayload', () => {
   it('produces the exact shape documented in pickup-realtime-mqtt.md', () => {
     expect(buildBoardPayload(snapshot)).toEqual({
+      kind: 'row',
       pickupRequestId: 'pr-1',
       status: 'en_route',
       studentFullName: 'Ana Pérez',
@@ -65,6 +67,29 @@ describe('buildBoardPayload', () => {
     expect(payload).not.toHaveProperty('deliveryCode');
     expect(Object.values(payload)).not.toContain('4821');
     expect(JSON.stringify(payload)).not.toContain('4821');
+  });
+});
+
+describe('buildBoardAnnouncePayload', () => {
+  it('produces the exact shape documented in board-ws.md', () => {
+    expect(
+      buildBoardAnnouncePayload('pr-1', 'Ana Pérez', new Date('2026-07-16T08:00:00.000Z')),
+    ).toEqual({
+      kind: 'announce',
+      pickupRequestId: 'pr-1',
+      studentFullName: 'Ana Pérez',
+      announcedAt: '2026-07-16T08:00:00.000Z',
+    });
+  });
+
+  // ADR-073 pt.3: same privacy criterion as the rest of this public channel
+  // (ADR-051/068) — no guardian/vehicle data, not even unrendered.
+  it('does not leak guardian or vehicle data', () => {
+    const payload = buildBoardAnnouncePayload('pr-1', 'Ana Pérez', new Date());
+    expect(payload).not.toHaveProperty('guardianFullName');
+    expect(payload).not.toHaveProperty('vehicleDescription');
+    expect(payload).not.toHaveProperty('vehiclePlate');
+    expect(payload).not.toHaveProperty('deliveryCode');
   });
 });
 

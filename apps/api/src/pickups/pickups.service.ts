@@ -11,8 +11,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import {
+  boardAnnounceTopic,
   boardMonitorTopic,
   boardTopic,
+  buildBoardAnnouncePayload,
   buildBoardMonitorPayload,
   buildBoardPayload,
   buildQueuePayload,
@@ -522,6 +524,47 @@ export class PickupsService {
       status: updated.status,
       completedAt: updated.completedAt!.toISOString(),
     };
+  }
+
+  // ADR-073: "vocear" is ephemeral — no status transition, no persisted row.
+  // Only side effects are the audit_log entry (traceability of who announced
+  // whom, when) and a best-effort MQTT publish to the board's second
+  // channel, same failure policy as publishRealtimeUpdate.
+  async announce(userId: string, id: string): Promise<void> {
+    const pickupRequest = await this.findPickupRequestOrFail(id);
+
+    if (pickupRequest.status === 'delivered' || pickupRequest.status === 'cancelled') {
+      throw new ConflictException(INVALID_STATUS_TRANSITION);
+    }
+
+    const announcedAt = new Date();
+
+    await this.auditLogRepository.save(
+      this.auditLogRepository.create({
+        actor: { id: userId } as User,
+        action: 'pickup_request.announced',
+        entityType: 'pickup_request',
+        entityId: pickupRequest.id,
+        metadata: null,
+      }),
+    );
+
+    try {
+      await this.mqttClient.publish(
+        boardAnnounceTopic(pickupRequest.institutionId),
+        buildBoardAnnouncePayload(
+          pickupRequest.id,
+          pickupRequest.enrollment.student.fullName,
+          announcedAt,
+        ),
+        1,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish pickup_request ${pickupRequest.id} announce to MQTT`,
+        error as Error,
+      );
+    }
   }
 
   private async findPickupRequestOrFail(id: string): Promise<PickupRequest> {

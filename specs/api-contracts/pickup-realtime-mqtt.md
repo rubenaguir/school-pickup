@@ -134,6 +134,7 @@ school-pickup/institution/{institutionId}/board
 "(join)" provienen de entidades relacionadas, no de columnas de `pickup_requests`)
 ```json
 {
+  "kind": "row",
   "pickupRequestId": "uuid",
   "status": "en_route | arriving | arrived | delivered | cancelled",
   "studentFullName": "string (join: student vía enrollment)",
@@ -146,6 +147,10 @@ school-pickup/institution/{institutionId}/board
 }
 ```
 
+`kind: 'row'` discrimina este payload del de "vocear" (ver abajo, ADR-073
+pt.3): ambos viajan por el mismo puente WebSocket
+(`specs/api-contracts/board-ws.md`), aunque son topics MQTT distintos.
+
 El tablero hace la cuenta regresiva por aritmética entre recálculos usando
 `etaSeconds`/`estimatedArrivalAt`, sin llamadas extra (ver `docs/arquitectura.md`
 §ETA y costo).
@@ -157,6 +162,44 @@ verificación es una categoría de exposición distinta de la que ADR-024 punto 
 autorizó (miembros autenticados). Que el payload de cola sí lo lleve no es
 motivo para "emparejar" los dos: la asimetría es la decisión.
 `buildBoardPayload()` tiene un test dedicado que falla si alguien lo arrastra.
+
+## Topic — vocear (ADR-073)
+
+```
+school-pickup/institution/{institutionId}/board-announce
+```
+
+- **Publica:** el `api`, cuando un `institution_members` de la Consola de
+  puerta llama `POST /pickup-requests/:id/announce`
+  (`specs/api-contracts/pickup-requests.md`). A diferencia de los tres
+  topics de arriba, no lo publica ninguna transición de estado del
+  `worker` — "vocear" no es una transición de `pickup_request`.
+- **Consume:** el `api` mismo, por comodín, para reenviarlo al `board`
+  (kiosko) de cada institución vía `specs/api-contracts/board-ws.md`
+  (ADR-073 pt.3) — mismo puente WebSocket que ya reenvía el feed agregado,
+  **no** una conexión nueva. El tablero anuncia al alumno por voz con el
+  mismo mecanismo (`useInstitutionBoard`/`onAnnounce`) que ya usa para las
+  transiciones automáticas a `arriving`/`arrived` (ADR-069).
+
+**Deliberadamente sin snapshot ni histórico** (ADR-073 pt.1): no es el
+patrón "snapshot REST + deltas WS" de los demás canales — no tiene sentido
+"reproducir" un anuncio de audio que ya pasó. Si un tablero se reconecta
+justo después de un voceo, simplemente no lo escucha.
+
+**Payload**
+```json
+{
+  "kind": "announce",
+  "pickupRequestId": "uuid",
+  "studentFullName": "string (join: student vía enrollment)",
+  "announcedAt": "string (timestamptz)"
+}
+```
+
+`kind: 'announce'` discrimina este payload del de fila (arriba). **Sin
+`guardianFullName` ni datos de vehículo** — mismo criterio de privacidad
+que el feed agregado del tablero (ADR-051/068): un kiosko público nunca
+recibe esos datos por el cable, ni siquiera sin pintarlos.
 
 ## Topic — cola de un punto de entrega
 
@@ -305,6 +348,9 @@ falla si alguien lo arrastra.
 - ADR-071 (punto 2: canal `board-monitor` separado para Carril, con datos de
   tutor/vehículo; punto 3: `relationshipLabel` promovido a
   `packages/shared`).
+- ADR-073 (punto 1: "vocear" efímero, sin escritura en base de datos; punto
+  3: topic `board-announce` multiplexado sobre `specs/api-contracts/board-ws.md`
+  vía el discriminador `kind`).
 - `specs/api-contracts/delivery-point-queue-ws.md` (contrato del puente).
 - `specs/api-contracts/board-monitor-ws.md` (contrato del puente de Carril).
 - `docs/arquitectura.md` (nombres de topic, ACL por tenant, flujo de tiempo

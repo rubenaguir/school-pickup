@@ -36,6 +36,7 @@ tutor, o membresía a la institución) contra el `pickup_requests` en cuestión.
 | `GET /pickup-requests?institutionId=` | verificación manual en el `service`: `institution_member` de esa institución, sin restricción de `role` (ver abajo) |
 | `PATCH /pickup-requests/:id/arrived` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
 | `PATCH /pickup-requests/:id/deliver` | **`InstitutionMembershipGuard`** en modo ruta por recurso: `@InstitutionResource({ entity: PickupRequest })` resuelve el `pickup_requests` por su `:id`, lee su `institution_id` (denormalizado, ADR-018 punto 4) y verifica la membresía antes de llegar al controller. Sin restricción de `role` (ADR-011) |
+| `POST /pickup-requests/:id/announce` | **`InstitutionMembershipGuard`**, calco exacto del mecanismo de `deliver` (mismo `@InstitutionResource({ entity: PickupRequest })`). Sin restricción de `role` (ADR-011, ADR-073 punto 2) |
 | `PATCH /pickup-requests/:id/cancel` | verificación manual en el `service`: ser el `guardian_user_id` dueño |
 | `GET /institutions/:id/delivered-today` | **`InstitutionMembershipGuard`** en modo degenerado (`@InstitutionResource({ entity: Institution, idParam: 'id', institutionColumn: 'id' })`, mismo caso que `GET /institutions/:id/reports`): `institution_member` de esa `:id`, sin restricción de `role` (ver abajo) |
 
@@ -530,6 +531,51 @@ en `audit_log` con `action = pickup_request.delivery_code_mismatched`,
 `metadata = null` — no se guarda el código incorrecto tecleado (minimización de
 datos; ADR-031 puntos 7 y 8, `specs/entities/audit_log.md`).
 
+## `POST /pickup-requests/:id/announce`
+
+"Vocear" (ADR-073): un `institution_members` de la Consola de puerta pide
+que el tablero anuncie al alumno por voz. **Acción efímera, sin transición
+de estado** — no es una de las 5 transiciones de la máquina de estados
+compartida (ADR-024 punto 8), no escribe la fila del `pickup_requests`, sin
+tabla ni columna nueva. Ver ADR-073 punto 1.
+
+Válido solo para un `pickup_requests` en estado activo (`en_route` /
+`arriving` / `arrived`) — mismo `ACTIVE_STATUSES` que ya usa `deliver()`.
+
+**Efecto:** escribe `audit_log` (`action = pickup_request.announced`,
+`entity_type = 'pickup_request'`, `entity_id` = el id del `pickup_requests`,
+`metadata = null` — mismo criterio de minimización de datos que
+`delivery_code_mismatched`) y publica al topic
+`school-pickup/institution/{institutionId}/board-announce`
+(`specs/api-contracts/pickup-realtime-mqtt.md`, § "Topic — vocear"), que el
+puente WebSocket del tablero reenvía (`specs/api-contracts/board-ws.md`).
+La publicación es best-effort: un fallo se registra y no afecta la
+respuesta de este endpoint, mismo criterio que el resto de publicaciones
+en tiempo real de este contrato.
+
+Mismo mecanismo de autorización que `deliver`:
+**`InstitutionMembershipGuard`** en modo ruta por recurso, sin restricción
+de `role` (ADR-011).
+
+**Request:** sin body — no hay nada que el cliente deba enviar más que el
+`id` en la ruta.
+
+**Response 204** — sin cuerpo (acción completada, nada que devolver; mismo
+criterio que otros endpoints de acción sin contenido de este API, por
+ejemplo `DELETE /institution-members/:id`).
+
+**Errores**
+| Código | `code` | Caso |
+|---|---|---|
+| 401 | — | no autenticado (respuesta del `JwtAuthGuard`) |
+| 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es `institution_members` de la institución del `pickup_requests` (cualquier `role` sirve, ADR-011) |
+| 404 | `RESOURCE_NOT_FOUND` | el `pickup_requests` no existe |
+| 409 | `INVALID_STATUS_TRANSITION` | el `pickup_requests` ya está en un estado terminal (`delivered`/`cancelled`) |
+
+**Sin límite de repetición ni debounce** (ADR-073 punto 4): un doble clic
+en el operador simplemente repite el anuncio dos veces seguidas — no se
+justifica lógica adicional para un caso de uso de bajo riesgo.
+
 ## `PATCH /pickup-requests/:id/cancel`
 
 El tutor cancela la recogida. Ver feature 022. Transición a `cancelled`.
@@ -639,6 +685,9 @@ igual a `asOf`: esa entrega ya está incluida en `total`/`byGroup`.
 - ADR-072 (enmienda al punto 3: `GET /institutions/:id/delivered-today`,
   línea base persistida de "entregados hoy" para el Dashboard del rol
   Institución, sin restricción de `role`).
+- ADR-073 (`POST /pickup-requests/:id/announce`: acción efímera "vocear",
+  punto 1: sin transición ni escritura de fila; punto 2: mecanismo de
+  autorización calco de `deliver`; punto 3: topic MQTT y canal WebSocket).
 - `specs/api-contracts/delivery-point-queue-ws.md` (los deltas de tiempo real que
   continúan el snapshot del modo `deliveryPointId`).
 - `specs/api-contracts/board-ws.md` (los deltas de tiempo real que continúan el

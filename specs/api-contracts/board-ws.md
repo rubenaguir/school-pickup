@@ -67,16 +67,26 @@ Mismo rango 4000–4999, espejo de los `code` REST equivalentes.
 
 ## Mensajes servidor → cliente
 
-Un mensaje por cada publicación del broker en el topic de tablero de la
-institución de esta conexión — el `api` se suscribe al wildcard completo
-del tablero (`school-pickup/institution/+/board`, mismo topic que ya
-consumen los dos canales hermanos), pero cada cliente de este canal solo
-recibe los que corresponden a su `institutionId`. A diferencia del canal de
+Un mensaje por cada publicación del broker en cualquiera de los dos topics
+que esta conexión multiplexa (ADR-073 pt.3): el feed de filas
+(`school-pickup/institution/+/board`, mismo topic que ya consumen los dos
+canales hermanos) y el de "vocear"
+(`school-pickup/institution/+/board-announce`, ver abajo). El `api` se
+suscribe a ambos wildcards; cada cliente de este canal solo recibe los
+mensajes que corresponden a su `institutionId`. A diferencia del canal de
 seguimiento (que además filtra por `pickupRequestId` dentro de la
 institución del tutor), aquí no hay un segundo filtro: el tablero recibe
 **todo** el feed de su institución, sin importar el `pickup_request` o el
 `delivery_point` al que pertenezca cada fila — el agrupado/filtrado por
 punto de entrega es responsabilidad del cliente (ADR-068 punto 5).
+
+Cada mensaje trae un discriminador `kind` (`'row' | 'announce'`) que indica
+cuál de las dos formas de abajo tiene — primera vez que este canal necesita
+distinguir más de una forma de mensaje (ADR-073 pt.3). El cliente decide
+qué hacer con cada uno según ese campo; el `api` reenvía siempre verbatim,
+sin transformar ninguno de los dos.
+
+### `kind: 'row'` — fila del feed agregado
 
 El cuerpo es **exactamente** el payload que ya construye
 `buildBoardPayload()` (`packages/shared`) — sin envoltura ni campos
@@ -85,11 +95,34 @@ añadidos, misma forma documentada en
 del tablero". **No incluye `deliveryCode`** (ADR-051, deliberado): el
 tablero es una pantalla pública en la recepción de la institución.
 
+### `kind: 'announce'` — "vocear" (ADR-073)
+
+Evento efímero: un operador de la Consola de puerta pide que el tablero
+anuncie a un alumno por voz (`POST /pickup-requests/:id/announce`,
+`specs/api-contracts/pickup-requests.md`). Sin snapshot ni histórico — un
+tablero que se reconecta después de un voceo simplemente no lo escucha. El
+cuerpo es exactamente el payload que construye `buildBoardAnnouncePayload()`
+(`packages/shared`), documentado en
+`specs/api-contracts/pickup-realtime-mqtt.md`, § "Topic — vocear
+(ADR-073)":
+
+```json
+{
+  "kind": "announce",
+  "pickupRequestId": "uuid",
+  "studentFullName": "string (join: student vía enrollment)",
+  "announcedAt": "string (timestamptz)"
+}
+```
+
+**Sin datos de tutor/vehículo** — mismo criterio de privacidad que el resto
+de este canal público (ADR-051/068).
+
 ## Mensajes cliente → servidor
 
 Ninguno — canal unidireccional, igual que los dos canales hermanos. Toda
-acción operativa (confirmar entrega, etc.) va por REST desde la Consola de
-puerta, no desde el tablero.
+acción operativa (confirmar entrega, vocear, etc.) va por REST desde la
+Consola de puerta, no desde el tablero.
 
 ## Reconexión
 
@@ -115,6 +148,8 @@ REST antes de reanudar el consumo de deltas.
   modo de staff — mismo mecanismo, payload con datos de tutor/vehículo,
   ADR-071 pt.2).
 - ADR-071 (punto 2: por qué Carril no reutiliza este canal).
+- ADR-073 (punto 3: "vocear" multiplexado sobre este mismo canal vía el
+  discriminador `kind`, en vez de una sexta conexión WS).
 
 ## Preguntas abiertas
 

@@ -1,5 +1,4 @@
 import type { PickupRequestStatus } from '@casillego/shared';
-import type { BoardRow } from './board-rows';
 
 export interface StatusMeta {
   label: string;
@@ -38,8 +37,25 @@ function minutesFromEta(etaSeconds: number | null): number | null {
   return etaSeconds === null ? null : Math.round(etaSeconds / 60);
 }
 
+/**
+ * Structural, not `BoardRow`: Carril passes its own row shape
+ * (`PickupRequestBoardMonitorPayload`) into these same functions, and
+ * neither of them needs anything beyond status/ETA — no reason to couple
+ * them to the board feed's own wire type (which, since ADR-073 pt.3, also
+ * carries a `kind` discriminator Carril's rows don't have).
+ */
+interface RowWithStatusAndEta {
+  status: PickupRequestStatus;
+  etaSeconds: number | null;
+}
+
+interface RowWithStatusAndArrival {
+  status: PickupRequestStatus;
+  estimatedArrivalAt: string | null;
+}
+
 /** Andén/Sereno's big ETA figure: `'En puerta' | 'Entregado' | 'Cancelado' | `${min} min``. */
-export function etaDisplay(row: BoardRow): string {
+export function etaDisplay(row: RowWithStatusAndEta): string {
   if (row.status === 'arrived') return 'En puerta';
   if (row.status === 'delivered') return 'Entregado';
   if (row.status === 'cancelled') return 'Cancelado';
@@ -48,7 +64,7 @@ export function etaDisplay(row: BoardRow): string {
 }
 
 /** Carril's condensed ETA figure: `'Puerta' | 'Listo' | 'Canc.' | `${min} min``. */
-export function etaShort(row: BoardRow): string {
+export function etaShort(row: RowWithStatusAndEta): string {
   if (row.status === 'arrived') return 'Puerta';
   if (row.status === 'delivered') return 'Listo';
   if (row.status === 'cancelled') return 'Canc.';
@@ -61,7 +77,7 @@ export function etaShort(row: BoardRow): string {
  * `estimatedArrivalAt`, the server's actual estimate, never `now + etaMin`
  * (that shortcut was the mockup's own simulation, not a rule to replicate).
  */
-export function horaText(row: BoardRow): string {
+export function horaText(row: RowWithStatusAndArrival): string {
   if (row.status === 'arrived') return 'ahora';
   if (row.status === 'delivered') return 'entregado';
   if (row.status === 'cancelled') return '—';

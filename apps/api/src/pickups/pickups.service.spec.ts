@@ -319,6 +319,7 @@ describe('PickupsService', () => {
         1,
         'school-pickup/institution/inst-1/board',
         {
+          kind: 'row',
           pickupRequestId: 'pr-1',
           status: 'en_route',
           studentFullName: 'Ana Pérez',
@@ -1059,6 +1060,11 @@ describe('PickupsService', () => {
 
     // ADR-068 pt.3: the shape exists so apps/board can merge snapshot and
     // deltas untouched. If the two drift apart, that stops being true.
+    // `kind` (ADR-073 pt.3) is excluded from this comparison on purpose: it's
+    // a wire-protocol discriminator for the two message shapes multiplexed
+    // over `/ws/board`, not domain data — a REST response is never
+    // ambiguous about its own shape, so PickupRequestBoardSummary never
+    // carries it.
     it('returns rows shaped exactly like the WebSocket delta payload', async () => {
       const pickupRequest = buildOwnedPickupRequest({
         status: 'arriving',
@@ -1071,7 +1077,7 @@ describe('PickupsService', () => {
 
       const result = await service.listByInstitution('user-1', { institutionId: INST_ID });
 
-      const boardPayload = buildBoardPayload({
+      const { kind, ...boardPayload } = buildBoardPayload({
         pickupRequestId: pickupRequest.id,
         status: pickupRequest.status,
         studentFullName: pickupRequest.enrollment.student.fullName,
@@ -1086,6 +1092,7 @@ describe('PickupsService', () => {
         updatedAt: pickupRequest.updatedAt.toISOString(),
       });
 
+      expect(kind).toBe('row');
       expect(result.pickupRequests[0]).toEqual(boardPayload);
     });
 
@@ -2191,6 +2198,95 @@ describe('PickupsService', () => {
         expect(result.status).toBe('delivered');
         expect(pushProvider.send).toHaveBeenCalledTimes(2);
       });
+    });
+  });
+
+  describe('announce', () => {
+    it.each(['en_route', 'arriving', 'arrived'] as const)(
+      'publishes to the board-announce topic when the pickup_request is active (status=%s)',
+      async (status) => {
+        const { service, mqttClient } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status })),
+          },
+        });
+
+        await service.announce('staff-1', 'pr-1');
+
+        expect(mqttClient.publish).toHaveBeenCalledWith(
+          'school-pickup/institution/inst-1/board-announce',
+          expect.objectContaining({
+            kind: 'announce',
+            pickupRequestId: 'pr-1',
+            studentFullName: 'Ana Pérez',
+          }),
+          1,
+        );
+      },
+    );
+
+    it('writes an audit_log row for the announcing member', async () => {
+      const { service, auditLogRepo } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'arrived' })),
+        },
+      });
+
+      await service.announce('staff-1', 'pr-1');
+
+      expect(auditLogRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actor: { id: 'staff-1' },
+          action: 'pickup_request.announced',
+          entityType: 'pickup_request',
+          entityId: 'pr-1',
+          metadata: null,
+        }),
+      );
+    });
+
+    it.each(['delivered', 'cancelled'] as const)(
+      'rejects with 409 when the pickup_request is already %s, without publishing or audit-logging',
+      async (status) => {
+        const { service, mqttClient, auditLogRepo } = buildService({
+          pickupRequests: {
+            findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status })),
+          },
+        });
+
+        await expect(service.announce('staff-1', 'pr-1')).rejects.toMatchObject({
+          response: { code: 'INVALID_STATUS_TRANSITION' },
+        });
+
+        expect(mqttClient.publish).not.toHaveBeenCalled();
+        expect(auditLogRepo.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not transition the pickup_request status or write status history (no state change)', async () => {
+      const { service, pickupRequestsRepo, statusHistoryRepo } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'arrived' })),
+        },
+      });
+
+      await service.announce('staff-1', 'pr-1');
+
+      expect(pickupRequestsRepo.save).not.toHaveBeenCalled();
+      expect(statusHistoryRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('a publish failure is logged and does not reject the call', async () => {
+      const { service } = buildService({
+        pickupRequests: {
+          findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest({ status: 'arrived' })),
+        },
+        mqttClient: {
+          publish: vi.fn().mockRejectedValue(new Error('broker unreachable')),
+        },
+      });
+
+      await expect(service.announce('staff-1', 'pr-1')).resolves.toBeUndefined();
     });
   });
 });

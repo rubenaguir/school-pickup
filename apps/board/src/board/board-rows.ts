@@ -1,5 +1,6 @@
 import type {
   ArrivalMode,
+  PickupRequestBoardAnnouncePayload,
   PickupRequestBoardPayload,
   PickupRequestStatus,
 } from '@casillego/shared';
@@ -53,12 +54,18 @@ function isNullableNumber(value: unknown): value is number | null {
  * Validates the shape of an incoming WebSocket delta. Never throws — returns
  * `null` for anything that doesn't match, so one malformed message cannot
  * corrupt the board on screen. Same contract as `parseQueueDelta`.
+ *
+ * Requires `kind === 'row'` (ADR-073 pt.3): `/ws/board` now multiplexes rows
+ * and "vocear" announcements over the same socket, so anything that isn't
+ * explicitly a row — including a value this parser doesn't recognize, for
+ * forward compatibility — is rejected rather than guessed at.
  */
 export function parseBoardDelta(raw: unknown): BoardRow | null {
   if (typeof raw !== 'object' || raw === null) return null;
 
   const payload = raw as Record<string, unknown>;
 
+  if (payload.kind !== 'row') return null;
   if (typeof payload.pickupRequestId !== 'string') return null;
   if (!isBoardStatus(payload.status)) return null;
   if (typeof payload.studentFullName !== 'string') return null;
@@ -70,6 +77,7 @@ export function parseBoardDelta(raw: unknown): BoardRow | null {
   if (typeof payload.updatedAt !== 'string') return null;
 
   return {
+    kind: 'row',
     pickupRequestId: payload.pickupRequestId,
     status: payload.status,
     studentFullName: payload.studentFullName,
@@ -79,6 +87,33 @@ export function parseBoardDelta(raw: unknown): BoardRow | null {
     etaSeconds: payload.etaSeconds,
     arrivalMode: payload.arrivalMode,
     updatedAt: payload.updatedAt,
+  };
+}
+
+/**
+ * "Vocear" (ADR-073 pt.3): validates the other message shape multiplexed
+ * over `/ws/board`. Same defensive contract as `parseBoardDelta` — never
+ * throws, `null` for anything that doesn't match exactly.
+ *
+ * Not wired to any effect yet (no TTS trigger, no pulse animation, no
+ * "Voceando" footer update) — that integration is a separate, later change.
+ * This parser only makes the payload safely consumable once it is.
+ */
+export function parseBoardAnnounce(raw: unknown): PickupRequestBoardAnnouncePayload | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+
+  const payload = raw as Record<string, unknown>;
+
+  if (payload.kind !== 'announce') return null;
+  if (typeof payload.pickupRequestId !== 'string') return null;
+  if (typeof payload.studentFullName !== 'string') return null;
+  if (typeof payload.announcedAt !== 'string') return null;
+
+  return {
+    kind: 'announce',
+    pickupRequestId: payload.pickupRequestId,
+    studentFullName: payload.studentFullName,
+    announcedAt: payload.announcedAt,
   };
 }
 

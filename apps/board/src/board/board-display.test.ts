@@ -4,6 +4,7 @@ import { etaDisplay, etaShort, horaText, progressPercent } from './board-display
 
 function row(overrides: Partial<BoardRow> = {}): BoardRow {
   return {
+    kind: 'row',
     pickupRequestId: 'pr-1',
     status: 'en_route',
     studentFullName: 'Ana López',

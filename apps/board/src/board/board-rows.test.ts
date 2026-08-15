@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isActiveBoardStatus,
   mergeBoardDelta,
+  parseBoardAnnounce,
   parseBoardDelta,
   sortBoardRows,
   type BoardRow,
@@ -9,6 +10,7 @@ import {
 
 function row(overrides: Partial<BoardRow> = {}): BoardRow {
   return {
+    kind: 'row',
     pickupRequestId: 'pr-1',
     status: 'en_route',
     studentFullName: 'Ana López',
@@ -18,6 +20,16 @@ function row(overrides: Partial<BoardRow> = {}): BoardRow {
     etaSeconds: 300,
     arrivalMode: 'vehicle',
     updatedAt: '2026-08-09T14:01:00.000Z',
+    ...overrides,
+  };
+}
+
+function announce(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    kind: 'announce',
+    pickupRequestId: 'pr-1',
+    studentFullName: 'Ana López',
+    announcedAt: '2026-08-09T14:06:00.000Z',
     ...overrides,
   };
 }
@@ -47,9 +59,39 @@ describe('parseBoardDelta', () => {
     expect(parseBoardDelta({ ...row(), etaSeconds: 'pronto' })).toBeNull();
   });
 
+  // ADR-073 pt.3: /ws/board now multiplexes two message shapes — a delta
+  // that isn't explicitly a row, including the other shape's own `kind`,
+  // must never be mistaken for one.
+  it('rejects a message whose kind is not "row"', () => {
+    expect(parseBoardDelta({ ...row(), kind: 'announce' })).toBeNull();
+    expect(parseBoardDelta({ ...row(), kind: undefined })).toBeNull();
+    expect(parseBoardDelta({ ...row(), kind: 'something-future' })).toBeNull();
+  });
+
   it('keeps only the board fields, dropping anything extra on the wire', () => {
     const parsed = parseBoardDelta({ ...row(), deliveryCode: '1234' });
     expect(parsed).toEqual(row());
+    expect(parsed).not.toHaveProperty('deliveryCode');
+  });
+});
+
+describe('parseBoardAnnounce', () => {
+  it('accepts the payload buildBoardAnnouncePayload publishes', () => {
+    expect(parseBoardAnnounce(announce())).toEqual(announce());
+  });
+
+  it('rejects anything that is not the announce payload', () => {
+    expect(parseBoardAnnounce(null)).toBeNull();
+    expect(parseBoardAnnounce('pr-1')).toBeNull();
+    expect(parseBoardAnnounce({ ...announce(), kind: 'row' })).toBeNull();
+    expect(parseBoardAnnounce({ ...announce(), pickupRequestId: 42 })).toBeNull();
+    expect(parseBoardAnnounce({ ...announce(), studentFullName: null })).toBeNull();
+    expect(parseBoardAnnounce({ ...announce(), announcedAt: null })).toBeNull();
+  });
+
+  it('keeps only the announce fields, dropping anything extra on the wire', () => {
+    const parsed = parseBoardAnnounce({ ...announce(), deliveryCode: '1234' });
+    expect(parsed).toEqual(announce());
     expect(parsed).not.toHaveProperty('deliveryCode');
   });
 });

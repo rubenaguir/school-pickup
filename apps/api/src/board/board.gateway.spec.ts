@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { boardTopic } from '@casillego/shared';
+import { boardAnnounceTopic, boardTopic } from '@casillego/shared';
 import { BoardGateway, type BoardWebSocket } from './board.gateway';
 
 const INST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -55,7 +55,22 @@ function authorizedUrl(institutionId = INST_ID): string {
   return `/ws/board?accessToken=a.jwt.token&institutionId=${institutionId}`;
 }
 
+async function subscribedGateway() {
+  const built = buildGateway();
+  await built.gateway.onModuleInit();
+  const handler = built.mqttClient.subscribe.mock.calls[0][1] as (
+    topic: string,
+    payload: unknown,
+  ) => void;
+  const announceHandler = built.mqttClient.subscribe.mock.calls[1][1] as (
+    topic: string,
+    payload: unknown,
+  ) => void;
+  return { ...built, handler, announceHandler };
+}
+
 const BOARD_PAYLOAD = {
+  kind: 'row',
   pickupRequestId: 'pr-1',
   status: 'arrived',
   studentFullName: 'Ana Pérez',
@@ -67,6 +82,13 @@ const BOARD_PAYLOAD = {
   updatedAt: '2026-07-16T08:05:00.000Z',
 };
 
+const BOARD_ANNOUNCE_PAYLOAD = {
+  kind: 'announce',
+  pickupRequestId: 'pr-1',
+  studentFullName: 'Ana Pérez',
+  announcedAt: '2026-07-16T08:05:00.000Z',
+};
+
 describe('BoardGateway', () => {
   describe('broker subscription', () => {
     it('subscribes once, on init, to the board wildcard topic', async () => {
@@ -74,22 +96,35 @@ describe('BoardGateway', () => {
 
       await gateway.onModuleInit();
 
-      expect(mqttClient.subscribe).toHaveBeenCalledTimes(1);
       expect(mqttClient.subscribe).toHaveBeenCalledWith(
         'school-pickup/institution/+/board',
         expect.any(Function),
       );
     });
 
+    // ADR-073 pt.3: second topic multiplexed over the same connection, not a
+    // new gateway — one extra subscribe call, no new broker connection.
+    it('also subscribes, on init, to the board-announce wildcard topic', async () => {
+      const { gateway, mqttClient } = buildGateway();
+
+      await gateway.onModuleInit();
+
+      expect(mqttClient.subscribe).toHaveBeenCalledTimes(2);
+      expect(mqttClient.subscribe).toHaveBeenCalledWith(
+        'school-pickup/institution/+/board-announce',
+        expect.any(Function),
+      );
+    });
+
     // A browser connecting must not add a broker subscription: the whole point
-    // of ADR-050 is that Mosquitto sees exactly the connection it already had.
+    // of ADR-050 is that Mosquitto sees exactly the connections it already had.
     it('does not touch the broker when a browser connects', async () => {
       const { gateway, mqttClient } = buildGateway();
       await gateway.onModuleInit();
 
       await connect(gateway, authorizedUrl());
 
-      expect(mqttClient.subscribe).toHaveBeenCalledTimes(1);
+      expect(mqttClient.subscribe).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -161,16 +196,6 @@ describe('BoardGateway', () => {
   });
 
   describe('forwarding', () => {
-    async function subscribedGateway() {
-      const built = buildGateway();
-      await built.gateway.onModuleInit();
-      const handler = built.mqttClient.subscribe.mock.calls[0][1] as (
-        topic: string,
-        payload: unknown,
-      ) => void;
-      return { ...built, handler };
-    }
-
     it('forwards the broker payload verbatim to every client of that institution', async () => {
       const { gateway, handler } = await subscribedGateway();
       const client = await connect(gateway, authorizedUrl());
@@ -255,6 +280,41 @@ describe('BoardGateway', () => {
       handler(boardTopic(INST_ID), { ...BOARD_PAYLOAD, deliveryPointId: 'dp-2' });
 
       expect(client.sent).toHaveLength(2);
+    });
+  });
+
+  // ADR-073 pt.3: "vocear" multiplexed over the same /ws/board socket as rows,
+  // via its own topic and broker subscription.
+  describe('forwarding board-announce messages', () => {
+    it('forwards an announce message verbatim to every client of that institution', async () => {
+      const { gateway, announceHandler } = await subscribedGateway();
+      const client = await connect(gateway, authorizedUrl());
+
+      announceHandler(boardAnnounceTopic(INST_ID), BOARD_ANNOUNCE_PAYLOAD);
+
+      expect(client.sent).toEqual([JSON.stringify(BOARD_ANNOUNCE_PAYLOAD)]);
+    });
+
+    it('does not forward an announce to a client authorized for another institution', async () => {
+      const { gateway, announceHandler } = await subscribedGateway();
+      const client = await connect(gateway, authorizedUrl(OTHER_INST_ID));
+
+      announceHandler(boardAnnounceTopic(INST_ID), BOARD_ANNOUNCE_PAYLOAD);
+
+      expect(client.sent).toEqual([]);
+    });
+
+    it('a client of the same institution receives both rows and announces', async () => {
+      const { gateway, handler, announceHandler } = await subscribedGateway();
+      const client = await connect(gateway, authorizedUrl());
+
+      handler(boardTopic(INST_ID), BOARD_PAYLOAD);
+      announceHandler(boardAnnounceTopic(INST_ID), BOARD_ANNOUNCE_PAYLOAD);
+
+      expect(client.sent).toEqual([
+        JSON.stringify(BOARD_PAYLOAD),
+        JSON.stringify(BOARD_ANNOUNCE_PAYLOAD),
+      ]);
     });
   });
 });

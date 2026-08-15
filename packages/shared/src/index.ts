@@ -79,6 +79,27 @@ export function boardTopic(institutionId: string): string {
 }
 
 /**
+ * "Vocear" (ADR-073): an operator at the gate console asks the board to
+ * announce a student by voice. Ephemeral — no snapshot, no history — so it
+ * doesn't share a shape with `boardTopic`, but it does share transport (same
+ * `BoardGateway`, same `/ws/board` socket, ADR-073 pt.3): not a new channel,
+ * a new topic multiplexed over one that already exists.
+ */
+export function boardAnnounceTopic(institutionId: string): string {
+  return `${institutionTopic(institutionId)}/board-announce`;
+}
+
+/**
+ * Inverse of `boardAnnounceTopic`, same contract as `parseBoardTopic`:
+ * returns `null`, never throws, for anything that isn't that exact shape.
+ */
+export function parseBoardAnnounceTopic(topic: string): { institutionId: string } | null {
+  const match = /^school-pickup\/institution\/([^/]+)\/board-announce$/.exec(topic);
+  if (!match) return null;
+  return { institutionId: match[1] };
+}
+
+/**
  * Delivery-point queue stream consumed by a delivery point's console:
  * `school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue`.
  */

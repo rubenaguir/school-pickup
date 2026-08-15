@@ -3,8 +3,10 @@ import { OnGatewayConnection, OnGatewayDisconnect, WebSocketGateway } from '@nes
 import {
   MQTT_CLIENT,
   MQTT_TOPIC_ROOT,
+  parseBoardAnnounceTopic,
   parseBoardTopic,
   type MqttClient,
+  type PickupRequestBoardAnnouncePayload,
   type PickupRequestBoardPayload,
 } from '@casillego/shared';
 import { AccessTokenVerifier } from '../auth/access-token.verifier';
@@ -13,6 +15,7 @@ import { InstitutionAccessService } from '../institutions/institution-access.ser
 export const BOARD_WS_PATH = '/ws/board';
 
 const BOARD_WILDCARD_TOPIC = `${MQTT_TOPIC_ROOT}/institution/+/board`;
+const BOARD_ANNOUNCE_WILDCARD_TOPIC = `${MQTT_TOPIC_ROOT}/institution/+/board-announce`;
 
 /**
  * Application close codes (RFC 6455 private range), mirroring the REST `code`
@@ -54,9 +57,16 @@ interface HandshakeRequest {
  * unfiltered by delivery point (that grouping is client-side, ADR-068 pt.5),
  * reusing the board topic already consumed by the tracking gateway.
  *
- * The browser never connects to the broker: this gateway holds the single
- * broker subscription, and fans each board message out only to the sockets
- * authorized for that exact institution.
+ * Multiplexes two message kinds over the same `/ws/board` socket (ADR-073
+ * pt.3): rows (`kind: 'row'`, the state feed above) and "vocear" announcements
+ * (`kind: 'announce'`, a one-off cross-frontend event from the gate console —
+ * no snapshot, no history). Both are forwarded verbatim; the discriminator
+ * already lives in the payload itself, so this gateway never needs to
+ * transform either.
+ *
+ * The browser never connects to the broker: this gateway holds the broker
+ * subscriptions, and fans each message out only to the sockets authorized for
+ * that exact institution.
  */
 @Injectable()
 @WebSocketGateway({ path: BOARD_WS_PATH })
@@ -71,12 +81,16 @@ export class BoardGateway implements OnModuleInit, OnGatewayConnection, OnGatewa
   ) {}
 
   /**
-   * One wildcard subscription for the whole process, taken at startup — not
+   * Two wildcard subscriptions for the whole process, taken at startup — not
    * one per browser connection (same server-subscription pattern as the two
-   * sibling gateways).
+   * sibling gateways). Second subscription is ADR-073 pt.3: same connection,
+   * a second topic multiplexed over it, not a new gateway.
    */
   async onModuleInit(): Promise<void> {
     await this.mqttClient.subscribe(BOARD_WILDCARD_TOPIC, (topic, payload) => {
+      this.forward(topic, payload);
+    });
+    await this.mqttClient.subscribe(BOARD_ANNOUNCE_WILDCARD_TOPIC, (topic, payload) => {
       this.forward(topic, payload);
     });
   }
@@ -132,23 +146,33 @@ export class BoardGateway implements OnModuleInit, OnGatewayConnection, OnGatewa
   }
 
   /**
-   * Fans a broker board message out to every authorized socket of that exact
-   * institution. Forwarded verbatim (`PickupRequestBoardPayload`,
-   * untransformed) — unlike `PickupRequestTrackingGateway` there is no
-   * `pickupRequestId` filter: every row of the institution's feed reaches the
-   * board.
+   * Fans a broker message (row or announce, ADR-073 pt.3) out to every
+   * authorized socket of that exact institution. Forwarded verbatim
+   * (untransformed) — unlike `PickupRequestTrackingGateway` there is no
+   * `pickupRequestId` filter: every message of the institution's feed reaches
+   * the board. The payload already carries its own `kind`, so the gateway
+   * only needs to recover `institutionId` from whichever topic shape matched.
    */
   private forward(topic: string, payload: unknown): void {
-    const parsed = parseBoardTopic(topic);
+    const parsed = parseBoardTopic(topic) ?? parseBoardAnnounceTopic(topic);
     if (!parsed) {
       this.logger.warn(`Discarding board message on unrecognized topic: ${topic}`);
       return;
     }
 
-    const boardPayload = payload as PickupRequestBoardPayload;
-    const message = JSON.stringify(boardPayload);
-    for (const [client, institutionId] of this.connections) {
-      if (institutionId !== parsed.institutionId) {
+    this.sendToInstitution(
+      parsed.institutionId,
+      payload as PickupRequestBoardPayload | PickupRequestBoardAnnouncePayload,
+    );
+  }
+
+  private sendToInstitution(
+    institutionId: string,
+    payload: PickupRequestBoardPayload | PickupRequestBoardAnnouncePayload,
+  ): void {
+    const message = JSON.stringify(payload);
+    for (const [client, clientInstitutionId] of this.connections) {
+      if (clientInstitutionId !== institutionId) {
         continue;
       }
       if (client.readyState !== WEBSOCKET_OPEN) {

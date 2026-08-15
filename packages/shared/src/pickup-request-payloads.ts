@@ -35,8 +35,13 @@ export interface PickupRequestRealtimeSnapshot {
   updatedAt: string;
 }
 
-/** Shape of `school-pickup/institution/{institutionId}/board`. */
+/**
+ * Shape of `school-pickup/institution/{institutionId}/board`. `kind: 'row'`
+ * discriminates it from `PickupRequestBoardAnnouncePayload` (ADR-073 pt.3) —
+ * both travel over the same `/ws/board` socket.
+ */
 export interface PickupRequestBoardPayload {
+  kind: 'row';
   pickupRequestId: string;
   status: PickupRequestStatus;
   studentFullName: string;
@@ -46,6 +51,32 @@ export interface PickupRequestBoardPayload {
   etaSeconds: number | null;
   arrivalMode: ArrivalMode | null;
   updatedAt: string;
+}
+
+/**
+ * "Vocear" (ADR-073 pt.3): the first message to travel over `/ws/board` that
+ * isn't a row. No guardian/vehicle data — same privacy criterion as the rest
+ * of this channel (ADR-051/068): a public board never carries that data over
+ * the wire, not even unrendered.
+ */
+export interface PickupRequestBoardAnnouncePayload {
+  kind: 'announce';
+  pickupRequestId: string;
+  studentFullName: string;
+  announcedAt: string;
+}
+
+export function buildBoardAnnouncePayload(
+  pickupRequestId: string,
+  studentFullName: string,
+  announcedAt: Date,
+): PickupRequestBoardAnnouncePayload {
+  return {
+    kind: 'announce',
+    pickupRequestId,
+    studentFullName,
+    announcedAt: announcedAt.toISOString(),
+  };
 }
 
 /** Shape of `school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue`. */
@@ -67,6 +98,7 @@ export function buildBoardPayload(
   snapshot: PickupRequestRealtimeSnapshot,
 ): PickupRequestBoardPayload {
   return {
+    kind: 'row',
     pickupRequestId: snapshot.pickupRequestId,
     status: snapshot.status,
     studentFullName: snapshot.studentFullName,
