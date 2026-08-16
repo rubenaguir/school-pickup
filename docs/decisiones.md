@@ -5315,3 +5315,92 @@ final, es la lectura correcta con la información de hoy.
   del patrón, y el backlog que fue subiendo el conteo en cada una).
 - `packages/shared/package.json`/`packages/ui/package.json` (confirmación
   real de qué paquete tiene React como dependencia — la base del punto 2).
+
+## ADR-076 — `NodeMqttClient` descartaba en silencio el handler de un gateway cuando dos gateways compartían el mismo patrón de suscripción
+
+**Contexto.** Durante la verificación en vivo del Paso 3 de ADR-075
+(migrar `useTrackingPickupRequest` al canal genérico) se encontró que la
+pantalla de seguimiento del tutor en `apps/parent` **nunca recibía un
+solo delta en vivo por WebSocket** — cargaba el snapshot inicial
+correctamente y ahí se quedaba, sin actualizarse jamás. No es un defecto
+de ADR-075 ni de la migración: el bug real vive en
+`packages/shared/src/adapters/node-mqtt-client.ts`, código de
+infraestructura compartida sin relación con el canal WS que se estaba
+migrando — apareció porque esta fue la primera vez en la sesión que se
+probó con cuidado, en vivo, si el seguimiento del tutor recibía deltas
+reales, no solo si cargaba.
+
+**El bug, confirmado línea por línea contra el código anterior al fix:**
+
+```ts
+private readonly handlers = new Map<string, MessageHandler>();
+// ...
+async subscribe(topic: string, handler: MessageHandler): Promise<void> {
+  this.handlers.set(topic, handler);
+  await this.requireClient().subscribeAsync(topic);
+}
+```
+
+Un solo handler por patrón de suscripción — `Map<string, MessageHandler>`,
+no `Map<string, Set<MessageHandler>>`. `BoardGateway` y
+`PickupRequestTrackingGateway` **suscriben al mismo patrón exacto**,
+`school-pickup/institution/+/board` (confirmado: ambos declaran la misma
+constante `BOARD_WILDCARD_TOPIC` con idéntico valor, ADR-064/ADR-068 — no
+es una coincidencia de nombres, es el mismo wildcard, a propósito, cada
+uno filtra del lado del cliente lo que le interesa). `PickupRequestTrackingModule`
+se registra antes que `BoardModule` en `app.module.ts` — su `subscribe()`
+corre primero durante el arranque, y cuando `BoardModule` arranca después,
+su propio `subscribe()` al mismo patrón **sobrescribe** silenciosamente
+la entrada del `Map`, sin ningún error, sin ningún log. El handler del
+tablero público queda funcionando; el de seguimiento del tutor deja de
+existir, aunque `subscribeAsync(topic)` sí se haya llamado (el broker
+cree que el proceso sigue suscrito — la suscripción real al broker nunca
+falló, la pérdida ocurre completamente del lado del cliente).
+
+Una segunda falla relacionada, en el mismo método: `dispatch()` hacía
+`return` apenas encontraba el primer patrón que matcheaba el topic
+entrante — así que incluso en un escenario hipotético con dos patrones
+*distintos* que ambos matchearan el mismo topic, solo el primero en
+iteración habría recibido el mensaje. El fix corrige ambas fallas a la
+vez.
+
+**Decisión — el fix.**
+
+1. `Map<string, Set<MessageHandler>>` en vez de
+   `Map<string, MessageHandler>` — `subscribe()` agrega al `Set` en vez
+   de reemplazar.
+2. `dispatch()` recorre **todos** los patrones que matchean el topic
+   entrante (no solo el primero) y, dentro de cada uno, llama a **todos**
+   los handlers de ese patrón — el payload se parsea una sola vez (no una
+   vez por handler) y se reutiliza.
+3. Test de regresión nuevo que reproduce el escenario exacto: dos
+   `subscribe()` al mismo patrón, un mensaje entrante, se verifica que
+   **ambos** handlers reciban la llamada — con el código viejo este test
+   habría fallado (solo el segundo handler se habría llamado).
+
+**Impacto real.** El seguimiento en vivo del tutor
+(`apps/parent`, ADR-064, la pantalla de "voy en camino") estuvo mostrando
+únicamente el estado del momento en que se abrió la pantalla, sin
+actualizarse jamás por WebSocket, desde que `BoardGateway` y
+`PickupRequestTrackingGateway` coexisten en el proceso — es decir, desde
+que se construyó el tablero (ADR-068), no algo introducido por esta
+sesión. Ninguna verificación anterior de esta pantalla lo había atrapado
+porque las verificaciones previas confirmaban que el snapshot inicial
+cargaba bien, no que los deltas en vivo llegaran después — exactamente el
+tipo de falla que solo aparece al probar con cuidado el comportamiento
+sostenido, no solo la carga inicial.
+
+**Consecuencias.** El fix es general — protege cualquier par futuro de
+gateways que decidan compartir un patrón de suscripción, no solo este
+caso puntual. Ya aplicado y verificado en vivo (Carril y seguimiento del
+tutor actualizándose simultáneamente desde la misma transición real, tras
+reiniciar `api`).
+
+## Referencias
+
+- ADR-064 (seguimiento del tutor — la pantalla afectada).
+- ADR-068 (tablero público — el segundo suscriptor del mismo patrón).
+- ADR-075 (el trabajo durante cuyo Paso 3 se encontró este bug, sin
+  relación causal con él).
+- `packages/shared/src/adapters/node-mqtt-client.ts`/`.test.ts` (el fix y
+  su test de regresión).
