@@ -5527,3 +5527,152 @@ sesión y vuelve a entrar, confirmado como aceptable.
   híbrido no cambia).
 - `apps/portal/src/screens/Profile.tsx` (confirmado sin dependencia de
   `useTutor`/`useInstitution` — la base del punto 4).
+
+## ADR-078 — El rol de tutor se muda por completo a `apps/parent`; el portal queda exclusivo de institución
+
+**Contexto.** Al empezar a diseñar el shell compartido para la vista de
+tutor dentro de `apps/portal` (continuación natural de ADR-072/074) se
+encontró que el kit real (`design/casillego-design-system/ui_kits/app-padre/`)
+**ya define esta pantalla — pero como parte de `apps/parent`, no del
+portal**. El README del kit lo dice explícito: dos superficies, "App
+móvil" (PWA, el flujo de recogida ya construido) y **"Portal web"**
+(versión de escritorio del tutor: Mis hijos, Asociar institución,
+Tutores autorizados, Perfil) — nunca se pensó como parte del portal de
+institución. Las 5 pantallas de tutor que hoy viven en `apps/portal`
+(Fase 7) se construyeron sin haber visto este kit, con una arquitectura
+de información distinta a la real (rutas parametrizadas por alumno,
+`/students/:id/...`, en vez de un selector de alumno en memoria dentro de
+una sola vista).
+
+Confirmado con el humano: la mudanza es completa. El portal deja de
+servir cuentas de tutor por completo — no las redirige, no les muestra
+nada propio. Esto revierte buena parte de ADR-077 (recién cerrado): el
+selector híbrido, `TutorContext`, `TutorRoleGate` y el propio concepto de
+`sessionRole` dejan de tener sentido cuando el portal solo tiene un rol.
+
+**Mapa de reutilización — confirmado contra el backend real, no
+asumido**: **cero endpoints nuevos**. Las 4 vistas del kit se resuelven
+íntegramente con contratos que ya existen:
+
+| Vista | Endpoint(s) |
+|---|---|
+| Mis hijos | `GET /students` + `GET /enrollments/mine` (ya enriquecido, ADR-057) |
+| Asociar institución | `GET /institutions?search=` (ADR-037) + `POST /enrollments` |
+| Tutores autorizados | `GET /students/:id/guardians` + `POST /students/:id/guardians/invite` + `PATCH /student-guardians/:id` |
+| Perfil — cuenta/contraseña | `GET/PATCH /users/me` + `POST /users/me/change-password` (ADR-059) |
+| Perfil — notificaciones | Mismo `PATCH /users/me`, 3 de los 4 booleanos ya existentes |
+| Perfil — vehículos | `GET/POST/PATCH/DELETE /vehicles` |
+
+Todo el trabajo de esta mudanza es frontend.
+
+**Decisión.**
+
+### 1. `apps/portal` queda exclusivo de institución — sin ruta de tutor alguna
+
+Se eliminan de `apps/portal`: las 5 rutas/pantallas de tutor
+(`STUDENTS_PATH`, `NEW_STUDENT_PATH`, `ASSOCIATE_INSTITUTION_PATH`,
+`STUDENT_GUARDIANS_PATH`, `VEHICLES_PATH`), `TutorContext`/`TutorProvider`,
+`TutorRoleGate`, `session-role.ts`, y la rama `choose-role`/el paso de
+selector de `Login.tsx` (ADR-077 puntos 2-3). `AuthenticatedLayout` vuelve
+a montar un solo `InstitutionProvider`, sin ninguna rama por rol —
+`InstitutionGate` pierde la verificación de `sessionRole` que ADR-077
+punto 4 le agregó (ya no hace falta distinguir nada, solo hay un rol).
+
+`resolveLoginOutcome`/`Login.tsx` se simplifican a 3 casos: super-admin →
+igual que hoy; cuenta con membresía de institución → `HOME_PATH`; cuenta
+sin membresía → **no navega a ningún lado dentro del portal** — muestra
+un estado informativo ("Esta cuenta no tiene acceso al portal de
+instituciones — usa la app CasiLlego para continuar", sin nombrar
+"tutor" explícitamente, ya que también cubre una cuenta sin ningún rol
+todavía). No es un error, mismo criterio que el resto del proyecto usa
+para "no tienes acceso a esto" (ej. "No perteneces a ninguna
+institución", ADR-042 punto 5) — nunca alarmar, siempre explicar.
+
+**Sin cambio de backend** — el login sigue autenticando cualquier cuenta
+válida sin importar su rol (`apps/parent` usa el mismo mecanismo de auth);
+esto es una decisión de enrutamiento del frontend del portal, no una
+restricción nueva del servidor.
+
+### 2. `Profile.tsx` del portal se recorta, no se elimina
+
+Sigue existiendo para el personal de institución (`fullName`, `phone`,
+cambio de contraseña) — pierde los 3 toggles de notificación específicos
+de tutor (`notifyEnrollmentApproved`/`notifyDismissalReminder`/
+`notifyDeliveryConfirmed`), que ahora solo tienen sentido dentro de
+`apps/parent`, donde de verdad hay hijos que recoger.
+
+### 3. `apps/parent` gana una segunda superficie: "Portal web"
+
+Nuevo `TutorShell` dentro de `apps/parent`, calco visual de
+`InstitutionShell`/`OpsShell` (250px, `var(--ink-900)`, mismo patrón de
+ítem activo) — confirmado que el kit real usa exactamente esos valores,
+no una improvisación. 4 ítems: Mis hijos, Asociar institución, Tutores
+autorizados, Perfil (vehículos y notificaciones viven dentro de Perfil,
+no como ítems propios — así lo define el kit, no las 5 rutas actuales
+del portal).
+
+**Arquitectura de información nueva, distinta a lo que existe hoy en el
+portal**: "Asociar institución" y "Tutores autorizados" comparten una
+sola vista con un selector de alumno en memoria (pestañas arriba, mismo
+patrón que ya usa "Mostrando N de M" en otras pantallas de esta sesión —
+estado de cliente, no parámetro de ruta) en vez de las rutas
+`/students/:id/...` actuales. El backend sigue pidiendo por `studentId`
+internamente (punto del mapa de reutilización) — lo que cambia es de
+dónde sale ese id: de un párametro de URL a una selección en memoria.
+
+**Es la primera pantalla de todo el proyecto que necesita ser
+responsive** — confirmado, ningún frontend existente tiene hoy manejo de
+breakpoints (`matchMedia`/`@media`/`innerWidth`, cero resultados en todo
+el repo). `InstitutionShell`/`OpsShell` nunca lo necesitaron porque son
+herramientas de escritorio sin expectativa de uso en teléfono. En
+pantalla angosta, la sidebar de 250px colapsa a un menú compacto
+(hamburguesa o barra inferior, decisión de implementación libre, sin
+mockup del kit que lo defina) — las 4 vistas de contenido deben verse
+bien en cualquier ancho, confirmado con el humano.
+
+### 4. Selector de superficie: por ancho de pantalla al aterrizar, persistente por sesión, con salida deliberada en ambas direcciones
+
+Confirmado con el humano, con la precisión que agregué y él no objetó:
+
+1. **Al aterrizar** (primera carga de la sesión, no cada render): ancho
+   ≥768px → Portal web directo; <768px → App móvil directo. 768px porque
+   separa razonablemente teléfono de tablet-vertical-para-arriba/laptop —
+   ajustable si se siente mal en el uso real, no es un valor con
+   significado especial más allá de eso.
+2. **La elección se guarda en `sessionStorage`, no `localStorage`** —
+   deliberado: si alguien entra a Portal web desde el celular por el
+   ícono de ajustes, un refresh de página no debe regresarlo a App móvil
+   (lo que pidió el humano) — pero una apertura genuinamente nueva de la
+   PWA (`sessionStorage` se limpia al cerrar la pestaña/app) sí vuelve a
+   evaluar el ancho desde cero, en vez de recordar para siempre una
+   preferencia declarada una sola vez hace semanas.
+3. **Camino de ida y vuelta**: un ícono de ajustes discreto en "Inicio"
+   (App móvil) navega a Portal web. `TutorShell` lleva un enlace de
+   regreso a "App móvil" (ubicación exacta: decisión de implementación,
+   cerca del pie de cuenta de la sidebar es lo más consistente con el
+   resto del shell).
+
+**Consecuencias.** Cierra el ciclo de alineación del design system para
+los 3 roles del portal (Institución, Operador, y ahora ninguno de tutor —
+se fue del portal en vez de alinearse dentro de él) más una superficie
+nueva en `apps/parent`. Primera vez que el proyecto necesita diseño
+responsive real, no solo un layout fijo de escritorio o uno fijo de
+teléfono.
+
+## Referencias
+
+- ADR-037 (`GET /institutions?search=`, reutilizado sin cambios).
+- ADR-057 (`GET /enrollments/mine` enriquecido, reutilizado sin cambios).
+- ADR-059 (`GET/PATCH /users/me`, `POST /users/me/change-password` —
+  fuente de los 3 toggles y los datos de cuenta, reutilizados sin
+  cambios).
+- ADR-072/074 (`InstitutionShell`/`OpsShell`, el patrón visual que
+  `TutorShell` replica por tercera vez, ahora en una app distinta).
+- ADR-077 (la decisión que este ADR revierte parcialmente — puntos 1
+  (criterio de caso híbrido) y 3 (mecanismo de persistencia junto al
+  token) quedan sin uso; el propio concepto de sesión de un solo rol
+  pierde sentido cuando ya no hay dos roles que elegir dentro del
+  portal).
+- `design/casillego-design-system/ui_kits/app-padre/index.html`,
+  función `TutorPortal()` (fuente visual completa de este ADR — leída
+  íntegra, no solo el README).
