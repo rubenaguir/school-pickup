@@ -1,16 +1,29 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
-import { Button } from '@casillego/ui';
+import { Button, EmptyState } from '@casillego/ui';
 import { ApiError, decodeAccessToken, readAccessToken } from '@casillego/shared';
 import { tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage } from '../auth/auth-error-messages';
 import { resolveLoginOutcome } from '../auth/login-outcome';
-import { writeSessionRole, type SessionRole } from '../auth/session-role';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
-import { ADMIN_INSTITUTIONS_PATH, HOME_PATH, STUDENTS_PATH } from '../routes/paths';
+import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
+
+const NO_ACCESS_ICON = (
+  <svg
+    width="26"
+    height="26"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+  >
+    <path d="M3 21h18M5 21V8l7-4 7 4v13" />
+    <path d="M9 21v-5h6v5" />
+  </svg>
+);
 
 /** Affordance with no endpoint behind it yet — visible but inert (ADR-043 point 4). */
 const INERT_LINK_STYLE = {
@@ -43,7 +56,7 @@ export function Login() {
   const emailId = useId();
   const passwordId = useId();
 
-  const [step, setStep] = useState<'credentials' | 'choose-role'>('credentials');
+  const [noAccess, setNoAccess] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [revealed, setRevealed] = useState(false);
@@ -54,7 +67,7 @@ export function Login() {
   // below updates `AuthContext.session` ahead of `handleSubmit` reaching
   // `resolveLoginOutcome`, and a plain `if (session)` read on every render
   // would win that race, redirecting straight to `destination` (HOME_PATH)
-  // before the hybrid case ever gets to show its chooser. Only a session
+  // before the no-access state ever gets a chance to render. Only a session
   // that already existed when this screen mounted (e.g. a direct visit to
   // /login while already signed in) should trigger that redirect.
   const [hadSessionOnMount] = useState(() => session !== null);
@@ -71,6 +84,7 @@ export function Login() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setNoAccess(false);
     setSubmitting(true);
     try {
       await login(email, password);
@@ -82,14 +96,9 @@ export function Login() {
       const freshToken = readAccessToken(tokenStorage);
       const freshClaims = freshToken ? decodeAccessToken(freshToken) : null;
       const outcome = await resolveLoginOutcome(freshClaims?.isSuperAdmin ?? false);
-      if (outcome.kind === 'choose-role') {
-        // Genuine hybrid account (ADR-077 point 1) — ask once instead of
-        // guessing, no navigation yet.
-        setStep('choose-role');
+      if (outcome.kind === 'no-access') {
+        setNoAccess(true);
         return;
-      }
-      if (outcome.role) {
-        writeSessionRole(outcome.role);
       }
       void navigate(outcome.path, { replace: true });
     } catch (caught) {
@@ -101,11 +110,6 @@ export function Login() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function chooseRole(role: SessionRole) {
-    writeSessionRole(role);
-    void navigate(role === 'institution' ? HOME_PATH : STUDENTS_PATH, { replace: true });
   }
 
   return (
@@ -145,7 +149,18 @@ export function Login() {
           }}
         >
           <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
-            {step === 'credentials' ? (
+            {noAccess ? (
+              <EmptyState
+                icon={NO_ACCESS_ICON}
+                title="Esta cuenta no tiene acceso al portal de instituciones"
+                description="Si buscas recoger a tus hijos de la escuela, usa la app CasiLlego para tutores en tu celular."
+                action={
+                  <Button variant="outline" size="md" onClick={() => setNoAccess(false)}>
+                    Volver a intentar
+                  </Button>
+                }
+              />
+            ) : (
               <>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
                   Bienvenido de nuevo
@@ -241,48 +256,6 @@ export function Login() {
                   >
                     Crear cuenta
                   </span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
-                  Tu cuenta tiene dos vistas
-                </div>
-                <h1
-                  style={{
-                    margin: '6px 0 12px',
-                    fontSize: 30,
-                    fontWeight: 800,
-                    color: 'var(--ink-900)',
-                    letterSpacing: '-.02em',
-                  }}
-                >
-                  ¿Con cuál quieres entrar?
-                </h1>
-                <p
-                  style={{
-                    margin: '0 0 28px',
-                    fontSize: 14,
-                    color: 'var(--ink-300)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Perteneces a una institución y también tienes hijos registrados. Elige una vista
-                  para esta sesión — para cambiar más tarde, cierra sesión y vuelve a entrar.
-                </p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    full
-                    onClick={() => chooseRole('institution')}
-                  >
-                    Continuar como Institución
-                  </Button>
-                  <Button variant="outline" size="lg" full onClick={() => chooseRole('tutor')}>
-                    Continuar como Tutor
-                  </Button>
                 </div>
               </>
             )}

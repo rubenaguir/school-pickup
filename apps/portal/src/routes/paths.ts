@@ -83,58 +83,9 @@ export const REPORTS_PATH = '/reports';
 export const HOME_PATH = DASHBOARD_PATH;
 
 /**
- * Landing screen of the tutor (parent) view — "Mis hijos", the first of the
- * five tutor screens (docs/design-brief.md, "Rol: tutor (padre)"). Where
- * anyone without an institution membership lands after login, including a
- * brand-new tutor account with zero children yet (ADR-056 point 5).
- */
-export const STUDENTS_PATH = '/students';
-
-/**
- * Alta de alumno (specs/features/004-alta-alumno.md), linked from the
- * "Agregar alumno" button on "Mis hijos". No photo field — deliberate,
- * ADR-058.
- */
-export const NEW_STUDENT_PATH = '/students/new';
-
-/**
- * Associate one student to an institution (specs/features/005-asociar-institucion.md),
- * linked per-student from "Mis hijos".
- */
-export const ASSOCIATE_INSTITUTION_PATH = '/students/:studentId/associate';
-
-export function associateInstitutionPath(studentId: string): string {
-  return `/students/${studentId}/associate`;
-}
-
-/**
- * Tutores autorizados de un alumno
- * (specs/features/015-invitar-tutor-autorizado.md,
- * specs/features/017-gestionar-tutores-autorizados.md), linked per-student
- * from "Mis hijos". Own route rather than an expandable panel inside
- * "Mis hijos": it carries its own form (invitar), row-level actions
- * (revocar, reasignar principal) and error states, same shape as
- * `ASSOCIATE_INSTITUTION_PATH`.
- */
-export const STUDENT_GUARDIANS_PATH = '/students/:studentId/guardians';
-
-export function studentGuardiansPath(studentId: string): string {
-  return `/students/${studentId}/guardians`;
-}
-
-/**
- * "Mis vehículos" (specs/features/014-gestionar-vehiculos.md), the vehicle
- * half of the "Perfil" tutor screen — the rest (`PROFILE_PATH`) is feature 026.
- * Global to the tutor, not per-student: no route param, unlike
- * `STUDENT_GUARDIANS_PATH`.
- */
-export const VEHICLES_PATH = '/vehicles';
-
-/**
- * Rest of "Perfil" (specs/features/026-perfil-tutor.md, ADR-059): datos
- * personales, preferencias de notificación y cambio de contraseña. "Mis
- * vehículos" (`VEHICLES_PATH`) stays its own route — the other half of the
- * same design-brief section, already shipped in feature 014. No biometría:
- * confirmed out of backend scope (ADR-059 point 6).
+ * Datos personales, preferencias de notificación y cambio de contraseña
+ * (specs/features/026-perfil-tutor.md, ADR-059) — recortado a lo que aplica
+ * a personal de institución (ADR-078 point 1). No biometría: confirmed out
+ * of backend scope (ADR-059 point 6).
  */
 export const PROFILE_PATH = '/profile';

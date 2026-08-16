@@ -1,11 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { AuthProvider } from './auth/AuthContext';
-import { AuthenticatedLayout, InstitutionGate, TutorRoleGate } from './routes/AuthenticatedLayout';
+import { AuthenticatedLayout, InstitutionGate } from './routes/AuthenticatedLayout';
 import { SuperAdminRoute } from './routes/SuperAdminRoute';
 import {
   ADMIN_INSTITUTIONS_PATH,
   ADMIN_METRICS_PATH,
-  ASSOCIATE_INSTITUTION_PATH,
   DASHBOARD_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
@@ -13,16 +12,11 @@ import {
   HOME_PATH,
   INSTITUTION_PROFILE_PATH,
   LOGIN_PATH,
-  NEW_STUDENT_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
   PROFILE_PATH,
   REPORTS_PATH,
-  STUDENTS_PATH,
-  STUDENT_GUARDIANS_PATH,
-  VEHICLES_PATH,
 } from './routes/paths';
-import { AssociateInstitution } from './screens/AssociateInstitution';
 import { Dashboard } from './screens/Dashboard';
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
@@ -32,15 +26,11 @@ import { InstitutionApproval } from './screens/InstitutionApproval';
 import { InstitutionProfile } from './screens/InstitutionProfile';
 import { InstitutionShell } from './institution/InstitutionShell';
 import { Login } from './screens/Login';
-import { NewStudent } from './screens/NewStudent';
 import { OpsShell } from './admin/OpsShell';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Profile } from './screens/Profile';
 import { Reports } from './screens/Reports';
-import { StudentGuardians } from './screens/StudentGuardians';
-import { Students } from './screens/Students';
-import { Vehicles } from './screens/Vehicles';
 
 export function App() {
   return (
@@ -49,9 +39,10 @@ export function App() {
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route element={<AuthenticatedLayout />}>
-            {/* InstitutionGate wraps only the institution routes: it redirects
-                a tutor session straight to STUDENTS_PATH before ever reading
-                InstitutionContext (ADR-077 point 4). */}
+            {/* InstitutionGate wraps only the institution routes; PROFILE_PATH
+                stays outside it since Profile.tsx applies to any signed-in
+                institution session regardless of which screen it opens
+                (ADR-078 point 1). */}
             <Route element={<InstitutionGate />}>
               {/* GateConsole stays outside the shell: it is a separate kiosk
                   screen, no sidebar in the kit either (ADR-072). */}
@@ -65,17 +56,6 @@ export function App() {
                 <Route path={PERSONNEL_PATH} element={<Personnel />} />
                 <Route path={REPORTS_PATH} element={<Reports />} />
               </Route>
-            </Route>
-            {/* TutorRoleGate wraps only the routes genuinely exclusive to the
-                tutor view (ADR-077 point 4). PROFILE_PATH stays outside both
-                this and InstitutionGate above: Profile.tsx is generic, it
-                applies to any signed-in session regardless of chosen role. */}
-            <Route element={<TutorRoleGate />}>
-              <Route path={STUDENTS_PATH} element={<Students />} />
-              <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
-              <Route path={ASSOCIATE_INSTITUTION_PATH} element={<AssociateInstitution />} />
-              <Route path={STUDENT_GUARDIANS_PATH} element={<StudentGuardians />} />
-              <Route path={VEHICLES_PATH} element={<Vehicles />} />
             </Route>
             <Route path={PROFILE_PATH} element={<Profile />} />
           </Route>

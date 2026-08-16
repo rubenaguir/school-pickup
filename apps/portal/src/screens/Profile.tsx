@@ -1,5 +1,4 @@
 import { useId, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
 import { Button, Card, ErrorState, SkeletonRow, Toggle } from '@casillego/ui';
 import type { ApiError } from '@casillego/shared';
 import { useAuth } from '../auth/AuthContext';
@@ -16,7 +15,6 @@ import {
 } from '../profile/useProfile';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { STUDENTS_PATH, VEHICLES_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -46,9 +44,6 @@ const GRID_STYLE = {
 interface PersonalFormValues {
   fullName: string;
   phone: string;
-  notifyEnrollmentApproved: boolean;
-  notifyDismissalReminder: boolean;
-  notifyDeliveryConfirmed: boolean;
   notifyProductNews: boolean;
 }
 
@@ -56,9 +51,6 @@ function toFormValues(profile: ProfileData): PersonalFormValues {
   return {
     fullName: profile.fullName ?? '',
     phone: profile.phone ?? '',
-    notifyEnrollmentApproved: profile.notifyEnrollmentApproved,
-    notifyDismissalReminder: profile.notifyDismissalReminder,
-    notifyDeliveryConfirmed: profile.notifyDeliveryConfirmed,
     notifyProductNews: profile.notifyProductNews,
   };
 }
@@ -82,15 +74,6 @@ function buildChanges(profile: ProfileData, form: PersonalFormValues): ProfileCh
     changes.phone = trimmedPhone;
   }
 
-  if (form.notifyEnrollmentApproved !== profile.notifyEnrollmentApproved) {
-    changes.notifyEnrollmentApproved = form.notifyEnrollmentApproved;
-  }
-  if (form.notifyDismissalReminder !== profile.notifyDismissalReminder) {
-    changes.notifyDismissalReminder = form.notifyDismissalReminder;
-  }
-  if (form.notifyDeliveryConfirmed !== profile.notifyDeliveryConfirmed) {
-    changes.notifyDeliveryConfirmed = form.notifyDeliveryConfirmed;
-  }
   if (form.notifyProductNews !== profile.notifyProductNews) {
     changes.notifyProductNews = form.notifyProductNews;
   }
@@ -99,21 +82,6 @@ function buildChanges(profile: ProfileData, form: PersonalFormValues): ProfileCh
 }
 
 const NOTIFICATION_TOGGLES = [
-  [
-    'notifyEnrollmentApproved',
-    'Aprobación de asociación',
-    'Cuando una institución aprueba a tu hijo.',
-  ],
-  [
-    'notifyDismissalReminder',
-    'Recordatorio de salida',
-    'Antes de que empiece la ventana de salida.',
-  ],
-  [
-    'notifyDeliveryConfirmed',
-    'Confirmación de entrega',
-    'Cuando el staff confirma que ya recogiste a tu hijo.',
-  ],
   [
     'notifyProductNews',
     'Novedades del producto',
@@ -402,7 +370,6 @@ function ChangePasswordForm({
  */
 export function Profile() {
   const { session, logout } = useAuth();
-  const navigate = useNavigate();
 
   const {
     status,
@@ -450,7 +417,7 @@ export function Profile() {
             <div
               style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
             >
-              <span style={EYEBROW_STYLE}>Tutor</span>
+              <span style={EYEBROW_STYLE}>Cuenta</span>
               <h1
                 style={{
                   margin: 0,
@@ -467,12 +434,6 @@ export function Profile() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button variant="outline" size="sm" onClick={() => void navigate(STUDENTS_PATH)}>
-                Mis hijos
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigate(VEHICLES_PATH)}>
-                Mis vehículos
-              </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Cerrar sesión
               </Button>
