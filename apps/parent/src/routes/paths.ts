@@ -30,3 +30,27 @@ export const TRACKING_PATH = '/pickup-requests/:pickupRequestId/tracking';
 export function trackingPath(pickupRequestId: string): string {
   return `/pickup-requests/${pickupRequestId}/tracking`;
 }
+
+/**
+ * "Mis hijos" del Portal web (docs/decisiones.md ADR-078 punto 3) — landing
+ * de la superficie de escritorio, análogo de HOME_PATH para App móvil.
+ */
+export const TUTOR_PORTAL_STUDENTS_PATH = '/portal/students';
+
+/**
+ * "Asociar institución" del Portal web. Placeholder route only (ADR-078
+ * step 2 prompt §2) — la pantalla real llega en un paso siguiente.
+ */
+export const TUTOR_PORTAL_ASSOCIATE_PATH = '/portal/associate';
+
+/**
+ * "Tutores autorizados" del Portal web. Placeholder route only — misma nota
+ * que TUTOR_PORTAL_ASSOCIATE_PATH.
+ */
+export const TUTOR_PORTAL_GUARDIANS_PATH = '/portal/guardians';
+
+/**
+ * "Perfil" del Portal web. Placeholder route only — misma nota que
+ * TUTOR_PORTAL_ASSOCIATE_PATH.
+ */
+export const TUTOR_PORTAL_PROFILE_PATH = '/portal/profile';

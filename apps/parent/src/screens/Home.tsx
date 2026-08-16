@@ -1,8 +1,11 @@
-import { useNavigate } from 'react-router';
-import { Avatar, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { useState } from 'react';
+import { Navigate, useNavigate } from 'react-router';
+import { Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useMyStudents, type MyStudent } from '../students/useMyStudents';
-import { selectInstitutionPath } from '../routes/paths';
+import { StudentPhoto } from '../students/StudentPhoto';
+import { resolveInitialSurface, setSurface } from '../surface/surface';
+import { selectInstitutionPath, TUTOR_PORTAL_STUDENTS_PATH } from '../routes/paths';
 import { PushSubscriptionPrompt } from '../push/PushSubscriptionPrompt';
 
 const EYEBROW_STYLE = {
@@ -29,21 +32,19 @@ const EMPTY_ICON = (
   </svg>
 );
 
-/** Photo if `photoUrl` exists, otherwise the same initials avatar the portal uses. */
-function StudentPhoto({ student, index }: { student: MyStudent; index: number }) {
-  if (!student.photoUrl) {
-    return <Avatar name={student.fullName} index={index} size={56} />;
-  }
-  return (
-    <img
-      src={student.photoUrl}
-      alt={student.fullName}
-      width={56}
-      height={56}
-      style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-    />
-  );
-}
+const SETTINGS_ICON = (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+  </svg>
+);
 
 /**
  * One student, with "¡Ya voy!" as the only action — the dominant gesture of
@@ -77,7 +78,20 @@ function StudentCard({ student, index }: { student: MyStudent; index: number }) 
 
 export function Home() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [surface] = useState(resolveInitialSurface);
   const students = useMyStudents();
+
+  // Evaluado una sola vez al montar (ADR-078 punto 4): un ancho de escritorio
+  // al aterrizar aquí manda directo a Portal web, sin renderizar "Inicio".
+  if (surface === 'web') {
+    return <Navigate to={TUTOR_PORTAL_STUDENTS_PATH} replace />;
+  }
+
+  function goToPortalWeb() {
+    setSurface('web');
+    void navigate(TUTOR_PORTAL_STUDENTS_PATH);
+  }
 
   return (
     <main
@@ -119,9 +133,14 @@ export function Home() {
               Mis hijos
             </h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            Cerrar sesión
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Button variant="ghost" size="sm" icon={SETTINGS_ICON} onClick={goToPortalWeb}>
+              Ajustes
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
         </div>
 
         <PushSubscriptionPrompt />
