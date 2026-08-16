@@ -495,17 +495,26 @@ Ver ADR-071 para la especificación completa.
 - [ ] **Extracción del patrón "canal WS con snapshot REST + deltas"
       (ADR-075)** — 3 pasos de riesgo creciente, verificados entre cada
       uno:
-  - [ ] Paso 1: piezas puras (`reconnectDelayMs`, `fatalCloseReason`,
-        `buildRealtimeSocketUrl`, `mergeBoardMonitorDelta`) a
-        `packages/shared/src/realtime-channel.ts` — cambio mecánico, sin
-        tests nuevos
-  - [ ] Paso 2: `useRealtimeChannel` genérico en
-        `packages/ui/src/hooks/` (React vive ahí, no en
-        `packages/shared`), migrar `useDeliveryPointQueue` como primer
-        caso de prueba
-  - [ ] Paso 3: migrar los 4 consumidores restantes, incluido
-        `apps/parent` (objeto único, no arreglo — la prueba de que la
-        abstracción no asumió por accidente que siempre hay una lista)
+  - [x] Paso 1: piezas puras (`reconnectDelayMs`, `fatalCloseReason`,
+        `buildRealtimeSocketUrl`) a `packages/shared/src/realtime-channel.ts`
+        — cambio mecánico, sin tests nuevos, ningún hook tocado
+  - [x] Paso 2: `useRealtimeChannel` genérico en `packages/ui/src/hooks/`
+        (React vive ahí, no en `packages/shared`), migrado
+        `useDeliveryPointQueue` como primer caso de prueba —
+        `asApiError` promovida de paso (17 duplicados detectados, solo
+        este consumidor migrado, los otros 16 quedan en Backlog técnico
+        aparte)
+  - [ ] Paso 3 (alcance corregido tras comparar el código real de los 4
+        restantes): migrar **solo 2**, no los 4 —
+        `useInstitutionBoardMonitor` de Carril (`apps/board`) y
+        `useTrackingPickupRequest` (`apps/parent`, objeto único, no
+        arreglo — la prueba de que la abstracción no asumió por
+        accidente que siempre hay una lista). `useInstitutionBoard`
+        (tablero público, multiplexa `kind: 'row'`/`kind: 'announce'`) y
+        `useInstitutionBoardMonitor` del Dashboard (segundo sub-canal
+        independiente de `delivered-today`) **se quedan sin migrar, a
+        propósito** — forzarlos al contrato actual del hook genérico
+        significaría ensuciarlo con conceptos que solo ellos necesitan
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

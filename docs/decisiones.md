@@ -5271,16 +5271,43 @@ el problema que resuelve:
    consumidor** (`useDeliveryPointQueue`, el original y el más probado) —
    probar el diseño contra el caso real más antiguo antes de tocar los
    otros 4.
-3. **Migrar los 4 restantes**, uno por uno o en lote una vez el paso 2
-   quede verificado en vivo — incluyendo el caso de `apps/parent` (objeto
-   único, no arreglo), que es la prueba real de que el hook genérico no
-   asumió por accidente que `TState` siempre es una lista.
+3. **Migrar solo 2 de los 4 restantes** — **no los 4**, corrección hecha
+   al comparar el código real de los 4 antes de escribir el prompt de
+   este paso (mismo tipo de hallazgo que corrigió el punto 1 sobre
+   `FATAL_CLOSE_REASONS`):
+   - `useInstitutionBoardMonitor` de Carril (`apps/board`) — encaja
+     limpio, misma forma que `useDeliveryPointQueue`.
+   - `useTrackingPickupRequest` (`apps/parent`) — encaja limpio, y es la
+     prueba real de que el hook genérico no asumió por accidente que
+     `TState` siempre es una lista (aquí es un solo objeto).
+   - **`useInstitutionBoard`** (tablero público, `apps/board`) **se
+     queda sin migrar, a propósito**: multiplexa dos tipos de mensaje
+     por el mismo socket (`kind: 'row'`/`kind: 'announce'`, ADR-073) con
+     reacciones distintas — uno funde estado, el otro solo dispara un
+     callback sin tocarlo. Forzarlo al contrato actual del hook
+     (`parseDelta`/`mergeDelta` de una sola forma) significaría
+     extenderlo con un concepto que le pertenece a este consumidor
+     específico — exactamente el riesgo que el punto de la fusión ya
+     evitó a nivel de función, ahora replicado un nivel más arriba.
+   - **`useInstitutionBoardMonitor` del Dashboard** (`apps/portal`) **se
+     queda sin migrar, a propósito**: trae un segundo sub-canal
+     independiente encima (`GET /institutions/:id/delivered-today`, con
+     su propio buffer y su propio corte por `asOf`, ADR-072 §6
+     enmienda) — el hook genérico no tiene ningún concepto de "un
+     segundo fetch con su propia lógica de espera" y no debería
+     inventarlo solo para este caso.
 
 **Consecuencias.** Cierra el ítem de backlog más señalado de todo el
-proyecto (5 instancias). El caso de `apps/parent` es lo que confirma que
-la abstracción no se sobre-ajustó a los 4 casos de "lista de filas" —
-si el hook genérico solo hubiera funcionado para arreglos, habría sido
-la señal de que la generalización estaba mal.
+proyecto — **3 de 5** instancias terminan sobre el hook genérico
+(`useDeliveryPointQueue`, Carril, `apps/parent`), **2 de 5** quedan
+documentadas como excepción deliberada, no como pendiente. El caso de
+`apps/parent` confirma que la abstracción no se sobre-ajustó a "lista de
+filas" — si el hook genérico solo hubiera funcionado para arreglos,
+habría sido la señal de que la generalización estaba mal. Si en el
+futuro `useInstitutionBoard`/el Dashboard necesitan evolucionar de forma
+que su complejidad extra deje de justificarse, revisar si para entonces
+el hook genérico puede extenderse sin ensuciarse — no es una decisión
+final, es la lectura correcta con la información de hoy.
 
 ## Referencias
 
