@@ -11,6 +11,7 @@ import {
   TUTOR_PORTAL_PROFILE_PATH,
   TUTOR_PORTAL_STUDENTS_PATH,
 } from './routes/paths';
+import { AssociateAndGuardians } from './portal-web/AssociateAndGuardians';
 import { PortalStudents } from './portal-web/PortalStudents';
 import { TutorPlaceholder } from './portal-web/TutorPlaceholder';
 import { TutorShell } from './portal-web/TutorShell';
@@ -31,18 +32,8 @@ export function App() {
             <Route path={TRACKING_PATH} element={<Tracking />} />
             <Route element={<TutorShell />}>
               <Route path={TUTOR_PORTAL_STUDENTS_PATH} element={<PortalStudents />} />
-              <Route
-                path={TUTOR_PORTAL_ASSOCIATE_PATH}
-                element={
-                  <TutorPlaceholder description="Buscar y solicitar la asociación de tus alumnos a nuevas instituciones." />
-                }
-              />
-              <Route
-                path={TUTOR_PORTAL_GUARDIANS_PATH}
-                element={
-                  <TutorPlaceholder description="Administrar quién más puede recoger a tus alumnos." />
-                }
-              />
+              <Route path={TUTOR_PORTAL_ASSOCIATE_PATH} element={<AssociateAndGuardians />} />
+              <Route path={TUTOR_PORTAL_GUARDIANS_PATH} element={<AssociateAndGuardians />} />
               <Route
                 path={TUTOR_PORTAL_PROFILE_PATH}
                 element={

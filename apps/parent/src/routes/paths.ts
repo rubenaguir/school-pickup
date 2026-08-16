@@ -38,14 +38,15 @@ export function trackingPath(pickupRequestId: string): string {
 export const TUTOR_PORTAL_STUDENTS_PATH = '/portal/students';
 
 /**
- * "Asociar institución" del Portal web. Placeholder route only (ADR-078
- * step 2 prompt §2) — la pantalla real llega en un paso siguiente.
+ * "Asociar institución" del Portal web (docs/decisiones.md ADR-078 punto 3).
+ * Comparte componente (`AssociateAndGuardians`) con TUTOR_PORTAL_GUARDIANS_PATH
+ * — un selector de alumno en memoria, no dos rutas por `:studentId`.
  */
 export const TUTOR_PORTAL_ASSOCIATE_PATH = '/portal/associate';
 
 /**
- * "Tutores autorizados" del Portal web. Placeholder route only — misma nota
- * que TUTOR_PORTAL_ASSOCIATE_PATH.
+ * "Tutores autorizados" del Portal web. Misma nota que
+ * TUTOR_PORTAL_ASSOCIATE_PATH — comparten componente.
  */
 export const TUTOR_PORTAL_GUARDIANS_PATH = '/portal/guardians';
 

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router';
 import { Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import type { EnrollmentStatus } from '@casillego/shared';
+import type { EnrollmentStatus, InstitutionType } from '@casillego/shared';
 import { useMyStudents, type MyStudent } from '../students/useMyStudents';
 import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
 import { StudentPhoto } from '../students/StudentPhoto';
@@ -31,7 +31,7 @@ const EMPTY_ICON = (
  * `--danger` ya existentes en el proyecto en vez de ocultarle al tutor un
  * estado real.
  */
-const STATUS_META: Record<EnrollmentStatus, { label: string; bg: string; fg: string }> = {
+export const STATUS_META: Record<EnrollmentStatus, { label: string; bg: string; fg: string }> = {
   approved: {
     label: 'Aprobada',
     bg: 'var(--status-delivered-bg)',
@@ -45,9 +45,16 @@ const STATUS_META: Record<EnrollmentStatus, { label: string; bg: string; fg: str
   rejected: { label: 'Rechazada', bg: 'var(--danger-bg)', fg: 'var(--danger)' },
 };
 
-function institutionTypeLabel(enrollment: MyEnrollment): string {
-  const base = enrollment.institutionType === 'school' ? 'Escuela' : 'Actividad';
-  return enrollment.institutionCategory ? `${base} · ${enrollment.institutionCategory}` : base;
+/**
+ * Second real consumer: `AssociateInstitutionPanel` (ADR-078 punto 3) needs
+ * the same "Escuela/Actividad · categoría" formatting for a search result,
+ * which carries `type`/`category` directly rather than nested in an
+ * enrollment — taking the two fields as plain params (instead of a
+ * `MyEnrollment`) is what lets both call sites share it.
+ */
+export function institutionTypeLabel(type: InstitutionType, category: string | null): string {
+  const base = type === 'school' ? 'Escuela' : 'Actividad';
+  return category ? `${base} · ${category}` : base;
 }
 
 /**
@@ -191,7 +198,7 @@ function StudentRow({
                   {enrollment.institutionName}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
-                  {institutionTypeLabel(enrollment)}
+                  {institutionTypeLabel(enrollment.institutionType, enrollment.institutionCategory)}
                 </span>
               </span>
               <span
