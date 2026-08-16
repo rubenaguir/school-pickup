@@ -6,6 +6,7 @@ import { apiClient } from '../api/client';
 import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
 import type { MyStudent } from '../students/useMyStudents';
 import { institutionTypeLabel, STATUS_META } from './PortalStudents';
+import { blockingEnrollment, rejectedEnrollment } from './associate-institution-rules';
 import {
   institutionSearchErrorMessage,
   enrollmentRequestErrorMessage,
@@ -57,12 +58,14 @@ interface SearchState {
 function InstitutionSearchResults({
   query,
   existingFor,
+  rejectedFor,
   submittingId,
   requestErrors,
   onRequest,
 }: {
   query: string;
   existingFor: (institutionId: string) => MyEnrollment | undefined;
+  rejectedFor: (institutionId: string) => MyEnrollment | undefined;
   submittingId: string | null;
   requestErrors: Record<string, ApiError>;
   onRequest: (institution: InstitutionSearchResult) => void;
@@ -114,6 +117,7 @@ function InstitutionSearchResults({
       {state.results.map((institution) => {
         const existing = existingFor(institution.id);
         const meta = existing ? STATUS_META[existing.status] : null;
+        const rejected = rejectedFor(institution.id);
         const submitting = submittingId === institution.id;
         const rowError = requestErrors[institution.id];
 
@@ -168,6 +172,11 @@ function InstitutionSearchResults({
                 </Button>
               )}
             </div>
+            {!meta && rejected && (
+              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--ink-300)' }}>
+                Tu solicitud anterior fue rechazada.
+              </div>
+            )}
             {rowError && (
               <div style={{ marginTop: 12 }}>
                 <InlineError
@@ -210,14 +219,16 @@ export function AssociateInstitutionPanel({ student }: { student: MyStudent }) {
   // asociación" while it's in flight.
   const studentEnrollments = enrollments.enrollments.filter((e) => e.studentId === student.id);
 
-  // Every status counts, not only pending/approved: `POST /enrollments`
-  // enforces a unique (studentId, institutionId) regardless of the existing
-  // row's status (specs/api-contracts/enrollments.md, 409 DUPLICATE_ENROLLMENT),
-  // so a rejected request would still 409 on retry — the button would only
-  // fail. Showing its status instead reflects what a retry would actually do.
-  function existingEnrollment(institutionId: string) {
-    return studentEnrollments.find((e) => e.institutionId === institutionId);
-  }
+  // Only pending/approved block a retry: the partial unique index
+  // `("student_id", "institution_id") WHERE "status" IN ('pending', 'approved')`
+  // (apps/api/src/database/migrations/1783697356401-PartialUniqueAndGinIndexes.ts)
+  // excludes `rejected` on purpose, and `POST /enrollments` relies on that
+  // index to raise DUPLICATE_ENROLLMENT — a rejected row does not 409 on
+  // retry (specs/entities/enrollment.md, ADR-026 punto 1).
+  const existingEnrollment = (institutionId: string) =>
+    blockingEnrollment(studentEnrollments, institutionId);
+  const rejectedForInstitution = (institutionId: string) =>
+    rejectedEnrollment(studentEnrollments, institutionId);
 
   function requestAssociation(institution: InstitutionSearchResult) {
     setRequestErrors((current) => {
@@ -289,6 +300,7 @@ export function AssociateInstitutionPanel({ student }: { student: MyStudent }) {
           key={debouncedQuery}
           query={debouncedQuery}
           existingFor={existingEnrollment}
+          rejectedFor={rejectedForInstitution}
           submittingId={submittingId}
           requestErrors={requestErrors}
           onRequest={requestAssociation}
