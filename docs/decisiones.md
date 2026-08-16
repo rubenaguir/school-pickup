@@ -5190,10 +5190,19 @@ instancias, no solo la descripción — el hallazgo cambia el diseño:
 1. **La capa de conexión** (abrir el socket, pedir el snapshot REST desde
    `onopen`, bufferizar deltas que llegan mientras el snapshot está en
    vuelo, reconectar con backoff `[1000, 2000, 5000, 10000]`, detectar
-   los 4 códigos de cierre fatal) es **idéntica letra por letra** en las
-   5 — `reconnectDelayMs`, `fatalCloseReason`, `FATAL_CLOSE_REASONS`, y el
-   constructor de URL del socket (misma forma, solo cambia el `path` y
-   los parámetros de query) no divergen ni un carácter entre archivos.
+   los 4 códigos de cierre fatal) es **casi idéntica** en las 5 —
+   `reconnectDelayMs` y el constructor de URL del socket (misma forma,
+   solo cambia el `path` y los parámetros de query) no divergen ni un
+   carácter entre archivos. `fatalCloseReason` en sí tampoco divierge,
+   pero **`FATAL_CLOSE_REASONS` no es idéntico**: el seguimiento del
+   tutor en `apps/parent` usa `4403: 'NOT_STUDENT_GUARDIAN'` en vez de
+   `'NOT_INSTITUTION_MEMBER'` — es el único canal orientado a tutores, no
+   a personal de institución, y ese código de cierre significa algo
+   distinto ahí. Las otras 3 posiciones (4400/4401/4404) sí son
+   idénticas en las 5. Hallazgo verificado al comparar el código real
+   justo antes de escribir el primer prompt de esta extracción —
+   corrige la primera versión de este punto, que asumía el mapa completo
+   idéntico sin haberlo confirmado letra por letra.
 2. **La función de fusión (`merge`)** no es igual entre las 5:
    - `mergeQueueDelta` (consola de puerta) devuelve solo el arreglo.
    - `mergeBoardDelta` (tablero público) devuelve además
@@ -5216,9 +5225,14 @@ hay hoy. No se hace.
 
 ### 1. `packages/shared/src/realtime-channel.ts` — piezas puras, sin React
 
-`reconnectDelayMs`, `fatalCloseReason`, `FATAL_CLOSE_REASONS`,
-`buildRealtimeSocketUrl(apiBaseUrl, path, params)` (generaliza los 5
-constructores de URL, que ya comparten forma). También
+`reconnectDelayMs`, `buildRealtimeSocketUrl(apiBaseUrl, path, params)`
+(generaliza los 5 constructores de URL, que ya comparten forma), y
+`fatalCloseReason(code, reason, knownReasons)` — **recibe el mapa como
+parámetro, no lo trae adentro**: cada canal conserva su propio
+`FATAL_CLOSE_REASONS` local (4 de los 5 comparten los mismos 4 valores,
+`apps/parent` difiere en el 4403 — ver punto 1 del contexto). Centralizar
+el mapa habría estandarizado silenciosamente ese mensaje para el único
+canal donde significa algo distinto. También
 `isActiveBoardStatus`/`mergeBoardMonitorDelta` — la única fusión
 verdaderamente duplicada, movida junto con su predicado (hoy vive
 duplicada en `apps/board` y re-declarada aparte en `apps/portal`).

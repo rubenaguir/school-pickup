@@ -33,6 +33,7 @@ export * from './types/audit-log';
 export * from './types/geo-point';
 
 export * from './pickup-request-status-machine';
+export * from './realtime-channel';
 export * from './pickup-request-payloads';
 export * from './student-guardian-labels';
 export * from './ports';

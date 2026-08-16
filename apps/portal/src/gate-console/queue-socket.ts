@@ -1,3 +1,8 @@
+import {
+  buildRealtimeSocketUrl,
+  fatalCloseReason as sharedFatalCloseReason,
+} from '@casillego/shared';
+
 /**
  * Path of the WebSocket bridge (ADR-050). Deliberately without the `/api`
  * global prefix of the REST API: `setGlobalPrefix('api')` applies to HTTP
@@ -21,13 +26,10 @@ export function buildQueueSocketUrl(
   apiBaseUrl: string,
   params: { accessToken: string; deliveryPointId: string },
 ): string {
-  const base = new URL(apiBaseUrl);
-  base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
-  base.pathname = QUEUE_SOCKET_PATH;
-  base.search = '';
-  base.searchParams.set('accessToken', params.accessToken);
-  base.searchParams.set('deliveryPointId', params.deliveryPointId);
-  return base.toString();
+  return buildRealtimeSocketUrl(apiBaseUrl, QUEUE_SOCKET_PATH, {
+    accessToken: params.accessToken,
+    deliveryPointId: params.deliveryPointId,
+  });
 }
 
 /**
@@ -53,9 +55,7 @@ const FATAL_CLOSE_REASONS: Record<number, string> = {
  * dropped for a reason a reconnection can fix.
  */
 export function fatalCloseReason(code: number, reason: string): string | null {
-  const known = FATAL_CLOSE_REASONS[code];
-  if (known === undefined) return null;
-  return reason === '' ? known : reason;
+  return sharedFatalCloseReason(code, reason, FATAL_CLOSE_REASONS);
 }
 
 /**
@@ -68,9 +68,4 @@ export function fatalCloseReason(code: number, reason: string): string | null {
  * that takes half a minute to come back is a console that missed the whole
  * event.
  */
-const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000] as const;
-
-export function reconnectDelayMs(attempt: number): number {
-  const index = Math.min(Math.max(attempt, 0), RECONNECT_DELAYS_MS.length - 1);
-  return RECONNECT_DELAYS_MS[index];
-}
+export { reconnectDelayMs } from '@casillego/shared';

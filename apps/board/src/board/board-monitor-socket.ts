@@ -1,3 +1,8 @@
+import {
+  buildRealtimeSocketUrl,
+  fatalCloseReason as sharedFatalCloseReason,
+} from '@casillego/shared';
+
 /**
  * Path of Carril's own WebSocket bridge (ADR-071 pt.2,
  * `specs/api-contracts/board-monitor-ws.md`) — deliberately separate
@@ -15,13 +20,10 @@ export function buildBoardMonitorSocketUrl(
   apiBaseUrl: string,
   params: { accessToken: string; institutionId: string },
 ): string {
-  const base = new URL(apiBaseUrl);
-  base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
-  base.pathname = BOARD_MONITOR_WS_PATH;
-  base.search = '';
-  base.searchParams.set('accessToken', params.accessToken);
-  base.searchParams.set('institutionId', params.institutionId);
-  return base.toString();
+  return buildRealtimeSocketUrl(apiBaseUrl, BOARD_MONITOR_WS_PATH, {
+    accessToken: params.accessToken,
+    institutionId: params.institutionId,
+  });
 }
 
 /**
@@ -41,18 +43,11 @@ const FATAL_CLOSE_REASONS: Record<number, string> = {
  * socket dropped for a reason a reconnection can fix.
  */
 export function fatalCloseReason(code: number, reason: string): string | null {
-  const known = FATAL_CLOSE_REASONS[code];
-  if (known === undefined) return null;
-  return reason === '' ? known : reason;
+  return sharedFatalCloseReason(code, reason, FATAL_CLOSE_REASONS);
 }
 
 /**
  * Backoff between reconnection attempts, in milliseconds — same values as
  * `board-socket.ts`.
  */
-const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000] as const;
-
-export function reconnectDelayMs(attempt: number): number {
-  const index = Math.min(Math.max(attempt, 0), RECONNECT_DELAYS_MS.length - 1);
-  return RECONNECT_DELAYS_MS[index];
-}
+export { reconnectDelayMs } from '@casillego/shared';
