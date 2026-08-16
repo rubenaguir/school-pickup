@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isActiveQueueStatus,
+  mergeAndSortQueueRows,
   mergeQueueDelta,
   parseQueueDelta,
   sortQueueRows,
@@ -136,6 +137,16 @@ describe('sortQueueRows', () => {
     ];
     sortQueueRows(rows);
     expect(rows.map((item) => item.pickupRequestId)).toEqual(['pr-1', 'pr-2']);
+  });
+});
+
+describe('mergeAndSortQueueRows', () => {
+  it('merges the delta and returns the result sorted by ETA', () => {
+    const merged = mergeAndSortQueueRows(
+      [row({ pickupRequestId: 'pr-1', etaSeconds: 600 })],
+      row({ pickupRequestId: 'pr-2', etaSeconds: 60 }),
+    );
+    expect(merged.map((item) => item.pickupRequestId)).toEqual(['pr-2', 'pr-1']);
   });
 });
 

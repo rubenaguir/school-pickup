@@ -154,3 +154,13 @@ export function sortQueueRows(rows: readonly QueueRow[]): QueueRow[] {
     return a.studentFullName.localeCompare(b.studentFullName, 'es-MX');
   });
 }
+
+/**
+ * `mergeQueueDelta` followed by `sortQueueRows` — the shape `useRealtimeChannel`
+ * (ADR-075) needs as its single `mergeDelta`, since the generic hook has no
+ * concept of ordering. `mergeQueueDelta` itself stays unsorted on purpose,
+ * its own tests assume that.
+ */
+export function mergeAndSortQueueRows(rows: readonly QueueRow[], delta: QueueRow): QueueRow[] {
+  return sortQueueRows(mergeQueueDelta(rows, delta));
+}

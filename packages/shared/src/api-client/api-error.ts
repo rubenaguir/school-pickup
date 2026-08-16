@@ -76,3 +76,18 @@ export function toApiError(status: number, rawBody: string): ApiError {
     details: Array.isArray(body.details) ? (body.details as InvalidPayloadDetail[]) : undefined,
   });
 }
+
+/**
+ * Normalizes a caught value into an `ApiError` — every promise rejection in a
+ * `.catch((caught: unknown) => ...)` handler passes through this, since a
+ * `caught` value is `unknown` by TypeScript's own rules (not necessarily
+ * something `apiClient` produced). Duplicated locally in ~17 places across
+ * the frontends (ADR-075); promoted here for the one consumer migrated by
+ * that ADR's Paso 2, not a sweep of the rest — see the Backlog técnico entry
+ * in `docs/plan-implementacion.md`.
+ */
+export function asApiError(caught: unknown): ApiError {
+  return caught instanceof ApiError
+    ? caught
+    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
+}

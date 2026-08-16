@@ -11,6 +11,7 @@
     "./styles.css": "./src/styles.css"
   },
   "dependencies": {
+    "@casillego/shared": "*",
     "mapbox-gl": "^3.28.1",
     "react": "^19.2.7"
   },

@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, readAccessToken, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { useCallback, useState } from 'react';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
+import { useRealtimeChannel } from '@casillego/ui';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
-import {
-  isActiveQueueStatus,
-  mergeQueueDelta,
-  parseQueueDelta,
-  sortQueueRows,
-  type QueueRow,
-} from './queue-rows';
-import { buildQueueSocketUrl, fatalCloseReason, reconnectDelayMs } from './queue-socket';
+import { mergeAndSortQueueRows, parseQueueDelta, type QueueRow } from './queue-rows';
+import { buildQueueSocketUrl, fatalCloseReason } from './queue-socket';
 
 /**
  * Page size of the snapshot. Above the API default of 20 (ADR-024 point 9) on
@@ -83,214 +78,75 @@ interface ListDeliveryPointQueueResponse {
   pickupRequests: QueueRow[];
 }
 
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
-}
-
-function parseMessage(data: unknown): QueueRow | null {
-  if (typeof data !== 'string') return null;
-  try {
-    return parseQueueDelta(JSON.parse(data));
-  } catch {
-    return null;
-  }
+function fetchQueueSnapshot(deliveryPointId: string): Promise<QueueRow[]> {
+  return apiClient
+    .get<ListDeliveryPointQueueResponse>(
+      `/pickup-requests?deliveryPointId=${encodeURIComponent(deliveryPointId)}&limit=${QUEUE_PAGE_SIZE}`,
+    )
+    .then((response) => response.pickupRequests);
 }
 
 /**
  * Live queue of one delivery point: REST snapshot plus WebSocket deltas
- * (feature 021, ADR-050).
+ * (feature 021, ADR-050), via the generic `useRealtimeChannel` (ADR-075).
  *
- * The two mechanisms stay separate, never hybrid (ADR-050 point 6). The socket
- * opens first and the snapshot is requested from its `open` handler, so the
- * order is always snapshot-then-deltas even on a reconnection: deltas that
- * arrive while the snapshot is in flight are buffered and folded in on top of
- * it afterwards, instead of being lost to a response that was already stale
- * when it was built.
- *
- * Everything the socket does lives inside one effect keyed on the delivery
- * point, so switching gates tears the old channel down before opening the new
- * one, and React's development double-mount cannot leave a socket behind.
+ * `deliver()`/`announce()` are not part of the realtime channel — they are
+ * plain REST actions this screen owns on its own.
  */
 export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryPointQueueValue {
-  const [rows, setRows] = useState<QueueRow[]>([]);
-  const [connection, setConnection] = useState<ConnectionState>('connecting');
-  const [connectionErrorReason, setConnectionErrorReason] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deliverError, setDeliverError] = useState<DeliverError | null>(null);
   const [deliveredId, setDeliveredId] = useState<string | null>(null);
   const [announcingId, setAnnouncingId] = useState<string | null>(null);
   const [announceError, setAnnounceError] = useState<AnnounceError | null>(null);
-  const [lastAnnouncedId, setLastAnnouncedId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const [announcedId, setAnnouncedId] = useState<string | null>(null);
 
-  // Read inside the socket effect below without making it re-run every time
-  // a `announce()` call resolves — same pattern as `onAnnounceRef` in
-  // `useInstitutionBoard`.
-  const lastAnnouncedIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    lastAnnouncedIdRef.current = lastAnnouncedId;
-  }, [lastAnnouncedId]);
+  const getSocketUrl = useCallback(() => {
+    // Read on every attempt, never captured once: a reconnection that happens
+    // after the REST client renewed the access token must hand the gateway
+    // the renewed one. <AuthenticatedLayout> already gated on a session, so an
+    // absent token here means it was cleared in another tab — the handshake
+    // is then rejected (4400) and the channel closes for good, which is what
+    // an emptied session deserves.
+    const accessToken = readAccessToken(tokenStorage) ?? '';
+    return buildQueueSocketUrl(apiBaseUrl, { accessToken, deliveryPointId: deliveryPointId ?? '' });
+  }, [deliveryPointId]);
 
-  // Both tagged with the gate they belong to, so `status` below is derived
-  // rather than reset by the effect: switching gates is already 'loading'
-  // because the new gate has not loaded yet, not because something told it to
-  // be. A reconnection, which reuses the same gate, leaves the queue on screen
-  // exactly where it was instead of blanking it back into skeletons.
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ deliveryPointId: string; error: ApiError } | null>(null);
+  const fetchSnapshot = useCallback(() => {
+    return fetchQueueSnapshot(deliveryPointId ?? '');
+  }, [deliveryPointId]);
 
-  const status: QueueStatus =
-    deliveryPointId === null
-      ? 'loading'
-      : failure?.deliveryPointId === deliveryPointId
-        ? 'error'
-        : loadedId === deliveryPointId
-          ? 'ready'
-          : 'loading';
+  const { status, state, error, connection, connectionErrorReason, reload } = useRealtimeChannel<
+    QueueRow[],
+    QueueRow
+  >({
+    channelKey: deliveryPointId,
+    getSocketUrl,
+    fetchSnapshot,
+    mergeDelta: mergeAndSortQueueRows,
+    parseDelta: parseQueueDelta,
+    fatalCloseReason,
+  });
 
-  const error = status === 'error' ? (failure?.error ?? null) : null;
+  const rows = state ?? [];
 
-  const reload = useCallback(() => {
-    setLoadedId(null);
-    setFailure(null);
+  // Derived during render rather than reset from an effect
+  // (react-hooks/set-state-in-effect, same convention as `gateId` in
+  // GateConsole.tsx): the announced row leaving the queue — delivered,
+  // cancelled, or simply gone after a reconnect's fresh snapshot — means
+  // the "Vocear" indicator has nothing left to point at (ADR-073 point 1:
+  // ephemeral, client-only state, no timeout). One check covers both the
+  // live-delta and the reconnect-snapshot cases, since `rows` is already the
+  // merged result of either.
+  const lastAnnouncedId =
+    announcedId !== null && rows.some((row) => row.pickupRequestId === announcedId)
+      ? announcedId
+      : null;
+
+  const reloadQueue = useCallback(() => {
     setDeliverError(null);
-    setConnectionErrorReason(null);
-    setAttempt((n) => n + 1);
-  }, []);
-
-  useEffect(() => {
-    if (!deliveryPointId) return;
-
-    let cancelled = false;
-    let socket: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let retries = 0;
-    /** Non-null only while a snapshot request is in flight. */
-    let buffered: QueueRow[] | null = null;
-
-    function applyDelta(delta: QueueRow) {
-      if (buffered) {
-        buffered.push(delta);
-        return;
-      }
-      setRows((current) => sortQueueRows(mergeQueueDelta(current, delta)));
-      // The announced row left the queue (delivered/cancelled) — the "Vocear"
-      // indicator has nothing left to point at (ADR-073 point 1: ephemeral,
-      // client-only state, no timeout).
-      if (
-        delta.pickupRequestId === lastAnnouncedIdRef.current &&
-        !isActiveQueueStatus(delta.status)
-      ) {
-        setLastAnnouncedId(null);
-      }
-    }
-
-    function loadSnapshot(id: string) {
-      buffered = [];
-      apiClient
-        .get<ListDeliveryPointQueueResponse>(
-          `/pickup-requests?deliveryPointId=${encodeURIComponent(id)}&limit=${QUEUE_PAGE_SIZE}`,
-        )
-        .then((response) => {
-          if (cancelled) return;
-          const pending = buffered ?? [];
-          buffered = null;
-          // The snapshot is the authority after a reconnection — the messages
-          // published while the socket was down were never stored and are not
-          // replayed (specs/api-contracts/delivery-point-queue-ws.md).
-          const merged = pending.reduce(mergeQueueDelta, response.pickupRequests);
-          setRows(sortQueueRows(merged));
-          // Covers the reconnect edge case: the announced row left the queue
-          // while the socket was down, so no delta ever carried the news.
-          if (
-            lastAnnouncedIdRef.current !== null &&
-            !merged.some((row) => row.pickupRequestId === lastAnnouncedIdRef.current)
-          ) {
-            setLastAnnouncedId(null);
-          }
-          setFailure(null);
-          setLoadedId(id);
-        })
-        .catch((caught: unknown) => {
-          buffered = null;
-          if (cancelled) return;
-          // Without a snapshot there is no queue to apply deltas to, so the
-          // channel comes down with it and "Reintentar" restarts both.
-          setFailure({ deliveryPointId: id, error: asApiError(caught) });
-          setLoadedId(null);
-          setConnection('closed');
-          socket?.close();
-        });
-    }
-
-    function connect(id: string) {
-      setConnection(retries === 0 ? 'connecting' : 'reconnecting');
-      setConnectionErrorReason(null);
-
-      // Read on every attempt, never captured once: a reconnection that happens
-      // after the REST client renewed the access token must hand the gateway
-      // the renewed one. <AuthenticatedLayout> already gated on a session, so an
-      // absent token here means it was cleared in another tab — the handshake
-      // is then rejected (4400) and the channel closes for good, which is what
-      // an emptied session deserves.
-      const accessToken = readAccessToken(tokenStorage) ?? '';
-      const opened = new WebSocket(
-        buildQueueSocketUrl(apiBaseUrl, { accessToken, deliveryPointId: id }),
-      );
-      socket = opened;
-
-      opened.onopen = () => {
-        if (cancelled) return;
-        retries = 0;
-        setConnection('live');
-        loadSnapshot(id);
-      };
-
-      opened.onmessage = (event: MessageEvent) => {
-        if (cancelled) return;
-        const delta = parseMessage(event.data);
-        // A message that is not a queue payload is discarded, never applied:
-        // one malformed publication cannot corrupt the gate's queue.
-        if (delta) applyDelta(delta);
-      };
-
-      opened.onclose = (event: CloseEvent) => {
-        if (cancelled) return;
-        buffered = null;
-
-        const fatal = fatalCloseReason(event.code, event.reason);
-        if (fatal) {
-          setConnection('closed');
-          setConnectionErrorReason(fatal);
-          return;
-        }
-
-        // A transport drop: the queue on screen is frozen until the socket is
-        // back, and the reconnection re-reads the snapshot from `onopen`
-        // (ADR-050 point 7).
-        setConnection('reconnecting');
-        retryTimer = setTimeout(() => connect(id), reconnectDelayMs(retries));
-        retries += 1;
-      };
-    }
-
-    connect(deliveryPointId);
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      // Nulled first: the handlers above would otherwise schedule a
-      // reconnection for a channel nobody is listening to any more.
-      if (socket) {
-        socket.onopen = null;
-        socket.onmessage = null;
-        socket.onclose = null;
-        socket.close();
-      }
-    };
-  }, [deliveryPointId, attempt]);
+    reload();
+  }, [reload]);
 
   const deliver = useCallback((pickupRequestId: string, deliveryCode: string) => {
     setBusyId(pickupRequestId);
@@ -334,7 +190,7 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
     void apiClient
       .post(`/pickup-requests/${encodeURIComponent(pickupRequestId)}/announce`)
       .then(() => {
-        setLastAnnouncedId(pickupRequestId);
+        setAnnouncedId(pickupRequestId);
       })
       .catch((caught: unknown) => {
         setAnnounceError({ pickupRequestId, error: asApiError(caught) });
@@ -350,7 +206,7 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
     error,
     connection,
     connectionErrorReason,
-    reload,
+    reload: reloadQueue,
     deliver,
     busyId,
     deliverError,
