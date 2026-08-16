@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { AuthProvider } from './auth/AuthContext';
-import { AuthenticatedLayout, InstitutionGate } from './routes/AuthenticatedLayout';
+import { AuthenticatedLayout, InstitutionGate, TutorRoleGate } from './routes/AuthenticatedLayout';
 import { SuperAdminRoute } from './routes/SuperAdminRoute';
 import {
   ADMIN_INSTITUTIONS_PATH,
@@ -49,9 +49,9 @@ export function App() {
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route element={<AuthenticatedLayout />}>
-            {/* InstitutionGate wraps only the institution routes: the tutor
-                route below has no institution membership to wait for and
-                must not be blocked by it (ADR-056 point 3). */}
+            {/* InstitutionGate wraps only the institution routes: it redirects
+                a tutor session straight to STUDENTS_PATH before ever reading
+                InstitutionContext (ADR-077 point 4). */}
             <Route element={<InstitutionGate />}>
               {/* GateConsole stays outside the shell: it is a separate kiosk
                   screen, no sidebar in the kit either (ADR-072). */}
@@ -66,11 +66,17 @@ export function App() {
                 <Route path={REPORTS_PATH} element={<Reports />} />
               </Route>
             </Route>
-            <Route path={STUDENTS_PATH} element={<Students />} />
-            <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
-            <Route path={ASSOCIATE_INSTITUTION_PATH} element={<AssociateInstitution />} />
-            <Route path={STUDENT_GUARDIANS_PATH} element={<StudentGuardians />} />
-            <Route path={VEHICLES_PATH} element={<Vehicles />} />
+            {/* TutorRoleGate wraps only the routes genuinely exclusive to the
+                tutor view (ADR-077 point 4). PROFILE_PATH stays outside both
+                this and InstitutionGate above: Profile.tsx is generic, it
+                applies to any signed-in session regardless of chosen role. */}
+            <Route element={<TutorRoleGate />}>
+              <Route path={STUDENTS_PATH} element={<Students />} />
+              <Route path={NEW_STUDENT_PATH} element={<NewStudent />} />
+              <Route path={ASSOCIATE_INSTITUTION_PATH} element={<AssociateInstitution />} />
+              <Route path={STUDENT_GUARDIANS_PATH} element={<StudentGuardians />} />
+              <Route path={VEHICLES_PATH} element={<Vehicles />} />
+            </Route>
             <Route path={PROFILE_PATH} element={<Profile />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not

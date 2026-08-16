@@ -7,6 +7,7 @@ import {
   type AccessTokenClaims,
 } from '@casillego/shared';
 import { apiClient, tokenStorage } from '../api/client';
+import { clearSessionRole } from './session-role';
 
 export interface AuthContextValue {
   /** Claims of the stored access token, or null when signed out. */
@@ -45,6 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // No server-side logout exists: the API is stateless by design and has no
     // token revocation table (ADR-019 point 3).
     discardTokens(tokenStorage);
+    // `sessionRole` is specific to apps/portal (ADR-077 point 3) — unlike
+    // `discardTokens`, which is shared with apps/parent and apps/board, so it
+    // is cleared here rather than folded into that shared helper.
+    clearSessionRole();
     setSession(null);
   }, []);
 

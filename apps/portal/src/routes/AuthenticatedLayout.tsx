@@ -1,8 +1,11 @@
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
-import { EmptyState, ErrorState, SegmentedTabs, SkeletonRow } from '@casillego/ui';
+import { useEffect, useState } from 'react';
+import { Navigate, Outlet, useLocation } from 'react-router';
+import { EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
+import { resolveFallbackSessionRole } from '../auth/login-outcome';
+import { readSessionRole, writeSessionRole, type SessionRole } from '../auth/session-role';
 import { InstitutionProvider, useInstitution } from '../institution/InstitutionContext';
-import { TutorProvider, useTutor } from '../tutor/TutorContext';
+import { TutorProvider } from '../tutor/TutorContext';
 import { HOME_PATH, STUDENTS_PATH } from './paths';
 
 function CenteredPanel({ children }: { children: React.ReactNode }) {
@@ -38,25 +41,57 @@ const NO_MEMBERSHIP_ICON = (
 );
 
 /**
- * Gates on the institution lookup, not on authentication: by the time this
- * renders there is already a session. Zero memberships is an explanatory empty
- * state, never an error (ADR-042 point 5).
- *
- * Nested only under the institution routes, not under `AuthenticatedLayout`
- * itself — the tutor view has no institution membership to wait for and must
- * not be blocked by this (ADR-056 point 3).
+ * Shown by whichever gate resolves a legacy session (one stored before
+ * `sessionRole` existed, ADR-077 point 3) while its own async lookup is in
+ * flight — same loading shape `InstitutionGateBody` already used.
  */
-export function InstitutionGate() {
+function GateLoadingPanel() {
+  return (
+    <CenteredPanel>
+      <SkeletonRow />
+      <SkeletonRow />
+      <SkeletonRow />
+    </CenteredPanel>
+  );
+}
+
+/**
+ * Resolves and persists `sessionRole` for a session that predates it
+ * (ADR-077 point 3), then hands back the resolved role. `preferredWhenAmbiguous`
+ * is only used for the rare case of a genuinely hybrid account with no stored
+ * preference and no login-time chooser available at this point in the tree —
+ * see `resolveFallbackSessionRole`.
+ */
+function useResolvedLegacySessionRole(preferredWhenAmbiguous: SessionRole): SessionRole | null {
+  const [role, setRole] = useState<SessionRole | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveFallbackSessionRole(preferredWhenAmbiguous).then((resolved) => {
+      if (cancelled) return;
+      writeSessionRole(resolved);
+      setRole(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [preferredWhenAmbiguous]);
+
+  return role;
+}
+
+/**
+ * Body of the institution gate, once `sessionRole` is known to be
+ * `'institution'` (or resolved as the legacy fallback). Gates on the
+ * institution lookup, not on authentication: by the time this renders there
+ * is already a session. Zero memberships is an explanatory empty state,
+ * never an error (ADR-042 point 5).
+ */
+function InstitutionGateBody() {
   const { status, error, retry } = useInstitution();
 
   if (status === 'loading') {
-    return (
-      <CenteredPanel>
-        <SkeletonRow />
-        <SkeletonRow />
-        <SkeletonRow />
-      </CenteredPanel>
-    );
+    return <GateLoadingPanel />;
   }
 
   if (status === 'error') {
@@ -87,68 +122,103 @@ export function InstitutionGate() {
   return <Outlet />;
 }
 
-const INSTITUTION_LABEL = 'Institución';
-const TUTOR_LABEL = 'Tutor';
-
 /**
- * Switches between the institution view and the tutor view, only shown when
- * there genuinely are two to switch between (ADR-056 point 4). Navigates
- * client-side to each view's landing route rather than gating routes — every
- * route stays reachable directly by URL regardless of this control.
- *
- * The active tab is derived from the URL rather than kept as separate state,
- * so it stays correct through direct navigation or the browser's back button,
- * not only through clicks on the switcher itself.
+ * A legacy session (no `sessionRole` stored yet, ADR-077 point 3) landing
+ * directly on an institution route: resolves the role once, persists it, and
+ * only then either renders the institution view or redirects to the tutor
+ * one. `InstitutionProvider` is guaranteed mounted here — `AuthenticatedLayout`
+ * mounts both providers for the null-role case.
  */
-function ModeSwitcher() {
-  const institution = useInstitution();
-  const tutor = useTutor();
-  const location = useLocation();
-  const navigate = useNavigate();
+function InstitutionGateFallback() {
+  const role = useResolvedLegacySessionRole('institution');
 
-  const canSwitch =
-    institution.status === 'ready' && (tutor.status === 'ready' || tutor.status === 'empty');
-
-  if (!canSwitch) {
-    return null;
+  if (role === null) {
+    return <GateLoadingPanel />;
   }
 
-  const activeLabel = location.pathname.startsWith(STUDENTS_PATH) ? TUTOR_LABEL : INSTITUTION_LABEL;
+  if (role === 'tutor') {
+    return <Navigate to={STUDENTS_PATH} replace />;
+  }
 
-  return (
-    // `position: fixed` rather than a normal flow element: the institution
-    // side now renders `InstitutionShell`, a full-viewport (minHeight: 100vh)
-    // sidebar layout (ADR-072). A switcher in flow above it added its own
-    // height on top of that 100vh, pushing the sidebar below the fold instead
-    // of anchoring it to the top of the viewport. Floating it removes it from
-    // flow entirely. Anchored top-right rather than top-center: centered, it
-    // overlapped the top of the tutor screens' centered card (both share the
-    // same horizontal middle of the viewport) — the top-right corner is empty
-    // in both layouts (InstitutionShell's header has no right-side content by
-    // design, ADR-072 point 1; the tutor cards are centered with margin to
-    // spare on either side).
-    <div
-      style={{
-        position: 'fixed',
-        top: 'var(--space-6)',
-        right: 'var(--space-6)',
-        zIndex: 40,
-      }}
-    >
-      <SegmentedTabs
-        options={[INSTITUTION_LABEL, TUTOR_LABEL]}
-        value={activeLabel}
-        onChange={(next) => void navigate(next === TUTOR_LABEL ? STUDENTS_PATH : HOME_PATH)}
-      />
-    </div>
-  );
+  return <InstitutionGateBody />;
 }
 
 /**
- * Everything outside /login requires a session (ADR-042 point 1). Mounts
- * `InstitutionProvider` and `TutorProvider` together and in parallel: neither
- * view depends on the other resolving first (ADR-056 point 3). `SuperAdminRoute`
- * is a separate tree with neither provider (ADR-055 point 2).
+ * Gates the institution routes on `sessionRole` before anything else
+ * (ADR-077 point 4): a `'tutor'` session redirects straight to
+ * `STUDENTS_PATH` without ever calling `useInstitution()` — which would
+ * throw, since `AuthenticatedLayout` does not mount `InstitutionProvider`
+ * for a tutor session at all.
+ */
+export function InstitutionGate() {
+  const sessionRole = readSessionRole();
+
+  if (sessionRole === 'tutor') {
+    return <Navigate to={STUDENTS_PATH} replace />;
+  }
+
+  if (sessionRole === null) {
+    return <InstitutionGateFallback />;
+  }
+
+  return <InstitutionGateBody />;
+}
+
+/**
+ * A legacy session landing directly on a tutor route: same resolution as
+ * `InstitutionGateFallback`, mirrored. `TutorProvider` is guaranteed mounted
+ * here for the same reason.
+ */
+function TutorRoleGateFallback() {
+  const role = useResolvedLegacySessionRole('tutor');
+
+  if (role === null) {
+    return <GateLoadingPanel />;
+  }
+
+  if (role === 'institution') {
+    return <Navigate to={HOME_PATH} replace />;
+  }
+
+  return <Outlet />;
+}
+
+/**
+ * Guards the routes genuinely exclusive to the tutor view — `STUDENTS_PATH`,
+ * `NEW_STUDENT_PATH`, `ASSOCIATE_INSTITUTION_PATH`, `STUDENT_GUARDIANS_PATH`,
+ * `VEHICLES_PATH` (ADR-077 point 4). `PROFILE_PATH` is deliberately not
+ * wrapped in this or `InstitutionGate`: `Profile.tsx` is generic, it applies
+ * to any signed-in session regardless of chosen role.
+ *
+ * Unlike ADR-056's `TutorContext.status === 'empty'`, which never blocked
+ * (a brand-new tutor account has zero children and must still reach these
+ * screens), this gate only checks `sessionRole` — it does not read
+ * `TutorContext` at all.
+ */
+export function TutorRoleGate() {
+  const sessionRole = readSessionRole();
+
+  if (sessionRole === 'institution') {
+    return <Navigate to={HOME_PATH} replace />;
+  }
+
+  if (sessionRole === null) {
+    return <TutorRoleGateFallback />;
+  }
+
+  return <Outlet />;
+}
+
+/**
+ * Everything outside /login requires a session (ADR-042 point 1). Mounts only
+ * the provider `sessionRole` calls for — reversing ADR-056 point 3, which
+ * mounted both unconditionally — since route access is now actually gated by
+ * that role (point 4 above) rather than merely deciding a landing screen.
+ * A session stored before `sessionRole` existed mounts both, transiently,
+ * for this one load only: the first gate to render resolves and persists the
+ * real value (ADR-077 point 3), and every subsequent load takes one of the
+ * two branches below. `SuperAdminRoute` remains its own tree with neither
+ * provider (ADR-055 point 2).
  */
 export function AuthenticatedLayout() {
   const { session } = useAuth();
@@ -158,10 +228,27 @@ export function AuthenticatedLayout() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  const sessionRole = readSessionRole();
+
+  if (sessionRole === 'institution') {
+    return (
+      <InstitutionProvider>
+        <Outlet />
+      </InstitutionProvider>
+    );
+  }
+
+  if (sessionRole === 'tutor') {
+    return (
+      <TutorProvider>
+        <Outlet />
+      </TutorProvider>
+    );
+  }
+
   return (
     <InstitutionProvider>
       <TutorProvider>
-        <ModeSwitcher />
         <Outlet />
       </TutorProvider>
     </InstitutionProvider>

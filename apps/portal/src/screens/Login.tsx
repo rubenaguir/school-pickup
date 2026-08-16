@@ -2,35 +2,15 @@ import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Button } from '@casillego/ui';
 import { ApiError, decodeAccessToken, readAccessToken } from '@casillego/shared';
-import { apiClient, tokenStorage } from '../api/client';
+import { tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage } from '../auth/auth-error-messages';
+import { resolveLoginOutcome } from '../auth/login-outcome';
+import { writeSessionRole, type SessionRole } from '../auth/session-role';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
 import { ADMIN_INSTITUTIONS_PATH, HOME_PATH, STUDENTS_PATH } from '../routes/paths';
-
-/**
- * Landing priority right after a fresh login (ADR-056 point 5): super-admin
- * first, unchanged from ADR-055 point 4; then the institution view, for any
- * account that carries at least one membership; otherwise the tutor view —
- * the natural landing for a tutor-only account, including one with zero
- * children yet (the "empty" state of `TutorContext` is not a block, ADR-056
- * point 2). A failed lookup falls back to `HOME_PATH`, same as before this
- * account existed: `InstitutionGate` there already knows how to show that
- * failure with a retry.
- */
-async function resolveLoginDestination(isSuperAdmin: boolean): Promise<string> {
-  if (isSuperAdmin) {
-    return ADMIN_INSTITUTIONS_PATH;
-  }
-  try {
-    const response = await apiClient.get<{ memberships: unknown[] }>('/institution-members/mine');
-    return response.memberships.length > 0 ? HOME_PATH : STUDENTS_PATH;
-  } catch {
-    return HOME_PATH;
-  }
-}
 
 /** Affordance with no endpoint behind it yet — visible but inert (ADR-043 point 4). */
 const INERT_LINK_STYLE = {
@@ -63,18 +43,28 @@ export function Login() {
   const emailId = useId();
   const passwordId = useId();
 
+  const [step, setStep] = useState<'credentials' | 'choose-role'>('credentials');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Captured once at mount, before any submit from this screen — `login()`
+  // below updates `AuthContext.session` ahead of `handleSubmit` reaching
+  // `resolveLoginOutcome`, and a plain `if (session)` read on every render
+  // would win that race, redirecting straight to `destination` (HOME_PATH)
+  // before the hybrid case ever gets to show its chooser. Only a session
+  // that already existed when this screen mounted (e.g. a direct visit to
+  // /login while already signed in) should trigger that redirect.
+  const [hadSessionOnMount] = useState(() => session !== null);
+
   // A super-admin's home is the institution approval queue, not
   // HOME_PATH — the same role PENDING_ENROLLMENTS_PATH plays for an
   // institution admin (ADR-055 point 4).
   const destination = isSuperAdmin ? ADMIN_INSTITUTIONS_PATH : HOME_PATH;
 
-  if (session) {
+  if (hadSessionOnMount) {
     return <Navigate to={destination} replace />;
   }
 
@@ -91,8 +81,17 @@ export function Login() {
       // directly instead, same as `AuthContext.login` does internally.
       const freshToken = readAccessToken(tokenStorage);
       const freshClaims = freshToken ? decodeAccessToken(freshToken) : null;
-      const destination = await resolveLoginDestination(freshClaims?.isSuperAdmin ?? false);
-      void navigate(destination, { replace: true });
+      const outcome = await resolveLoginOutcome(freshClaims?.isSuperAdmin ?? false);
+      if (outcome.kind === 'choose-role') {
+        // Genuine hybrid account (ADR-077 point 1) — ask once instead of
+        // guessing, no navigation yet.
+        setStep('choose-role');
+        return;
+      }
+      if (outcome.role) {
+        writeSessionRole(outcome.role);
+      }
+      void navigate(outcome.path, { replace: true });
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -102,6 +101,11 @@ export function Login() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function chooseRole(role: SessionRole) {
+    writeSessionRole(role);
+    void navigate(role === 'institution' ? HOME_PATH : STUDENTS_PATH, { replace: true });
   }
 
   return (
@@ -141,101 +145,147 @@ export function Login() {
           }}
         >
           <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
-              Bienvenido de nuevo
-            </div>
-            <h1
-              style={{
-                margin: '6px 0 28px',
-                fontSize: 30,
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              Entrar
-            </h1>
-
-            <form
-              onSubmit={(event) => void handleSubmit(event)}
-              style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
-            >
-              <Field label="Correo electrónico" htmlFor={emailId}>
-                <input
-                  id={emailId}
-                  type="email"
-                  name="email"
-                  autoComplete="username"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  style={INPUT_STYLE}
-                />
-              </Field>
-
-              <Field
-                label="Contraseña"
-                htmlFor={passwordId}
-                action={
-                  // No password-reset endpoint exists in the API yet
-                  // (ADR-043 point 4). Shown, deliberately inert.
-                  <span style={INERT_LINK_STYLE} title="Próximamente">
-                    ¿Olvidaste tu contraseña?
-                  </span>
-                }
-              >
-                <input
-                  id={passwordId}
-                  type={revealed ? 'text' : 'password'}
-                  name="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  style={INPUT_STYLE}
-                />
-                <button
-                  type="button"
-                  onClick={() => setRevealed((current) => !current)}
-                  aria-label={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            {step === 'credentials' ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
+                  Bienvenido de nuevo
+                </div>
+                <h1
                   style={{
-                    display: 'inline-flex',
-                    border: 'none',
-                    background: 'transparent',
-                    padding: 0,
-                    cursor: 'pointer',
+                    margin: '6px 0 28px',
+                    fontSize: 30,
+                    fontWeight: 800,
+                    color: 'var(--ink-900)',
+                    letterSpacing: '-.02em',
                   }}
                 >
-                  <EyeIcon crossed={revealed} />
-                </button>
-              </Field>
+                  Entrar
+                </h1>
 
-              {error && <Alert message={loginErrorMessage(error.code)} code={error.code} />}
+                <form
+                  onSubmit={(event) => void handleSubmit(event)}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+                >
+                  <Field label="Correo electrónico" htmlFor={emailId}>
+                    <input
+                      id={emailId}
+                      type="email"
+                      name="email"
+                      autoComplete="username"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      style={INPUT_STYLE}
+                    />
+                  </Field>
 
-              <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
-                {submitting ? 'Entrando…' : 'Entrar'}
-              </Button>
-            </form>
+                  <Field
+                    label="Contraseña"
+                    htmlFor={passwordId}
+                    action={
+                      // No password-reset endpoint exists in the API yet
+                      // (ADR-043 point 4). Shown, deliberately inert.
+                      <span style={INERT_LINK_STYLE} title="Próximamente">
+                        ¿Olvidaste tu contraseña?
+                      </span>
+                    }
+                  >
+                    <input
+                      id={passwordId}
+                      type={revealed ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      style={INPUT_STYLE}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRevealed((current) => !current)}
+                      aria-label={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      style={{
+                        display: 'inline-flex',
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <EyeIcon crossed={revealed} />
+                    </button>
+                  </Field>
 
-            <div
-              style={{
-                textAlign: 'center',
-                fontSize: 14,
-                color: 'var(--ink-300)',
-                fontWeight: 500,
-                marginTop: 26,
-              }}
-            >
-              {/* Registration endpoints exist, the screens do not — this layer
-                  is plumbing only (ADR-043 point 4). */}
-              ¿Primera vez en CasiLlego?{' '}
-              <span
-                style={{ ...INERT_LINK_STYLE, fontSize: 14, fontWeight: 700 }}
-                title="Próximamente"
-              >
-                Crear cuenta
-              </span>
-            </div>
+                  {error && <Alert message={loginErrorMessage(error.code)} code={error.code} />}
+
+                  <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
+                    {submitting ? 'Entrando…' : 'Entrar'}
+                  </Button>
+                </form>
+
+                <div
+                  style={{
+                    textAlign: 'center',
+                    fontSize: 14,
+                    color: 'var(--ink-300)',
+                    fontWeight: 500,
+                    marginTop: 26,
+                  }}
+                >
+                  {/* Registration endpoints exist, the screens do not — this layer
+                      is plumbing only (ADR-043 point 4). */}
+                  ¿Primera vez en CasiLlego?{' '}
+                  <span
+                    style={{ ...INERT_LINK_STYLE, fontSize: 14, fontWeight: 700 }}
+                    title="Próximamente"
+                  >
+                    Crear cuenta
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
+                  Tu cuenta tiene dos vistas
+                </div>
+                <h1
+                  style={{
+                    margin: '6px 0 12px',
+                    fontSize: 30,
+                    fontWeight: 800,
+                    color: 'var(--ink-900)',
+                    letterSpacing: '-.02em',
+                  }}
+                >
+                  ¿Con cuál quieres entrar?
+                </h1>
+                <p
+                  style={{
+                    margin: '0 0 28px',
+                    fontSize: 14,
+                    color: 'var(--ink-300)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Perteneces a una institución y también tienes hijos registrados. Elige una vista
+                  para esta sesión — para cambiar más tarde, cierra sesión y vuelve a entrar.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    full
+                    onClick={() => chooseRole('institution')}
+                  >
+                    Continuar como Institución
+                  </Button>
+                  <Button variant="outline" size="lg" full onClick={() => chooseRole('tutor')}>
+                    Continuar como Tutor
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
