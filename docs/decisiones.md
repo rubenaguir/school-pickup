@@ -5404,3 +5404,126 @@ reiniciar `api`).
   relación causal con él).
 - `packages/shared/src/adapters/node-mqtt-client.ts`/`.test.ts` (el fix y
   su test de regresión).
+
+## ADR-077 — La sesión elige rol al iniciar (Institución o Tutor), no alterna; reversión deliberada de ADR-056 puntos 2 y 4
+
+**Contexto.** El humano señaló fricción real con el `ModeSwitcher`
+persistente: aunque el caso híbrido (alguien que es personal de una
+institución **y** tutor con un hijo ahí) es real y common, en la práctica
+nadie necesita alternar entre las dos vistas *dentro de la misma sesión
+de trabajo* — entra a hacer una cosa u otra. ADR-056 punto 2 había
+decidido explícitamente lo contrario ("el humano confirmó que quiere un
+switcher persistente, no una prioridad fija") — este ADR revierte esa
+decisión con el mismo peso de deliberación, no la contradice por
+descuido. Confirmado con el humano, dos preguntas que definen qué tan
+lejos llega:
+
+1. **No es solo cambiar el aterrizaje — las rutas de la vista no elegida
+   quedan bloqueadas de verdad** hasta volver a iniciar sesión (reversión
+   también de ADR-056 punto 4, que garantizaba ambas vistas alcanzables
+   por URL directa sin importar el switcher).
+2. **Sin escotilla para cambiar a mitad de sesión** — si hace falta la
+   otra vista, se cierra sesión y se vuelve a entrar. No se construye
+   ningún enlace de "cambiar de rol" dentro del shell.
+
+**Decisión.**
+
+### 1. Criterio de "caso híbrido" — más estricto que el que tenía el switcher
+
+El switcher se mostraba cuando `InstitutionContext.status === 'ready'` **y**
+`TutorContext.status` era `'ready'` **o** `'empty'` (ADR-056 punto 2) —
+correcto para un switcher persistente, donde un tutor sin hijos todavía
+merece ver la invitación a agregar el primero. Para una decisión **de una
+sola vez al iniciar sesión**, ese criterio es demasiado amplio: casi
+todo el personal de institución nunca ha usado el lado de tutor y tiene
+cero hijos — su `TutorContext` igual resuelve `'empty'` sin error, así
+que el criterio viejo les mostraría el selector sin necesidad. El criterio
+correcto aquí es más estricto: **hay elección solo si hay membresía de
+institución (`> 0`) Y `TutorContext.status === 'ready'`** (hijos reales
+inscritos, no el estado vacío). Si el vacío no cuenta, no hay ambigüedad
+real que resolver — la mayoría de las cuentas caen limpio en uno de los
+dos casos sin ver nunca el selector.
+
+### 2. Selector nuevo, dentro de `Login.tsx`, no una ruta aparte
+
+Tras un login exitoso, `resolveLoginDestination` (que hoy devuelve
+directamente un path) pasa a resolver tres casos: super-admin (sin
+cambios), un solo rol real (navega directo, igual que hoy), o híbrido
+(punto 1) — en el tercer caso, `Login.tsx` cambia de un estado local
+`step: 'credentials' → 'choose-role'` y muestra un selector simple en el
+mismo `BrandPanel`, en vez de navegar. No es una ruta nueva (`/login/...`)
+para no dejar un estado intermedio alcanzable fuera de contexto por URL
+directa.
+
+### 3. `sessionRole` persistido junto al token, no en el backend
+
+`localStorage` (mismo `tokenStorage` que ya usan los tokens), clave nueva
+(`casillego.portal.sessionRole`, valor `'institution' | 'tutor'`) — **sin
+cambio de backend**: la autorización real de cada endpoint la sigue dando
+cada guard del lado del servidor exactamente igual que hoy (ADR-011 y
+demás no cambian); este valor es puramente una decisión de qué mostrar y
+qué bloquear del lado del cliente, análogo a como `activeMode` ya lo era
+en ADR-056 punto 4 — solo que ahora sí actúa como guard, no solo como
+preferencia de navegación. Se limpia junto con los tokens en
+`AuthContext.logout()` — `discardTokens` (compartida en
+`packages/shared`, usada también por `apps/parent`/`apps/board`) no se
+toca, la limpieza de esta clave es una línea aparte, específica de
+`apps/portal`.
+
+**Sesión ya abierta sin esta clave** (alguien con una sesión activa desde
+antes de este cambio): en vez de forzar un cierre de sesión por el
+despliegue, cualquier guard que la necesite y la encuentre ausente la
+resuelve al vuelo con el mismo criterio del punto 1 y la persiste en ese
+momento — degradación silenciosa, no un error visible.
+
+### 4. Compuertas de ruta — `InstitutionGate` extendida, `TutorRoleGate` nuevo
+
+- `InstitutionGate` (ya existe) gana una verificación adicional:
+  `sessionRole !== 'tutor'` antes de las que ya tiene — si no pasa,
+  redirige a `STUDENTS_PATH` en vez de renderizar `<Outlet/>`.
+- `TutorRoleGate` nuevo, mismo criterio invertido
+  (`sessionRole !== 'institution'` → redirige a `HOME_PATH`), envuelve
+  **solo** las rutas genuinamente exclusivas de tutor: `STUDENTS_PATH`,
+  `NEW_STUDENT_PATH`, `ASSOCIATE_INSTITUTION_PATH`,
+  `STUDENT_GUARDIANS_PATH`, `VEHICLES_PATH`.
+- **`PROFILE_PATH` no se envuelve en ninguna de las dos** — confirmado en
+  el código real que `Profile.tsx` no importa `useTutor` ni
+  `useInstitution`: es genérico (datos personales, contraseña), aplica
+  igual a cualquier sesión sin importar el rol elegido. Agruparlo bajo el
+  gate de tutor solo porque comparte bloque de rutas en `App.tsx` hoy
+  habría bloqueado por error al personal de institución de su propio
+  perfil.
+
+### 5. `AuthenticatedLayout` monta un solo provider, no los dos en paralelo
+
+ADR-056 punto 3 montaba `InstitutionProvider` y `TutorProvider` siempre
+juntos, sin importar la vista activa — correcto cuando ambas vistas
+convivían en la misma sesión. Con el bloqueo real de rutas (punto 4), ya
+no hay razón para pedir `GET /students` de fondo en una sesión que
+`sessionRole` ya fijó como `'institution'` (ni `GET /institution-members/mine`
+en una de `'tutor'`) — se monta solo el provider que corresponde al rol
+de la sesión.
+
+### 6. `ModeSwitcher` se elimina
+
+Ya no hay nada que alternar dentro de una sesión — el componente y su
+lógica de `activeLabel`/`canSwitch` se eliminan de
+`AuthenticatedLayout.tsx`, no se dejan sin usar.
+
+**Consecuencias.** El super-admin no se toca (`SuperAdminRoute` sigue sin
+ninguno de estos dos providers, ADR-055 punto 2 — un rol ortogonal a
+este, no un tercer caso de esta decisión). Alguien con cuenta híbrida que
+necesite ambas vistas en la misma sesión de trabajo ya no puede — cierra
+sesión y vuelve a entrar, confirmado como aceptable.
+
+## Referencias
+
+- ADR-042 (`InstitutionGate` original, `ProtectedRoute`).
+- ADR-055 (`SuperAdminRoute`, sin cambios — rol ortogonal).
+- ADR-056 (la decisión que este ADR revierte en sus puntos 2 y 4 — puntos
+  1, 3, 5, 6, 7 no cambian: "tutor" se sigue derivando de datos, el
+  "vacío" de `TutorContext` sigue sin bloquear *dentro* de la vista de
+  tutor una vez elegida, la prioridad de aterrizaje para el caso no
+  híbrido no cambia).
+- `apps/portal/src/screens/Profile.tsx` (confirmado sin dependencia de
+  `useTutor`/`useInstitution` — la base del punto 4).
