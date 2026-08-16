@@ -154,6 +154,30 @@ describe('NodeMqttClient', () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
+    it('dispatches to every handler subscribed on the exact same pattern, not just the first', async () => {
+      // Regression test: two gateways legitimately subscribe to the same
+      // wildcard (BoardGateway and PickupRequestTrackingGateway both take
+      // `school-pickup/institution/+/board`). A single-handler-per-pattern
+      // map previously let the second subscribe() silently discard the
+      // first gateway's handler.
+      const client = new NodeMqttClient({ url: 'mqtts://broker.example.com' });
+      await client.connect();
+      const firstHandler = vi.fn();
+      const secondHandler = vi.fn();
+      await client.subscribe('school-pickup/institution/+/board', firstHandler);
+      await client.subscribe('school-pickup/institution/+/board', secondHandler);
+
+      const messageListener = fakeClient.on.mock.calls.find(
+        ([event]) => event === 'message',
+      )?.[1] as (topic: string, payload: Buffer) => void;
+      const topic = 'school-pickup/institution/inst-1/board';
+      const payload = { pickupRequestId: 'pr-1', status: 'arrived' };
+      messageListener(topic, Buffer.from(JSON.stringify(payload)));
+
+      expect(firstHandler).toHaveBeenCalledWith(topic, payload);
+      expect(secondHandler).toHaveBeenCalledWith(topic, payload);
+    });
+
     it('discards a non-JSON payload without throwing and without invoking the handler', async () => {
       const client = new NodeMqttClient({ url: 'mqtts://broker.example.com' });
       await client.connect();
