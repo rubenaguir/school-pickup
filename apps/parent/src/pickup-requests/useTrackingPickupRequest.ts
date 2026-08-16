@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ApiError, UNKNOWN_ERROR_CODE, readAccessToken } from '@casillego/shared';
 import type { ArrivalMode, PickupRequestStatus } from '@casillego/shared';
+import { useRealtimeChannel } from '@casillego/ui';
 import { apiClient, apiBaseUrl, tokenStorage } from '../api/client';
-import {
-  buildTrackingSocketUrl,
-  fatalCloseReason,
-  reconnectDelayMs,
-} from './pickup-request-tracking-socket';
+import { buildTrackingSocketUrl, fatalCloseReason } from './pickup-request-tracking-socket';
 
 /** `GET /pickup-requests/:id` (specs/api-contracts/pickup-requests.md, ADR-065). */
 interface TrackingSnapshotResponse {
@@ -144,136 +141,50 @@ function applyDelta(current: TrackingPickupRequest, delta: BoardDelta): Tracking
   };
 }
 
-function parseMessage(data: unknown): BoardDelta | null {
-  if (typeof data !== 'string') return null;
-  try {
-    return parseBoardDelta(JSON.parse(data));
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Live state of one `pickup_request`: REST snapshot plus WebSocket deltas
- * (ADR-064). Same architecture as the gate console's `useDeliveryPointQueue`
- * — the socket opens first and the snapshot is requested from its `open`
- * handler, so a reconnection always re-establishes snapshot-then-deltas.
- * Unlike the queue, this tracks a single resource: the latest delta simply
- * replaces the live fields, no per-row `updatedAt` bookkeeping needed.
+ * (ADR-064), via the generic `useRealtimeChannel` (ADR-075). Proves the
+ * generic hook does not assume `TState` is a list: `TState` here is a single
+ * `TrackingPickupRequest`, and `applyDelta` — unchanged, still the same pure
+ * function — replaces its live fields wholesale on every delta rather than
+ * merging into an array by id, no per-row `updatedAt` bookkeeping needed.
+ *
+ * `markArrived()`/`cancel()` are not part of the channel — plain REST
+ * actions this screen owns on its own, same as `deliver()`/`announce()` in
+ * the gate console. Same as `deliver()` there, they do **not** update
+ * `pickupRequest` optimistically from the `PATCH` response: the channel is
+ * the only source of truth for `status` (ADR-052 point 4's rule, which this
+ * hook had not actually followed before this migration — `transitionAndPublish`
+ * awaits the MQTT publish before the `PATCH` handler returns, so the board
+ * delta reaches this already-open socket at essentially the same time as the
+ * REST response, same as it already does for the gate console's `deliver()`).
  */
 export function useTrackingPickupRequest(pickupRequestId: string): TrackingValue {
-  const [pickupRequest, setPickupRequest] = useState<TrackingPickupRequest | null>(null);
-  const [connection, setConnection] = useState<ConnectionState>('connecting');
-  const [connectionErrorReason, setConnectionErrorReason] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ id: string; error: ApiError } | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<TrackingActionError | null>(null);
 
-  const status: TrackingStatus =
-    failure?.id === pickupRequestId ? 'error' : loadedId === pickupRequestId ? 'ready' : 'loading';
-  const error = status === 'error' ? (failure?.error ?? null) : null;
+  const getSocketUrl = useCallback(() => {
+    const accessToken = readAccessToken(tokenStorage) ?? '';
+    return buildTrackingSocketUrl(apiBaseUrl, { accessToken, pickupRequestId });
+  }, [pickupRequestId]);
 
-  const reload = useCallback(() => {
-    setLoadedId(null);
-    setFailure(null);
-    setConnectionErrorReason(null);
-    setAttempt((n) => n + 1);
-  }, []);
+  const fetchSnapshot = useCallback(() => {
+    return apiClient.get<TrackingSnapshotResponse>(
+      `/pickup-requests/${encodeURIComponent(pickupRequestId)}`,
+    );
+  }, [pickupRequestId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let socket: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let retries = 0;
-    /** Non-null only while the snapshot request is in flight — latest delta wins, single resource. */
-    let bufferedDelta: BoardDelta | null | 'none' = 'none';
-
-    function onDelta(delta: BoardDelta) {
-      if (bufferedDelta !== 'none') {
-        bufferedDelta = delta;
-        return;
-      }
-      setPickupRequest((current) => (current ? applyDelta(current, delta) : current));
-    }
-
-    function loadSnapshot(id: string) {
-      bufferedDelta = null;
-      apiClient
-        .get<TrackingSnapshotResponse>(`/pickup-requests/${encodeURIComponent(id)}`)
-        .then((snapshot) => {
-          if (cancelled) return;
-          const pending = bufferedDelta;
-          bufferedDelta = 'none';
-          const base: TrackingPickupRequest = snapshot;
-          setPickupRequest(pending && pending !== 'none' ? applyDelta(base, pending) : base);
-          setFailure(null);
-          setLoadedId(id);
-        })
-        .catch((caught: unknown) => {
-          bufferedDelta = 'none';
-          if (cancelled) return;
-          setFailure({ id, error: asApiError(caught) });
-          setLoadedId(null);
-          setConnection('closed');
-          socket?.close();
-        });
-    }
-
-    function connect(id: string) {
-      setConnection(retries === 0 ? 'connecting' : 'reconnecting');
-      setConnectionErrorReason(null);
-
-      const accessToken = readAccessToken(tokenStorage) ?? '';
-      const opened = new WebSocket(
-        buildTrackingSocketUrl(apiBaseUrl, { accessToken, pickupRequestId: id }),
-      );
-      socket = opened;
-
-      opened.onopen = () => {
-        if (cancelled) return;
-        retries = 0;
-        setConnection('live');
-        loadSnapshot(id);
-      };
-
-      opened.onmessage = (event: MessageEvent) => {
-        if (cancelled) return;
-        const delta = parseMessage(event.data);
-        if (delta) onDelta(delta);
-      };
-
-      opened.onclose = (event: CloseEvent) => {
-        if (cancelled) return;
-        bufferedDelta = 'none';
-
-        const fatal = fatalCloseReason(event.code, event.reason);
-        if (fatal) {
-          setConnection('closed');
-          setConnectionErrorReason(fatal);
-          return;
-        }
-
-        setConnection('reconnecting');
-        retryTimer = setTimeout(() => connect(id), reconnectDelayMs(retries));
-        retries += 1;
-      };
-    }
-
-    connect(pickupRequestId);
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (socket) {
-        socket.onopen = null;
-        socket.onmessage = null;
-        socket.onclose = null;
-        socket.close();
-      }
-    };
-  }, [pickupRequestId, attempt]);
+  const { status, state, error, connection, connectionErrorReason, reload } = useRealtimeChannel<
+    TrackingPickupRequest,
+    BoardDelta
+  >({
+    channelKey: pickupRequestId,
+    getSocketUrl,
+    fetchSnapshot,
+    mergeDelta: applyDelta,
+    parseDelta: parseBoardDelta,
+    fatalCloseReason,
+  });
 
   const markArrived = useCallback(() => {
     setActionBusy(true);
@@ -282,11 +193,6 @@ export function useTrackingPickupRequest(pickupRequestId: string): TrackingValue
       .patch<{ id: string; status: PickupRequestStatus }>(
         `/pickup-requests/${encodeURIComponent(pickupRequestId)}/arrived`,
       )
-      .then((response) => {
-        setPickupRequest((current) =>
-          current ? { ...current, status: response.status } : current,
-        );
-      })
       .catch((caught: unknown) => {
         setActionError({ action: 'arrived', error: asApiError(caught) });
       })
@@ -302,13 +208,6 @@ export function useTrackingPickupRequest(pickupRequestId: string): TrackingValue
       .patch<{ id: string; status: PickupRequestStatus; completedAt: string }>(
         `/pickup-requests/${encodeURIComponent(pickupRequestId)}/cancel`,
       )
-      .then((response) => {
-        setPickupRequest((current) =>
-          current
-            ? { ...current, status: response.status, completedAt: response.completedAt }
-            : current,
-        );
-      })
       .catch((caught: unknown) => {
         setActionError({ action: 'cancel', error: asApiError(caught) });
       })
@@ -319,7 +218,7 @@ export function useTrackingPickupRequest(pickupRequestId: string): TrackingValue
 
   return {
     status,
-    pickupRequest,
+    pickupRequest: state,
     error,
     connection,
     connectionErrorReason,

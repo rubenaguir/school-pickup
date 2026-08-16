@@ -4,6 +4,7 @@ import type {
   PickupRequestStatus,
   StudentGuardianRelationship,
 } from '@casillego/shared';
+import { mergeBoardMonitorDelta } from '@casillego/shared';
 
 /**
  * One row of the Dashboard's live activity table (ADR-072 §5/§7). Same alias
@@ -11,19 +12,22 @@ import type {
  * — the REST snapshot (`view=monitor`) and the `/ws/board-monitor` deltas
  * carry the same fields either way. Not imported from `apps/board`: apps in
  * this monorepo only share code through `packages/shared`/`packages/ui`
- * (`apps/portal/package.json` has no dependency on `apps/board`), so this is
- * the fifth reimplementation of the "snapshot + WS delta" channel the ADR-072
- * prompt §5/ADR-071 §5 already flagged as a strong extraction signal — still
- * not extracted this round, same call as ADR-071 (no blocking a functional
- * phase on a transversal refactor).
+ * (`apps/portal/package.json` has no dependency on `apps/board`), so the type
+ * alias itself is still declared once per app. `mergeBoardMonitorDelta`
+ * (re-exported below) is the one piece that genuinely was a byte-identical
+ * copy between the two apps — moved to `@casillego/shared` (ADR-075 point
+ * 1). `useInstitutionBoardMonitor` here in `apps/portal` stays on its own
+ * hand-rolled connection scaffolding rather than the generic
+ * `useRealtimeChannel` (ADR-075 point 3): its second `delivered-today`
+ * sub-channel doesn't fit the hook's contract.
  */
 export type BoardMonitorRow = PickupRequestBoardMonitorPayload;
 
-const ACTIVE_STATUSES: readonly PickupRequestStatus[] = ['en_route', 'arriving', 'arrived'];
-
-export function isActiveBoardStatus(status: PickupRequestStatus): boolean {
-  return ACTIVE_STATUSES.includes(status);
-}
+/**
+ * Re-exported rather than redeclared (ADR-075 point 1): this was a
+ * byte-identical copy of `apps/board`'s version before the extraction.
+ */
+export { mergeBoardMonitorDelta };
 
 function isBoardStatus(value: unknown): value is PickupRequestStatus {
   return (
@@ -92,26 +96,6 @@ export function parseBoardMonitorDelta(raw: unknown): BoardMonitorRow | null {
     vehiclePlate: payload.vehiclePlate,
     updatedAt: payload.updatedAt,
   };
-}
-
-/** Folds one delta into the Dashboard's rows, by `pickupRequestId` — append/replace/remove, older delta discarded. */
-export function mergeBoardMonitorDelta(
-  rows: readonly BoardMonitorRow[],
-  delta: BoardMonitorRow,
-): BoardMonitorRow[] {
-  const current = rows.find((row) => row.pickupRequestId === delta.pickupRequestId);
-
-  if (current && delta.updatedAt < current.updatedAt) {
-    return [...rows];
-  }
-
-  if (!isActiveBoardStatus(delta.status)) {
-    return rows.filter((row) => row.pickupRequestId !== delta.pickupRequestId);
-  }
-
-  return current
-    ? rows.map((row) => (row.pickupRequestId === delta.pickupRequestId ? delta : row))
-    : [...rows, delta];
 }
 
 const STATUS_PRIORITY: Record<PickupRequestStatus, number> = {

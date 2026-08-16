@@ -4,7 +4,8 @@ import type {
   PickupRequestStatus,
   StudentGuardianRelationship,
 } from '@casillego/shared';
-import { isActiveBoardStatus } from './board-rows';
+import { mergeBoardMonitorDelta } from '@casillego/shared';
+import { sortBoardRows } from './board-rows';
 
 /**
  * One row of Carril (ADR-071 pt.2) — calco exacto de `BoardRow`
@@ -13,6 +14,12 @@ import { isActiveBoardStatus } from './board-rows';
  * and the `/ws/board-monitor` deltas carry the same shape.
  */
 export type BoardMonitorRow = PickupRequestBoardMonitorPayload;
+
+/**
+ * Re-exported rather than redeclared (ADR-075 point 1): this was a
+ * byte-identical copy of `apps/portal`'s version before the extraction.
+ */
+export { mergeBoardMonitorDelta };
 
 function isBoardStatus(value: unknown): value is PickupRequestStatus {
   return (
@@ -88,27 +95,14 @@ export function parseBoardMonitorDelta(raw: unknown): BoardMonitorRow | null {
 }
 
 /**
- * Folds one delta into Carril's rows, by `pickupRequestId` — same three
- * outcomes as `mergeBoardDelta` (append/replace/remove, older delta
- * discarded, terminal status removes the row), minus `changedStatusIds`:
- * Carril doesn't animate or announce (ADR-071 pt.2/§10 of the redesign
- * prompt), so there is nothing for the screen to key an effect off of.
+ * `mergeBoardMonitorDelta` followed by `sortBoardRows` — the shape
+ * `useRealtimeChannel` (ADR-075) needs as its single `mergeDelta`, since the
+ * generic hook has no concept of ordering. Same criterion as the gate
+ * console's `mergeAndSortQueueRows`.
  */
-export function mergeBoardMonitorDelta(
+export function mergeAndSortBoardMonitorRows(
   rows: readonly BoardMonitorRow[],
   delta: BoardMonitorRow,
 ): BoardMonitorRow[] {
-  const current = rows.find((row) => row.pickupRequestId === delta.pickupRequestId);
-
-  if (current && delta.updatedAt < current.updatedAt) {
-    return [...rows];
-  }
-
-  if (!isActiveBoardStatus(delta.status)) {
-    return rows.filter((row) => row.pickupRequestId !== delta.pickupRequestId);
-  }
-
-  return current
-    ? rows.map((row) => (row.pickupRequestId === delta.pickupRequestId ? delta : row))
-    : [...rows, delta];
+  return sortBoardRows(mergeBoardMonitorDelta(rows, delta));
 }
