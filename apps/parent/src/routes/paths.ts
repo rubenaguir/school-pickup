@@ -1,6 +1,13 @@
 export const LOGIN_PATH = '/login';
 
 /**
+ * "Verificar correo" (ADR-080 punto 3), enlazada desde el correo de
+ * verificación con `?token=...`. Fuera de `ProtectedRoute`: quien llega aquí
+ * todavía no tiene sesión.
+ */
+export const VERIFY_EMAIL_PATH = '/verify-email';
+
+/**
  * "Inicio / Mis hijos" (docs/design-brief.md, "App del padre"): list of the
  * tutor's students with the dominant "¡Ya voy!" action per student. Where a
  * signed-in user lands.

@@ -10,6 +10,7 @@ import {
   TUTOR_PORTAL_GUARDIANS_PATH,
   TUTOR_PORTAL_PROFILE_PATH,
   TUTOR_PORTAL_STUDENTS_PATH,
+  VERIFY_EMAIL_PATH,
 } from './routes/paths';
 import { AssociateAndGuardians } from './portal-web/AssociateAndGuardians';
 import { PortalProfile } from './portal-web/PortalProfile';
@@ -19,6 +20,7 @@ import { Home } from './screens/Home';
 import { Login } from './screens/Login';
 import { SelectInstitution } from './screens/SelectInstitution';
 import { Tracking } from './screens/Tracking';
+import { VerifyEmail } from './screens/VerifyEmail';
 
 export function App() {
   return (
@@ -26,6 +28,7 @@ export function App() {
       <AuthProvider>
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
+          <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
           <Route element={<ProtectedRoute />}>
             <Route path={HOME_PATH} element={<Home />} />
             <Route path={SELECT_INSTITUTION_PATH} element={<SelectInstitution />} />
