@@ -5878,3 +5878,125 @@ sesión.
 - ADR-080 (registro/verificación — el trabajo que expuso este desvío).
 - `apps/portal/src/screens/BrandPanel.tsx` (el componente a promover,
   ya fiel al kit desde su construcción original).
+
+## ADR-082 — Aceptar invitación, alta de alumno, y dos bugs reales de enrutamiento de correo
+
+**Contexto.** El humano pidió una verificación real del estado de la
+plataforma, no solo documental — cruzar cada endpoint que muta datos
+contra si algún frontend lo consume. De 39 endpoints reales, 2 quedaron
+completamente huérfanos, y al investigar el primero aparecieron dos bugs
+de enrutamiento adicionales, uno introducido en esta misma sesión
+(ADR-080) y uno preexistente que ADR-080 dejó expuesto sin que nadie lo
+notara.
+
+**Hallazgo 1 — Aceptar invitación no existe en ningún frontend.**
+`POST /invitations/:token/accept` funciona y maneja los dos casos
+(`institution_member_invitation`/`student_guardian_invitation`) — cero
+frontend lo llama, confirmado con una búsqueda amplia en los dos apps.
+Sin esto, ninguna invitación enviada (Personal, Tutores autorizados)
+puede completarse — el link que recibe la persona invitada no lleva a
+ninguna pantalla real.
+
+**Hallazgo 2 — Alta de alumno no existe en ningún frontend.**
+`POST /students` funciona, cero frontend lo llama. Ya estaba
+parcialmente anotado (`PortalStudents.tsx`, ADR-078 Paso 2, omitido a
+propósito por falta de ruta) pero nunca se retomó. Confirmado con las
+propias palabras del producto: el estado vacío de `Home.tsx` (móvil) dice
+*"Da de alta a tu primer alumno desde el portal web"*, y el estado vacío
+del propio Portal web dice lo mismo, sin ningún botón — un loop cerrado
+sin salida.
+
+**Hallazgo 3 — `VERIFY_EMAIL_PATH` no coincide con el link real que
+manda el backend (bug introducido en ADR-080).** Las dos apps
+construyeron `/verify-email`; `apps/api/src/email/email-templates.ts`
+arma el link real como `/verificar-correo` — confirmado leyendo el
+archivo completo, no una sola línea. Ninguna verificación de esta sesión
+lo atrapó porque todas usaron un JWT firmado a mano para saltarse el
+correo real, nunca el link tal cual el backend lo construye.
+
+**Hallazgo 4 — el correo de verificación siempre manda a
+`PARENT_APP_URL`, sin importar si quien se registra es tutor o
+institución (bug preexistente, expuesto por ADR-080).**
+`registerInstitution`, `registerGuardian` y `resendVerification` — los 3
+disparan el mismo `kind: 'email_verification'` genérico
+(`apps/api/src/auth/auth.service.ts`, confirmado en las 3 líneas), y la
+plantilla (`email-templates.ts`) no distingue: siempre `PARENT_APP_URL`.
+Esto significa que la pantalla de verificación que ADR-080 construyó en
+`apps/portal` **nunca sería alcanzable por un correo real** — un admin de
+institución que se registre recibe un link que lo manda a `apps/parent`,
+no de vuelta al portal donde necesita entrar.
+
+**Decisión.**
+
+### 1. Corregir el path — mecánico, en las dos apps
+
+`VERIFY_EMAIL_PATH` pasa de `/verify-email` a `/verificar-correo` en
+`apps/portal/src/routes/paths.ts` y `apps/parent/src/routes/paths.ts` —
+coincide con lo que el backend ya construye, sin tocar el backend.
+
+### 2. `EmailMessage` gana un campo `audience` para `email_verification`
+
+```ts
+| { kind: 'email_verification'; to: string; token: string; audience: 'portal' | 'parent' }
+```
+
+(`packages/shared/src/ports/email-provider.ts`). `email-templates.ts`
+usa `message.audience` para elegir `PORTAL_APP_URL`/`PARENT_APP_URL` en
+vez de asumir siempre `PARENT_APP_URL`.
+
+- `registerInstitution`/`registerGuardian` (`auth.service.ts`) ya saben
+  su propio contexto — pasan `audience: 'portal'`/`'parent'`
+  directamente, sin consulta nueva.
+- `resendVerification` no lo sabe de antemano (solo tiene un correo) —
+  resuelve con una consulta liviana:
+  `dataSource.getRepository(InstitutionMember).exists({ where: { user: { id: user.id } } })`
+  → `'portal'` si es verdadero, `'parent'` si no. `InstitutionMember` no
+  está inyectado hoy en `AuthService` — usa `this.dataSource.getRepository(...)`
+  en vez de agregar una inyección nueva al constructor, mismo criterio
+  que ya usa `registerInstitution` internamente para sus repos
+  transaccionales.
+
+### 3. "Aceptar invitación" — pantalla nueva, una por app, mismo patrón que `VerifyEmail`
+
+Ruta `/aceptar-invitacion` en las dos apps (coincide con el link real del
+backend, confirmado en `email-templates.ts` — ambos casos usan el mismo
+path, solo cambia el dominio base). Lee `?token=`, formulario mínimo
+(nombre completo, contraseña — ambos opcionales según
+`AcceptInvitationDto`, pero en la práctica siempre se piden para
+completar el alta de la cuenta), llama
+`POST /invitations/:token/accept`. El backend decide qué tipo de
+invitación es a partir del token — el frontend no necesita saberlo de
+antemano, ni bifurcar su formulario por tipo.
+
+Éxito → mensaje de confirmación + enlace a login (mismo patrón de
+`VerifyEmail`, sin auto-login — la respuesta no trae tokens). Errores:
+`INVITATION_TOKEN_EXPIRED` (410), `INVALID_INVITATION_TOKEN` (400) —
+mapear ambos, mismo criterio que `verifyEmailErrorMessage` ya establece.
+
+### 4. "Agregar alumno" — pantalla nueva en `apps/parent`
+
+Formulario simple (`POST /students`) dentro del Portal web —
+`PortalStudents.tsx` gana de vuelta el botón "Agregar alumno" que se
+omitió a propósito en ADR-078 Paso 2, ahora conectado a una ruta real.
+Revisa el DTO real (`CreateStudentDto` o el nombre que tenga) antes de
+asumir sus campos.
+
+**Consecuencias.** Cierra los dos huecos críticos confirmados por la
+verificación completa de la plataforma, más dos bugs de enrutamiento de
+correo que habrían pasado desapercibidos hasta el primer registro real
+fuera de un entorno de pruebas con atajos. Con esto, los 39 endpoints
+mutantes del backend quedan con al menos un consumidor real en algún
+frontend.
+
+## Referencias
+
+- ADR-013/016 (`specs/features/013-aceptar-invitacion-personal.md`,
+  `016-aceptar-invitacion-tutor.md` — las features que Hallazgo 1 deja
+  sin cerrar hasta este ADR).
+- `specs/features/004-alta-alumno.md` (Hallazgo 2).
+- ADR-078 Paso 2 (la omisión original de "Agregar alumno", documentada
+  ahí, retomada aquí).
+- ADR-080 (el trabajo que introdujo el Hallazgo 3 y expuso el Hallazgo 4
+  sin que nadie lo notara en su momento).
+- `apps/api/src/email/email-templates.ts` (fuente de verdad de los paths
+  reales — leída completa, no una sola línea, antes de este ADR).
