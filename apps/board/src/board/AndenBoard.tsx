@@ -140,7 +140,7 @@ export function AndenBoard({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {visible.map((row) => {
+            {visible.map((row, index) => {
               const meta = STATUS_META[row.status];
               const filled = row.status === 'arrived';
               return (
@@ -151,10 +151,13 @@ export function AndenBoard({
                     gridTemplateColumns: '1fr 140px 200px 140px',
                     gap: 16,
                     alignItems: 'center',
-                    padding: '0 38px',
-                    flex: 1,
+                    padding: '18px 38px',
                     borderBottom: '1px solid rgba(255,255,255,.05)',
-                    background: filled ? 'rgba(14,165,164,0.06)' : 'transparent',
+                    background: filled
+                      ? 'rgba(14,165,164,0.06)'
+                      : index % 2
+                        ? 'rgba(255,255,255,.1)'
+                        : 'transparent',
                   }}
                 >
                   <span style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>

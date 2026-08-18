@@ -105,19 +105,18 @@ export function SerenoBoard({
         }}
       >
         {contentOverride ??
-          visible.map((row) => {
+          visible.map((row, index) => {
             const meta = STATUS_META[row.status];
             const filled = row.status === 'arrived';
             return (
               <div
                 key={row.pickupRequestId}
                 style={{
-                  background: '#fff',
+                  background: index % 2 ? 'rgba(14,31,48,0.025)' : '#fff',
                   borderRadius: 22,
                   boxShadow: '0 8px 20px rgba(14,31,48,.06)',
                   display: 'flex',
                   overflow: 'hidden',
-                  flex: 1,
                   animation: filled ? 'yv-pulse 2.4s ease-in-out infinite' : 'none',
                 }}
               >
