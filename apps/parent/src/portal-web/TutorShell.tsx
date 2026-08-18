@@ -269,10 +269,8 @@ export function TutorShell() {
             padding: '0 28px',
           }}
         >
-          {/* Sin botón "Agregar alumno" del kit: no existe todavía una ruta
-              de alta de alumno en apps/parent (ADR-078 punto 3 deja "Mis
-              hijos" de solo lectura en este paso; la acción real llega con
-              esa pantalla, no antes). */}
+          {/* Sin botón "Agregar alumno" del kit en esta topbar: la acción
+              vive dentro de `PortalStudents.tsx` (ADR-082 punto 4), no aquí. */}
           <span style={{ fontSize: 14, color: 'var(--ink-200)', fontWeight: 500 }}>
             Tutor <span style={{ color: 'var(--ink-50)' }}>/</span>{' '}
             <span style={{ color: 'var(--ink-900)', fontWeight: 700 }}>{activeEntry.label}</span>

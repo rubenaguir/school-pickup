@@ -1,11 +1,35 @@
+import { useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
-import type { EnrollmentStatus, InstitutionType } from '@casillego/shared';
-import { useMyStudents, type MyStudent } from '../students/useMyStudents';
+import {
+  relationshipLabel,
+  STUDENT_GUARDIAN_RELATIONSHIPS,
+  type EnrollmentStatus,
+  type InstitutionType,
+  type StudentGuardianRelationship,
+} from '@casillego/shared';
+import { useMyStudents, type CreateStudentDraft, type MyStudent } from '../students/useMyStudents';
 import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
 import { StudentPhoto } from '../students/StudentPhoto';
+import { createStudentErrorMessage } from '../students/student-error-messages';
 import { TUTOR_PORTAL_ASSOCIATE_PATH, TUTOR_PORTAL_GUARDIANS_PATH } from '../routes/paths';
+import { InlineError } from './InlineError';
 import { Icon } from './icons';
+
+const LABEL_STYLE = { fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' } as const;
+
+const INPUT_STYLE = {
+  height: 44,
+  border: '1px solid var(--border-strong)',
+  borderRadius: 10,
+  padding: '0 14px',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 15,
+  color: 'var(--ink-900)',
+  outline: 'none',
+  width: '100%',
+  boxSizing: 'border-box',
+} as const;
 
 const EMPTY_ICON = (
   <svg
@@ -22,6 +46,158 @@ const EMPTY_ICON = (
     <path d="M2 21h20" />
   </svg>
 );
+
+/* ------------------------------------------------------------------ */
+/* Formulario "Agregar alumno" (ADR-082 punto 4)                      */
+/* ------------------------------------------------------------------ */
+
+interface AddStudentFormValues {
+  fullName: string;
+  birthDate: string;
+  relationship: StudentGuardianRelationship | '';
+}
+
+const EMPTY_ADD_STUDENT_FORM: AddStudentFormValues = {
+  fullName: '',
+  birthDate: '',
+  relationship: '',
+};
+
+function AddStudentForm({
+  submitting,
+  submitError,
+  onSubmit,
+  onCancel,
+}: {
+  submitting: boolean;
+  submitError: ReturnType<typeof useMyStudents>['createError'];
+  onSubmit: (draft: CreateStudentDraft) => void;
+  onCancel: () => void;
+}) {
+  const fieldId = useId();
+  const [form, setForm] = useState<AddStudentFormValues>(EMPTY_ADD_STUDENT_FORM);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const fullName = form.fullName.trim();
+    if (fullName === '' || form.relationship === '') {
+      setValidationError('Escribe el nombre completo y elige el parentesco.');
+      return;
+    }
+    setValidationError(null);
+
+    onSubmit({
+      fullName,
+      birthDate: form.birthDate === '' ? undefined : form.birthDate,
+      relationship: form.relationship,
+    });
+  }
+
+  return (
+    <Card>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
+          Agregar alumno
+        </span>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={LABEL_STYLE}>Nombre completo</span>
+            <input
+              id={`${fieldId}-fullName`}
+              value={form.fullName}
+              required
+              autoFocus
+              onChange={(event) => {
+                setValidationError(null);
+                setForm((current) => ({ ...current, fullName: event.target.value }));
+              }}
+              style={INPUT_STYLE}
+            />
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={LABEL_STYLE}>Fecha de nacimiento</span>
+            <input
+              id={`${fieldId}-birthDate`}
+              type="date"
+              value={form.birthDate}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, birthDate: event.target.value }))
+              }
+              style={INPUT_STYLE}
+            />
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={LABEL_STYLE}>Parentesco</span>
+            <select
+              id={`${fieldId}-relationship`}
+              value={form.relationship}
+              onChange={(event) => {
+                setValidationError(null);
+                setForm((current) => ({
+                  ...current,
+                  relationship: event.target.value as StudentGuardianRelationship,
+                }));
+              }}
+              style={{ ...INPUT_STYLE, cursor: 'pointer' }}
+            >
+              <option value="" disabled>
+                Elige una opción
+              </option>
+              {STUDENT_GUARDIAN_RELATIONSHIPS.map((value) => (
+                <option key={value} value={value}>
+                  {relationshipLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {validationError && <InlineError message={validationError} code="INVALID_PAYLOAD" />}
+        {submitError && (
+          <InlineError
+            message={createStudentErrorMessage(submitError.code)}
+            code={submitError.code}
+          />
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 8,
+            borderTop: '1px solid var(--border-hairline)',
+            paddingTop: 14,
+          }}
+        >
+          <Button
+            variant="outline"
+            size="md"
+            type="button"
+            disabled={submitting}
+            onClick={onCancel}
+          >
+            Cancelar
+          </Button>
+          <Button variant="primary" size="md" type="submit" disabled={submitting}>
+            {submitting ? 'Agregando…' : 'Agregar alumno'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
 
 /**
  * El kit (`ASOC_META`, línea ~468) solo define 3 etiquetas —
@@ -226,17 +402,23 @@ function StudentRow({
 }
 
 /**
- * "Mis hijos" del Portal web (ADR-078 punto 3). Solo lectura en este paso:
- * el botón "Agregar alumno" del kit no tiene todavía una ruta de alta de
- * alumno en apps/parent, así que se deja fuera en vez de apuntarlo a la
- * nada (ver también el comentario en `TutorShell`). "Tutores
- * autorizados"/"Asociar institución" navegan a las rutas placeholder — se
- * conectan de verdad en los pasos siguientes.
+ * "Mis hijos" del Portal web (ADR-078 punto 3, "Agregar alumno" conectado en
+ * ADR-082 punto 4). El botón abre el mismo formulario inline desde dos
+ * puntos de entrada — junto al encabezado cuando ya hay alumnos, y dentro
+ * del `EmptyState` cuando no hay ninguno — mismo patrón sin modal que
+ * `Personnel.tsx` en apps/portal. "Tutores autorizados"/"Asociar
+ * institución" navegan a las rutas placeholder — se conectan de verdad en
+ * los pasos siguientes.
  */
 export function PortalStudents() {
   const navigate = useNavigate();
   const students = useMyStudents();
   const enrollments = useMyEnrollments();
+  const [addOpen, setAddOpen] = useState(false);
+
+  function handleCreate(draft: CreateStudentDraft) {
+    students.create(draft, () => setAddOpen(false));
+  }
 
   // Dos hooks independientes con la misma forma status/retry — se combinan
   // con el criterio más simple que cubre este paso: cargando si cualquiera
@@ -252,20 +434,51 @@ export function PortalStudents() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
-      <h1
+      <div
         style={{
-          margin: 0,
-          fontSize: 'var(--text-display-sm)',
-          fontWeight: 800,
-          color: 'var(--ink-900)',
-          letterSpacing: '-.02em',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
         }}
       >
-        Mis hijos
-      </h1>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 'var(--text-display-sm)',
+            fontWeight: 800,
+            color: 'var(--ink-900)',
+            letterSpacing: '-.02em',
+          }}
+        >
+          Mis hijos
+        </h1>
+        {students.status === 'ready' && (
+          <Button
+            variant={addOpen ? 'outline' : 'primary'}
+            size="md"
+            disabled={addOpen}
+            onClick={() => setAddOpen(true)}
+          >
+            + Agregar alumno
+          </Button>
+        )}
+      </div>
       {students.status === 'ready' && (
         <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, margin: '0 0 18px' }}>
           {count} {count === 1 ? 'alumno registrado' : 'alumnos registrados'}
+        </div>
+      )}
+
+      {addOpen && (
+        <div style={{ marginTop: 18 }}>
+          <AddStudentForm
+            submitting={students.creating}
+            submitError={students.createError}
+            onSubmit={handleCreate}
+            onCancel={() => setAddOpen(false)}
+          />
         </div>
       )}
 
@@ -287,12 +500,17 @@ export function PortalStudents() {
         </Card>
       )}
 
-      {!loading && !failed && students.status === 'empty' && (
+      {!loading && !failed && students.status === 'empty' && !addOpen && (
         <Card style={{ marginTop: 18 }}>
           <EmptyState
             icon={EMPTY_ICON}
             title="Sin alumnos todavía"
             description="Da de alta a tu primer alumno para empezar a usar el seguimiento."
+            action={
+              <Button variant="primary" size="md" onClick={() => setAddOpen(true)}>
+                + Agregar alumno
+              </Button>
+            }
           />
         </Card>
       )}
