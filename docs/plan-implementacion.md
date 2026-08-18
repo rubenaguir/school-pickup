@@ -490,7 +490,7 @@ filtro por punto de entrega) era funcionalmente correcto y se conserva —
 lo que se rehace es la capa visual completa más el canal nuevo de Carril.
 Ver ADR-071 para la especificación completa.
 
-## Registro y verificación de correo (ADR-080) — hueco encontrado tarde, no una fase original
+## Registro y verificación de correo (ADR-080) ✅ completo — hueco encontrado tarde, no una fase original
 
 Al auditar la integración de los 5 kits del design system contra las 3
 apps se confirmó que `ui_kits/acceso` nunca se terminó de construir —
@@ -498,26 +498,47 @@ ADR-043 punto 4 lo dejó deshabilitado a propósito desde la plomería
 inicial ("hasta que se construyan [las pantallas]"), y nadie volvió a
 esto. Los endpoints (`POST /auth/register/institution`,
 `POST /auth/register/guardian`, `POST /auth/verify-email`,
-`POST /auth/resend-verification`) ya existen y funcionan — cero frontend
-los llama.
+`POST /auth/resend-verification`) ya existían y funcionaban — cero
+frontend los llamaba.
 
-- [ ] Registro de tutor (`apps/parent`) — más simple, se construye
+- [x] Registro de tutor (`apps/parent`) — más simple, se construyó
       primero (sin mapa, sin selector de tipo)
-- [ ] Verificación de correo en `apps/parent` (lee `?token=`, llama
+- [x] Verificación de correo en `apps/parent` (lee `?token=`, llama
       `POST /auth/verify-email`, reenvío con el throttling ya existente
       del servidor)
-- [ ] Registro de institución (`apps/portal`) — reutiliza `GeofenceMap`
+- [x] Registro de institución (`apps/portal`) — reutiliza `GeofenceMap`
       (ADR-048) para dirección/ubicación, con los radios de geocerca/
-      activación en sus defaults de columna (100m/3000m), sin editar en
-      este paso; selector de `type` (`school`/`extracurricular`) nuevo,
-      no dibujado en el kit pero exigido por el DTO; `timezone`
-      auto-detectado del navegador
-- [ ] Verificación de correo en `apps/portal`
-- [ ] Mensaje post-registro ("revisa tu correo"), sin auto-login — ninguna
-      respuesta de registro trae tokens
+      activación en sus defaults de columna (100m/3000m), sin exponer su
+      edición en este paso (el `disabled` único de `GeofenceMap` para
+      pin+radios sigue permitiendo arrastrar los anillos, así que ambos
+      `onGeofenceRadiusChange`/`onActivationRadiusChange` quedan cableados
+      a estado local en vez de ignorados); sin geocodificación de
+      dirección — no existe ese paquete en el repo, el pin abre en un
+      punto de referencia fijo (Zócalo, CDMX, la misma coordenada de los
+      fixtures del backend) y se arrastra a mano; selector de `type`
+      (`school`/`extracurricular`) nuevo vía `SegmentedTabs`, no dibujado
+      en el kit pero exigido por el DTO; `timezone` auto-detectado del
+      navegador
+- [x] Verificación de correo en `apps/portal` (calco de `apps/parent`,
+      adaptado al layout `BrandPanel` de dos paneles en vez del `Card`
+      centrado)
+- [x] Mensaje post-registro ("revisa tu correo"), sin auto-login — ninguna
+      respuesta de registro trae tokens; matizado en `apps/portal` para el
+      caso de reutilización de cuenta (ADR-028 punto 2): si el correo del
+      admin ya existía con esa contraseña y la cuenta ya estaba `active`,
+      el mensaje dice que la institución quedó vinculada y que ya puede
+      entrar, en vez de pedir revisar un correo que el backend no reenvía
+      en ese caso
 
-Sin backend nuevo en ningún punto — los 4 endpoints ya están completos y
-verificados, este trabajo es 100% frontend.
+Sin backend nuevo en ningún punto — los 4 endpoints ya estaban completos y
+verificados, este trabajo fue 100% frontend. `npm run check` en verde
+(984 tests). Verificado también en vivo con Playwright contra el backend
+local real: alta de institución (`extracurricular`, con categoría) sin
+auto-login, activación con un token firmado a mano, login posterior,
+visibilidad como `pending` en la bandeja de aprobación de super-admin, y
+los dos lados de la reutilización de cuenta (ADR-028 punto 2) — misma
+contraseña vincula sin error ("Institución vinculada"), contraseña
+distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
 
 ## Fase 10 — Pulido y defensa de tesis
 

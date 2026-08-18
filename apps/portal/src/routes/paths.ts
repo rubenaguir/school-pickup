@@ -1,6 +1,13 @@
 export const LOGIN_PATH = '/login';
 
 /**
+ * "Verificar correo" (ADR-080 punto 3), enlazada desde el correo de
+ * verificación con `?token=...`. Fuera de `AuthenticatedLayout`: quien llega
+ * aquí todavía no tiene sesión — mismo criterio que `apps/parent`.
+ */
+export const VERIFY_EMAIL_PATH = '/verify-email';
+
+/**
  * Dashboard of the Institución role (ADR-072) — real-time KPI cards plus the
  * live activity table, inside `InstitutionShell`. Where a signed-in
  * institution member lands now that a real landing screen exists.

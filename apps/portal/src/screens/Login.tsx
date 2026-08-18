@@ -1,15 +1,41 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useNavigate } from 'react-router';
-import { Button, EmptyState } from '@casillego/ui';
-import { ApiError, decodeAccessToken, readAccessToken } from '@casillego/shared';
-import { tokenStorage } from '../api/client';
+import { Button, EmptyState, GeofenceMap, SegmentedTabs } from '@casillego/ui';
+import type { LatLng } from '@casillego/ui';
+import {
+  ApiError,
+  asApiError,
+  decodeAccessToken,
+  readAccessToken,
+  type InstitutionType,
+} from '@casillego/shared';
+import { apiClient, tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { loginErrorMessage } from '../auth/auth-error-messages';
+import { loginErrorMessage, registerInstitutionErrorMessage } from '../auth/auth-error-messages';
+import { institutionRegistrationValidationError } from '../auth/register-institution-rules';
 import { resolveLoginOutcome } from '../auth/login-outcome';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { BrandPanel } from './BrandPanel';
 import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
+
+type Step = 'login' | 'choose' | 'escuela';
+
+/** Reference point for a brand-new institution's pin — Zócalo, CDMX, the same
+ * fixture coordinate used across the backend's test suite. There is no
+ * address-to-coordinates lookup anywhere in this repo (confirmed: no
+ * geocoding dependency exists) — `InstitutionProfile.tsx`'s own use of
+ * `GeofenceMap` never resolves one either, it only ever starts from a
+ * profile's already-known `location`. A new registration has no such value
+ * yet, so the pin opens here and the admin drags it into place. */
+const CDMX_CENTER: LatLng = { lat: 19.4326, lng: -99.1332 };
+
+/** `institutions.geofence_radius_meters`/`activation_radius_meters` column
+ * defaults (`packages/shared/src/entities/institution.entity.ts`) — not
+ * exposed for editing in this form (ADR-080 point 1), only correctable later
+ * from the approved institution's own profile screen. */
+const DEFAULT_GEOFENCE_RADIUS_METERS = 100;
+const DEFAULT_ACTIVATION_RADIUS_METERS = 3000;
 
 const NO_ACCESS_ICON = (
   <svg
@@ -50,12 +76,626 @@ function EyeIcon({ crossed }: { crossed: boolean }) {
   );
 }
 
+function BuildingIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M3 21h18M5 21V8l7-4 7 4v13" />
+      <path d="M9 21v-5h6v5" />
+    </svg>
+  );
+}
+
+function FamilyIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3 20a6 6 0 0112 0" />
+      <path d="M16 5.5a3 3 0 010 5.5M19 20a6 6 0 00-3.5-5.5" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--status-arriving-fg)"
+      strokeWidth="2"
+      style={{ flexShrink: 0, marginTop: 1 }}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5M12 16v.01" />
+    </svg>
+  );
+}
+
+const BACK_LINK_STYLE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 14,
+  color: 'var(--ink-300)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  marginBottom: 14,
+  background: 'none',
+  border: 'none',
+  padding: 0,
+} as const;
+
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={BACK_LINK_STYLE}>
+      <ChevronLeftIcon /> Volver
+    </button>
+  );
+}
+
+const EYE_BUTTON_STYLE = {
+  display: 'inline-flex',
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
+  cursor: 'pointer',
+} as const;
+
+const CHOICE_CARD_STYLE = {
+  flex: 1,
+  border: '1px solid var(--border)',
+  borderRadius: 16,
+  padding: 22,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 13,
+  textAlign: 'left',
+  background: 'none',
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'pointer',
+} as const;
+
+function IconBubble({
+  background,
+  color,
+  children,
+}: {
+  background: string;
+  color: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      style={{
+        width: 48,
+        height: 48,
+        borderRadius: 13,
+        background,
+        color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Step 2 of `ui_kits/acceso`'s `Access()`, `view === 'choose'`. */
+function ChooseAccountType({
+  onSelectSchool,
+  onBack,
+}: {
+  onSelectSchool: () => void;
+  onBack: () => void;
+}) {
+  const parentUrl = import.meta.env.VITE_PARENT_URL || null;
+
+  return (
+    <div style={{ maxWidth: 520, width: '100%', margin: '0 auto' }}>
+      <h1
+        style={{
+          margin: '0 0 4px',
+          fontSize: 30,
+          fontWeight: 800,
+          color: 'var(--ink-900)',
+          letterSpacing: '-.02em',
+        }}
+      >
+        Crear cuenta
+      </h1>
+      <div style={{ fontSize: 15, color: 'var(--ink-300)', fontWeight: 500, marginBottom: 26 }}>
+        ¿Cómo vas a usar CasiLlego? Elige tu tipo de cuenta.
+      </div>
+
+      <div style={{ display: 'flex', gap: 16 }}>
+        <button type="button" onClick={onSelectSchool} style={CHOICE_CARD_STYLE}>
+          <IconBubble background="var(--brand-soft)" color="var(--brand-strong)">
+            <BuildingIcon />
+          </IconBubble>
+          <span
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.01em',
+            }}
+          >
+            Escuela o institución
+          </span>
+          <span
+            style={{
+              fontSize: 14,
+              color: 'var(--ink-300)',
+              fontWeight: 500,
+              lineHeight: 1.45,
+              flex: 1,
+            }}
+          >
+            Administra la salida, aprueba alumnos y opera el tablero de llegadas.
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              color: 'var(--brand)',
+              fontSize: 14,
+              fontWeight: 700,
+            }}
+          >
+            Registrar institución <ArrowRightIcon />
+          </span>
+        </button>
+
+        {/* No tutor form lives in this app — apps/portal is exclusive to the
+            institución role since ADR-078. This card only points at
+            apps/parent (ADR-080 point 2), same disabled-with-title pattern
+            as the Dashboard's "Abrir tablero" (ADR-072 point 6). */}
+        <span
+          title={parentUrl ? undefined : 'Configura VITE_PARENT_URL para habilitar este enlace.'}
+          style={{ flex: 1 }}
+        >
+          <a
+            href={parentUrl ?? undefined}
+            target="_blank"
+            rel="noopener"
+            aria-disabled={!parentUrl}
+            style={{
+              ...CHOICE_CARD_STYLE,
+              textDecoration: 'none',
+              cursor: parentUrl ? 'pointer' : 'not-allowed',
+              opacity: parentUrl ? 1 : 0.55,
+              pointerEvents: parentUrl ? 'auto' : 'none',
+            }}
+          >
+            <IconBubble background="var(--accent-teal-bg)" color="var(--accent-teal-fg)">
+              <FamilyIcon />
+            </IconBubble>
+            <span
+              style={{
+                fontSize: 18,
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.01em',
+              }}
+            >
+              Tutor o familia
+            </span>
+            <span
+              style={{
+                fontSize: 14,
+                color: 'var(--ink-300)',
+                fontWeight: 500,
+                lineHeight: 1.45,
+                flex: 1,
+              }}
+            >
+              Regístrate como tutor en la app CasiLlego para padres.
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                color: 'var(--accent-teal-fg)',
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              Ir a la app de tutores <ArrowRightIcon />
+            </span>
+          </a>
+        </span>
+      </div>
+
+      <div
+        style={{
+          textAlign: 'center',
+          fontSize: 14,
+          color: 'var(--ink-300)',
+          fontWeight: 500,
+          marginTop: 24,
+        }}
+      >
+        ¿Ya tienes cuenta?{' '}
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            font: 'inherit',
+            color: 'var(--brand)',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Entrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface RegisterInstitutionResponse {
+  institution: { id: string; name: string; status: 'pending'; joinCode: string };
+  user: { id: string; email: string; status: 'invited' | 'active' };
+}
+
+const WARNING_BANNER_STYLE = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 10,
+  background: 'rgba(245,158,11,.10)',
+  border: '1px solid rgba(245,158,11,.3)',
+  borderRadius: 12,
+  padding: '12px 14px',
+} as const;
+
+/** Step 3 of `ui_kits/acceso`'s `Access()`, `view === 'escuela'` — extended
+ * with the fields the kit's mockup left out but `RegisterInstitutionDto`
+ * requires (ADR-080 point 1). */
+function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
+  const fieldId = useId();
+
+  const [name, setName] = useState('');
+  const [type, setType] = useState<InstitutionType>('school');
+  const [category, setCategory] = useState('');
+  const [address, setAddress] = useState('');
+  const [location, setLocation] = useState<LatLng>(CDMX_CENTER);
+  // The map's `disabled` toggle covers pin and both rings together — there is
+  // no way to leave the pin draggable while pinning the rings (see
+  // GeofenceMap's own prop docstring). Both change handlers must stay wired
+  // even though this form exposes no numeric backup for them: an admin who
+  // drags a ring by accident still needs what they see reflected in the
+  // payload, not a value the UI silently ignored.
+  const [geofenceRadiusMeters, setGeofenceRadiusMeters] = useState(DEFAULT_GEOFENCE_RADIUS_METERS);
+  const [activationRadiusMeters, setActivationRadiusMeters] = useState(
+    DEFAULT_ACTIVATION_RADIUS_METERS,
+  );
+
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [revealed, setRevealed] = useState(false);
+
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<RegisterInstitutionResponse | null>(null);
+
+  // Resolved once at mount, never asked of the person registering (ADR-080
+  // point 1) — editable later from the institution's own profile.
+  const [timezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    const validation = institutionRegistrationValidationError(password);
+    if (validation) {
+      setValidationError(validation);
+      return;
+    }
+    setValidationError(null);
+
+    setSubmitting(true);
+    try {
+      const response = await apiClient.post<RegisterInstitutionResponse>(
+        '/auth/register/institution',
+        {
+          institution: {
+            name,
+            type,
+            // `category` only ever means something for an extracurricular
+            // (specs/entities/institution.md) — same rule InstitutionProfile
+            // already enforces on edit. The key must still be present, never
+            // omitted (RegisterInstitutionDto marks it `@IsOptional()`, not
+            // absent-able).
+            category: type === 'extracurricular' && category.trim() !== '' ? category.trim() : null,
+            address,
+            location,
+            timezone,
+          },
+          admin: {
+            email,
+            password,
+            fullName,
+            phone: phone.trim() === '' ? null : phone,
+          },
+        },
+        { skipAuth: true },
+      );
+      setResult(response);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (result) {
+    // ADR-028 point 2: a matching password on an existing email reuses that
+    // account instead of creating a new one. `status: 'active'` is the only
+    // response shape that proves this happened without a fresh verification
+    // email going out — telling that admin to "check your email" would be
+    // wrong, so the copy branches on it.
+    const reusedActiveAccount = result.user.status === 'active';
+    return (
+      <div style={{ maxWidth: 440, width: '100%', margin: '0 auto' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>CasiLlego</div>
+        <h1
+          style={{
+            margin: '6px 0 16px',
+            fontSize: 26,
+            fontWeight: 800,
+            color: 'var(--ink-900)',
+            letterSpacing: '-.02em',
+          }}
+        >
+          {reusedActiveAccount ? 'Institución vinculada' : 'Revisa tu correo'}
+        </h1>
+        <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--ink-400)', lineHeight: 1.5 }}>
+          {reusedActiveAccount
+            ? `Ya tenías una cuenta activa con ${result.user.email} — la vinculamos como administrador de ${result.institution.name}. Ya puedes entrar.`
+            : `Revisa tu correo para activar tu cuenta, ${result.user.email}.`}
+        </p>
+        <Button variant="primary" size="lg" full onClick={onBack}>
+          Volver a entrar
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 440, width: '100%', margin: '0 auto' }}>
+      <BackLink onClick={onBack} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <IconBubble background="var(--brand-soft)" color="var(--brand-strong)">
+          <BuildingIcon />
+        </IconBubble>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 26,
+            fontWeight: 800,
+            color: 'var(--ink-900)',
+            letterSpacing: '-.02em',
+          }}
+        >
+          Registrar institución
+        </h1>
+      </div>
+      <div style={{ fontSize: 14, color: 'var(--ink-300)', fontWeight: 500, marginBottom: 22 }}>
+        Crea la cuenta de tu escuela o centro de actividades.
+      </div>
+
+      <form
+        onSubmit={(event) => void handleSubmit(event)}
+        style={{ display: 'flex', flexDirection: 'column', gap: 15 }}
+      >
+        <Field label="Nombre de la institución" htmlFor={`${fieldId}-name`}>
+          <input
+            id={`${fieldId}-name`}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            style={INPUT_STYLE}
+          />
+        </Field>
+
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}>Tipo</span>
+          <SegmentedTabs
+            options={['Escuela', 'Actividad extracurricular']}
+            value={type === 'school' ? 'Escuela' : 'Actividad extracurricular'}
+            onChange={(next) => setType(next === 'Escuela' ? 'school' : 'extracurricular')}
+          />
+        </span>
+
+        <Field
+          label="Categoría"
+          htmlFor={`${fieldId}-category`}
+          hint={
+            type === 'school'
+              ? 'Solo aplica a instituciones de tipo actividad extracurricular.'
+              : 'Ballet, natación, robótica… (opcional)'
+          }
+        >
+          <input
+            id={`${fieldId}-category`}
+            value={category}
+            disabled={type === 'school'}
+            onChange={(event) => setCategory(event.target.value)}
+            style={INPUT_STYLE}
+          />
+        </Field>
+
+        <Field label="Dirección" htmlFor={`${fieldId}-address`}>
+          <input
+            id={`${fieldId}-address`}
+            required
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            style={INPUT_STYLE}
+          />
+        </Field>
+
+        <GeofenceMap
+          accessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+          center={location}
+          geofenceRadiusMeters={geofenceRadiusMeters}
+          activationRadiusMeters={activationRadiusMeters}
+          onCenterChange={setLocation}
+          onGeofenceRadiusChange={setGeofenceRadiusMeters}
+          onActivationRadiusChange={setActivationRadiusMeters}
+          height={240}
+        />
+
+        <Field label="Nombre del responsable" htmlFor={`${fieldId}-fullName`}>
+          <input
+            id={`${fieldId}-fullName`}
+            required
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            style={INPUT_STYLE}
+          />
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Correo" htmlFor={`${fieldId}-email`}>
+            <input
+              id={`${fieldId}-email`}
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              style={INPUT_STYLE}
+            />
+          </Field>
+          <Field label="Teléfono (opcional)" htmlFor={`${fieldId}-phone`}>
+            <input
+              id={`${fieldId}-phone`}
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              style={INPUT_STYLE}
+            />
+          </Field>
+        </div>
+
+        <Field label="Contraseña" htmlFor={`${fieldId}-password`}>
+          <input
+            id={`${fieldId}-password`}
+            type={revealed ? 'text' : 'password'}
+            autoComplete="new-password"
+            required
+            value={password}
+            onChange={(event) => {
+              setValidationError(null);
+              setPassword(event.target.value);
+            }}
+            style={INPUT_STYLE}
+          />
+          <button
+            type="button"
+            onClick={() => setRevealed((current) => !current)}
+            aria-label={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            style={EYE_BUTTON_STYLE}
+          >
+            <EyeIcon crossed={revealed} />
+          </button>
+        </Field>
+
+        <div style={WARNING_BANNER_STYLE}>
+          <WarningIcon />
+          <span
+            style={{
+              fontSize: 13,
+              color: 'var(--status-arriving-fg)',
+              fontWeight: 500,
+              lineHeight: 1.4,
+            }}
+          >
+            Tu institución quedará <b style={{ fontWeight: 700 }}>pendiente de validación</b> por el
+            equipo de CasiLlego antes de operar.
+          </span>
+        </div>
+
+        {validationError && <Alert message={validationError} code="INVALID_PAYLOAD" />}
+        {error && <Alert message={registerInstitutionErrorMessage(error.code)} code={error.code} />}
+
+        <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
+          {submitting ? 'Registrando…' : 'Registrar institución'}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 export function Login() {
   const { session, isSuperAdmin, login } = useAuth();
   const navigate = useNavigate();
   const emailId = useId();
   const passwordId = useId();
 
+  const [step, setStep] = useState<Step>('login');
   const [noAccess, setNoAccess] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -146,120 +786,134 @@ export function Login() {
             justifyContent: 'center',
             padding: '48px 56px',
             minWidth: 0,
+            overflow: 'auto',
           }}
         >
-          <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
-            {noAccess ? (
-              <EmptyState
-                icon={NO_ACCESS_ICON}
-                title="Esta cuenta no tiene acceso al portal de instituciones"
-                description="Si buscas recoger a tus hijos de la escuela, usa la app CasiLlego para tutores en tu celular."
-                action={
-                  <Button variant="outline" size="md" onClick={() => setNoAccess(false)}>
-                    Volver a intentar
-                  </Button>
-                }
-              />
-            ) : (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
-                  Bienvenido de nuevo
-                </div>
-                <h1
-                  style={{
-                    margin: '6px 0 28px',
-                    fontSize: 30,
-                    fontWeight: 800,
-                    color: 'var(--ink-900)',
-                    letterSpacing: '-.02em',
-                  }}
-                >
-                  Entrar
-                </h1>
+          {step === 'choose' && (
+            <ChooseAccountType
+              onSelectSchool={() => setStep('escuela')}
+              onBack={() => setStep('login')}
+            />
+          )}
 
-                <form
-                  onSubmit={(event) => void handleSubmit(event)}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
-                >
-                  <Field label="Correo electrónico" htmlFor={emailId}>
-                    <input
-                      id={emailId}
-                      type="email"
-                      name="email"
-                      autoComplete="username"
-                      required
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      style={INPUT_STYLE}
-                    />
-                  </Field>
+          {step === 'escuela' && <RegisterInstitutionForm onBack={() => setStep('login')} />}
 
-                  <Field
-                    label="Contraseña"
-                    htmlFor={passwordId}
-                    action={
-                      // No password-reset endpoint exists in the API yet
-                      // (ADR-043 point 4). Shown, deliberately inert.
-                      <span style={INERT_LINK_STYLE} title="Próximamente">
-                        ¿Olvidaste tu contraseña?
-                      </span>
-                    }
+          {step === 'login' && (
+            <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
+              {noAccess ? (
+                <EmptyState
+                  icon={NO_ACCESS_ICON}
+                  title="Esta cuenta no tiene acceso al portal de instituciones"
+                  description="Si buscas recoger a tus hijos de la escuela, usa la app CasiLlego para tutores en tu celular."
+                  action={
+                    <Button variant="outline" size="md" onClick={() => setNoAccess(false)}>
+                      Volver a intentar
+                    </Button>
+                  }
+                />
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>
+                    Bienvenido de nuevo
+                  </div>
+                  <h1
+                    style={{
+                      margin: '6px 0 28px',
+                      fontSize: 30,
+                      fontWeight: 800,
+                      color: 'var(--ink-900)',
+                      letterSpacing: '-.02em',
+                    }}
                   >
-                    <input
-                      id={passwordId}
-                      type={revealed ? 'text' : 'password'}
-                      name="password"
-                      autoComplete="current-password"
-                      required
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      style={INPUT_STYLE}
-                    />
+                    Entrar
+                  </h1>
+
+                  <form
+                    onSubmit={(event) => void handleSubmit(event)}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+                  >
+                    <Field label="Correo electrónico" htmlFor={emailId}>
+                      <input
+                        id={emailId}
+                        type="email"
+                        name="email"
+                        autoComplete="username"
+                        required
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        style={INPUT_STYLE}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Contraseña"
+                      htmlFor={passwordId}
+                      action={
+                        // No password-reset endpoint exists in the API yet
+                        // (ADR-043 point 4). Shown, deliberately inert.
+                        <span style={INERT_LINK_STYLE} title="Próximamente">
+                          ¿Olvidaste tu contraseña?
+                        </span>
+                      }
+                    >
+                      <input
+                        id={passwordId}
+                        type={revealed ? 'text' : 'password'}
+                        name="password"
+                        autoComplete="current-password"
+                        required
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        style={INPUT_STYLE}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRevealed((current) => !current)}
+                        aria-label={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        style={EYE_BUTTON_STYLE}
+                      >
+                        <EyeIcon crossed={revealed} />
+                      </button>
+                    </Field>
+
+                    {error && <Alert message={loginErrorMessage(error.code)} code={error.code} />}
+
+                    <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
+                      {submitting ? 'Entrando…' : 'Entrar'}
+                    </Button>
+                  </form>
+
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      fontSize: 14,
+                      color: 'var(--ink-300)',
+                      fontWeight: 500,
+                      marginTop: 26,
+                    }}
+                  >
+                    ¿Primera vez en CasiLlego?{' '}
                     <button
                       type="button"
-                      onClick={() => setRevealed((current) => !current)}
-                      aria-label={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      onClick={() => setStep('choose')}
                       style={{
-                        display: 'inline-flex',
+                        background: 'none',
                         border: 'none',
-                        background: 'transparent',
                         padding: 0,
+                        font: 'inherit',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: 'var(--brand)',
                         cursor: 'pointer',
                       }}
                     >
-                      <EyeIcon crossed={revealed} />
+                      Crear cuenta
                     </button>
-                  </Field>
-
-                  {error && <Alert message={loginErrorMessage(error.code)} code={error.code} />}
-
-                  <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
-                    {submitting ? 'Entrando…' : 'Entrar'}
-                  </Button>
-                </form>
-
-                <div
-                  style={{
-                    textAlign: 'center',
-                    fontSize: 14,
-                    color: 'var(--ink-300)',
-                    fontWeight: 500,
-                    marginTop: 26,
-                  }}
-                >
-                  {/* Registration endpoints exist, the screens do not — this layer
-                      is plumbing only (ADR-043 point 4). */}
-                  ¿Primera vez en CasiLlego?{' '}
-                  <span
-                    style={{ ...INERT_LINK_STYLE, fontSize: 14, fontWeight: 700 }}
-                    title="Próximamente"
-                  >
-                    Crear cuenta
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </main>

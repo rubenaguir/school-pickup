@@ -16,6 +16,7 @@ import {
   PERSONNEL_PATH,
   PROFILE_PATH,
   REPORTS_PATH,
+  VERIFY_EMAIL_PATH,
 } from './routes/paths';
 import { Dashboard } from './screens/Dashboard';
 import { DeliveryPoints } from './screens/DeliveryPoints';
@@ -31,6 +32,7 @@ import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Profile } from './screens/Profile';
 import { Reports } from './screens/Reports';
+import { VerifyEmail } from './screens/VerifyEmail';
 
 export function App() {
   return (
@@ -38,6 +40,7 @@ export function App() {
       <AuthProvider>
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
+          <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
           <Route element={<AuthenticatedLayout />}>
             {/* InstitutionGate wraps only the institution routes; PROFILE_PATH
                 stays outside it since Profile.tsx applies to any signed-in
