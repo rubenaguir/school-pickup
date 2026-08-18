@@ -5676,3 +5676,47 @@ teléfono.
 - `design/casillego-design-system/ui_kits/app-padre/index.html`,
   función `TutorPortal()` (fuente visual completa de este ADR — leída
   íntegra, no solo el README).
+
+## ADR-079 — "Cerrar sesión" visible en los 3 shells, no solo alcanzable por URL
+
+**Contexto.** Tercer punto de fricción señalado por el humano: no hay
+forma de cerrar sesión desde `InstitutionShell`. Confirmado en el código
+real: la función existe y funciona (`apps/portal/src/screens/Profile.tsx`,
+botón "Cerrar sesión" ya construido) — el problema es que `PROFILE_PATH`
+nunca aparece en la navegación de `InstitutionShell` ni de `OpsShell`,
+solo alcanzable escribiendo `/profile` directo. `TutorShell`
+(`apps/parent`, ADR-078) sí tiene "Perfil" como ítem de navegación, pero
+ningún botón de cerrar sesión en el shell mismo.
+
+**Decisión.**
+
+1. **"Perfil"/"Cerrar sesión" no se agregan a la lista principal de
+   navegación de `InstitutionShell`/`OpsShell`** — esos ítems son
+   secciones de la institución/operación, personal de institución
+   navegando ahí espera ver Aprobaciones/Reportes/etc., no configuración
+   de su propia cuenta. Se agregan como dos enlaces chicos, siempre
+   visibles, debajo del bloque de avatar+nombre+rol que el pie de la
+   sidebar ya tiene — mismo criterio visual discreto que el resto del pie
+   (`rgba(255,255,255,.5-.6)`), sin menú desplegable ni popover: el
+   proyecto no tiene ese patrón en ningún lado todavía y dos enlaces de
+   texto siempre visibles son más simples y no necesitan lógica de
+   cerrar-al-hacer-clic-afuera.
+2. **`TutorShell` ya tiene "Perfil" en la nav principal** (correcto ahí —
+   para un tutor, gestionar su propia cuenta *es* una de las tareas
+   primarias del portal, a diferencia del personal de institución) — solo
+   se agrega "Cerrar sesión" al mismo pie, mismo criterio visual.
+3. El botón de cerrar sesión que ya existe dentro de
+   `Profile.tsx`/`PortalProfile.tsx` **se conserva** — tener el acceso en
+   dos lugares (pie del shell + dentro de la pantalla de perfil) no es
+   redundante de forma dañina, es un patrón común.
+
+**Consecuencias.** Cierra el tercer y último punto de fricción señalado
+por el humano en esta ronda. Los 3 shells del proyecto (Institución,
+Operador, Tutor) quedan con el mismo patrón de pie de cuenta.
+
+## Referencias
+
+- ADR-072/074/078 (los 3 shells que este ADR completa).
+- `apps/portal/src/screens/Profile.tsx` (el botón de cerrar sesión ya
+  existente, confirmado funcional, solo sin ruta de acceso desde la
+  sidebar).

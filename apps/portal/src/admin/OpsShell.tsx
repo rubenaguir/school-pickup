@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useProfile } from '../profile/useProfile';
 import { Icon, type IconName } from '../institution/icons';
 import { useAdminMetrics } from './useAdminMetrics';
-import { ADMIN_INSTITUTIONS_PATH, ADMIN_METRICS_PATH } from '../routes/paths';
+import { ADMIN_INSTITUTIONS_PATH, ADMIN_METRICS_PATH, PROFILE_PATH } from '../routes/paths';
 
 interface NavEntry {
   path: string;
@@ -44,7 +44,7 @@ function initialsOf(name: string): string {
 export function OpsShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const { profile } = useProfile();
   const adminMetrics = useAdminMetrics();
 
@@ -130,40 +130,58 @@ export function OpsShell() {
             padding: '16px 18px',
             borderTop: '1px solid rgba(255,255,255,.08)',
             display: 'flex',
-            alignItems: 'center',
-            gap: 11,
+            flexDirection: 'column',
+            gap: 12,
           }}
         >
-          <span
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,.12)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: 700,
-              flexShrink: 0,
-            }}
-          >
-            {initialsOf(displayName)}
-          </span>
-          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <span
               style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,.12)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 fontSize: 14,
-                fontWeight: 600,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontWeight: 700,
+                flexShrink: 0,
               }}
             >
-              {displayName}
+              {initialsOf(displayName)}
             </span>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Operador CasiLlego</span>
-          </span>
+            <span
+              style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, minWidth: 0 }}
+            >
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {displayName}
+              </span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>
+                Operador CasiLlego
+              </span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span
+              onClick={() => void navigate(PROFILE_PATH)}
+              style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
+            >
+              Perfil
+            </span>
+            <span style={{ color: 'rgba(255,255,255,.3)' }}>·</span>
+            <span onClick={logout} style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}>
+              Cerrar sesión
+            </span>
+          </div>
         </div>
       </aside>
 

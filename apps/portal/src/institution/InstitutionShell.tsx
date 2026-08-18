@@ -13,6 +13,7 @@ import {
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
+  PROFILE_PATH,
   REPORTS_PATH,
 } from '../routes/paths';
 
@@ -59,7 +60,7 @@ export function InstitutionShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { current, institutionId } = useInstitution();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const { profile } = useProfile();
   const pendingEnrollments = usePendingEnrollments(institutionId);
 
@@ -132,40 +133,56 @@ export function InstitutionShell() {
             padding: '16px 18px',
             borderTop: '1px solid rgba(255,255,255,.08)',
             display: 'flex',
-            alignItems: 'center',
-            gap: 11,
+            flexDirection: 'column',
+            gap: 12,
           }}
         >
-          <span
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,.12)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: 700,
-              flexShrink: 0,
-            }}
-          >
-            {initialsOf(displayName)}
-          </span>
-          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <span
               style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,.12)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 fontSize: 14,
-                fontWeight: 600,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontWeight: 700,
+                flexShrink: 0,
               }}
             >
-              {displayName}
+              {initialsOf(displayName)}
             </span>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>{roleText}</span>
-          </span>
+            <span
+              style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, minWidth: 0 }}
+            >
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {displayName}
+              </span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>{roleText}</span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span
+              onClick={() => void navigate(PROFILE_PATH)}
+              style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
+            >
+              Perfil
+            </span>
+            <span style={{ color: 'rgba(255,255,255,.3)' }}>·</span>
+            <span onClick={logout} style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}>
+              Cerrar sesión
+            </span>
+          </div>
         </div>
       </aside>
 

@@ -66,7 +66,7 @@ const SHELL_STYLE = `
 export function TutorShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const activeEntry = NAV.find((entry) => location.pathname.startsWith(entry.path)) ?? NAV[0];
@@ -216,6 +216,12 @@ export function TutorShell() {
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Tutor</span>
             </span>
           </div>
+          <span
+            onClick={logout}
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
+          >
+            Cerrar sesión
+          </span>
         </div>
       </aside>
 
