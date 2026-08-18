@@ -416,12 +416,11 @@ function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
   const [category, setCategory] = useState('');
   const [address, setAddress] = useState('');
   const [location, setLocation] = useState<LatLng>(CDMX_CENTER);
-  // The map's `disabled` toggle covers pin and both rings together — there is
-  // no way to leave the pin draggable while pinning the rings (see
-  // GeofenceMap's own prop docstring). Both change handlers must stay wired
-  // even though this form exposes no numeric backup for them: an admin who
-  // drags a ring by accident still needs what they see reflected in the
-  // payload, not a value the UI silently ignored.
+  // `radiiDisabled` keeps both rings fixed at their default value while the
+  // pin stays draggable (GeofenceMap's own prop docstring): RegisterInstitutionDto
+  // doesn't accept either radius, so there's nothing to send if an admin
+  // changed them here. The change handlers stay wired for GeofenceMap's API,
+  // but with the rings locked they never actually fire.
   const [geofenceRadiusMeters, setGeofenceRadiusMeters] = useState(DEFAULT_GEOFENCE_RADIUS_METERS);
   const [activationRadiusMeters, setActivationRadiusMeters] = useState(
     DEFAULT_ACTIVATION_RADIUS_METERS,
@@ -603,8 +602,13 @@ function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
           onCenterChange={setLocation}
           onGeofenceRadiusChange={setGeofenceRadiusMeters}
           onActivationRadiusChange={setActivationRadiusMeters}
+          radiiDisabled
           height={240}
         />
+        <span style={{ fontSize: 12, color: 'var(--ink-200)', marginTop: -6 }}>
+          La ubicación se ajusta arrastrando el pin; los radios se configuran más adelante desde el
+          perfil de tu institución.
+        </span>
 
         <Field label="Nombre del responsable" htmlFor={`${fieldId}-fullName`}>
           <input

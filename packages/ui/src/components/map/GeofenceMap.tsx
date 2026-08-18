@@ -23,6 +23,14 @@ export interface GeofenceMapProps {
   onActivationRadiusChange?: (meters: number) => void;
   /** Read-only: both rings and the pin render, nothing can be dragged. */
   disabled?: boolean;
+  /**
+   * Independent of `disabled`: controls only whether the two rings can be
+   * dragged, without affecting the pin — two drag mechanisms already
+   * separated in the implementation (`marker.draggable` vs. the listeners on
+   * the `*_HANDLE_LAYER` layers). Defaults to `disabled`, so no existing
+   * consumer that doesn't pass it changes behaviour.
+   */
+  radiiDisabled?: boolean;
   height?: number;
   geofenceLabel?: string;
   activationLabel?: string;
@@ -136,6 +144,7 @@ export function GeofenceMap({
   onGeofenceRadiusChange,
   onActivationRadiusChange,
   disabled = false,
+  radiiDisabled = disabled,
   height = 380,
   geofenceLabel = 'Radio de arribo',
   activationLabel = 'Radio de activación',
@@ -153,6 +162,7 @@ export function GeofenceMap({
   const propsRef = useRef({
     center,
     disabled,
+    radiiDisabled,
     onCenterChange,
     onGeofenceRadiusChange,
     onActivationRadiusChange,
@@ -161,6 +171,7 @@ export function GeofenceMap({
     propsRef.current = {
       center,
       disabled,
+      radiiDisabled,
       onCenterChange,
       onGeofenceRadiusChange,
       onActivationRadiusChange,
@@ -270,7 +281,7 @@ export function GeofenceMap({
 
     function beginDrag(target: 'geofence' | 'activation') {
       return (event: MapMouseEvent) => {
-        if (propsRef.current.disabled) return;
+        if (propsRef.current.radiiDisabled) return;
         // Keeps the gesture from panning the map underneath the ring.
         event.preventDefault();
         draggingRef.current = target;
@@ -300,7 +311,7 @@ export function GeofenceMap({
     }
 
     function hoverIn() {
-      if (propsRef.current.disabled || draggingRef.current) return;
+      if (propsRef.current.radiiDisabled || draggingRef.current) return;
       canvas().style.cursor = 'ew-resize';
     }
 
@@ -391,8 +402,12 @@ export function GeofenceMap({
         />
         {!disabled && (
           <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
-            Arrastra el pin para mover la institución, o el borde de un círculo para cambiar su
-            radio.
+            Arrastra el pin para mover la institución.
+          </span>
+        )}
+        {!radiiDisabled && (
+          <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
+            Arrastra el borde de un círculo para cambiar su radio.
           </span>
         )}
       </div>
