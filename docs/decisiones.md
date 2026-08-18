@@ -5720,3 +5720,114 @@ Operador, Tutor) quedan con el mismo patrón de pie de cuenta.
 - `apps/portal/src/screens/Profile.tsx` (el botón de cerrar sesión ya
   existente, confirmado funcional, solo sin ruta de acceso desde la
   sidebar).
+
+## ADR-080 — Construir el flujo de registro/verificación de `ui_kits/acceso`, deferido desde ADR-043
+
+**Contexto.** Al auditar qué tan bien integrados están los 5 kits del
+design system contra las 3 apps (el humano preguntó específicamente por
+esto) se confirmó un hueco real: `ui_kits/acceso` describe un flujo
+completo — Entrar → "Crear cuenta" → elegir tipo (Escuela/Tutor) →
+formulario de alta — del que hoy solo existe el "Entrar". ADR-043 punto 4
+ya documentó esto en su momento, explícitamente como plomería temporal:
+*"se renderiza deshabilitado hasta que se construyan [las pantallas]"* —
+nunca se construyeron. Confirmado en el código: `POST /auth/register/institution`
+y `POST /auth/register/guardian` existen y funcionan, cero frontend los
+llama. `apps/portal` conserva el enlace inerte con su comentario original;
+`apps/parent` ni siquiera tiene eso.
+
+Investigar el alcance real reveló dos cosas más, no visibles desde el
+kit:
+
+1. **El formulario de "Escuela" del kit está incompleto respecto al DTO
+   real.** `RegisterInstitutionDto` exige `address`, `location.lat/lng`,
+   `timezone`, `institution.type` — el kit solo pide nombre, responsable,
+   correo, teléfono, contraseña. No es un caso de "el kit no lo pide, no
+   se construye" (como el botón de incidencia, ADR-034) — es un caso de
+   "el mockup simplificó un formulario que el backend exige completo", el
+   mismo tipo de vacío que ya apareció varias veces esta sesión (ej. el
+   Dashboard institucional, ADR-072).
+2. **El registro no completa el ciclo sin verificación de correo.**
+   `RegisterInstitutionResponse`/`RegisterGuardianResponse` no devuelven
+   tokens — el `users` creado queda en `status = invited`
+   (`specs/features/007-verificacion-correo.md`), y `POST /auth/verify-email`
+   ya existe, pero ninguna pantalla de ningún frontend lee el token del
+   link que llega por correo. Construir el registro sin esto dejaría a
+   cualquiera que se registre atascado sin forma de activar su cuenta —
+   se aborda en el mismo ADR, son la misma pieza de producto.
+
+**Decisión.**
+
+### 1. Campos adicionales del formulario de institución — reutiliza `GeofenceMap`, con defaults sin editar en este paso
+
+`apps/portal/src/screens/InstitutionProfile.tsx` ya resuelve
+dirección+ubicación con `GeofenceMap` (`@casillego/ui`, ADR-048) — se
+reutiliza tal cual para el paso "Escuela" del registro, **sin exponer
+edición de los radios de geocerca/activación en este formulario**: se
+envían los defaults de columna (`geofence_radius_meters` 100,
+`activation_radius_meters` 3000 — confirmado en
+`packages/shared/src/entities/institution.entity.ts`), editables después
+desde el perfil de institución una vez aprobada, no antes de que exista
+la cuenta. Un selector simple de `type` (`school`/`extracurricular`,
+radio o segmented control) se agrega al formulario — el kit no lo dibuja
+porque su chooser de "Escuela o institución" no distingue el
+subtipo, pero el DTO lo exige.
+
+`timezone` se auto-detecta con
+`Intl.DateTimeFormat().resolvedOptions().timeZone` del navegador — sin
+pedírselo a quien se registra, editable después igual que los radios si
+hace falta corregirlo.
+
+### 2. Estructura de pantallas — calco del `Access()` del kit, dentro de `Login.tsx`
+
+Mismo criterio que el selector de rol de ADR-077: estado local dentro del
+componente de login existente (`step: 'login' | 'choose' | 'escuela' | 'tutor'`
+en `apps/portal`; `apps/parent` solo necesita `'login' | 'tutor'`, no
+tiene noción de institución), no rutas nuevas — evita un estado
+intermedio alcanzable por URL fuera de contexto, mismo razonamiento que
+ya se usó para el selector híbrido.
+
+### 3. Verificación de correo — pantalla nueva, una por app
+
+Ruta nueva en cada app (`/verify-email` o similar, decide el nombre
+exacto consistente con el resto de `paths.ts`) que lee `?token=` de la
+URL, llama `POST /auth/verify-email`, muestra éxito (con enlace a
+login) o error (token expirado/inválido, con acceso a
+`POST /auth/resend-verification` — ya tiene su propio throttling del
+lado del servidor, 3 por hora, cooldown de 60s entre solicitudes,
+`specs/features/007`, no se reinventa nada de eso en el cliente).
+
+### 4. Tras un registro exitoso: mensaje, no auto-login
+
+Ninguna respuesta de registro trae tokens — el flujo correcto es mostrar
+un mensaje claro ("Revisa tu correo para activar tu cuenta") y volver a
+`step: 'login'`, no intentar iniciar sesión automáticamente.
+
+### 5. Secuencia de implementación — tutor primero, institución después
+
+El registro de tutor es sustancialmente más simple (sin mapa, sin
+selector de tipo) — se construye primero en `apps/parent` junto con la
+pantalla de verificación de esa app, sirviendo de prueba del patrón antes
+de abordar el formulario de institución en `apps/portal`, que sí necesita
+`GeofenceMap` y tiene más campos.
+
+**Consecuencias.** Cierra un hueco que estuvo documentado como diferido
+desde ADR-043 sin que nadie volviera a él — la plataforma queda con alta
+de cuenta funcional en los dos frentes, no solo login para cuentas ya
+creadas por otro medio.
+
+## Referencias
+
+- ADR-019 (autogeneración de `join_code`, token de verificación firmado
+  sin persistencia).
+- ADR-028 punto 2 (reutilización de `users` existente si la contraseña
+  coincide — caso de error a manejar en el formulario de institución si
+  el correo del admin ya existe).
+- ADR-043 punto 4 (la decisión original que dejó esto deshabilitado a
+  propósito, citada aquí para no repetir la misma reflexión).
+- ADR-048 (`GeofenceMap`, reutilizado sin cambios).
+- ADR-077 (patrón de estado-dentro-del-componente-de-login que este ADR
+  replica para el selector de tipo de cuenta).
+- `specs/features/001-registro-institucion.md`,
+  `002-registro-tutor.md`, `007-verificacion-correo.md`.
+- `design/casillego-design-system/ui_kits/acceso/index.html` (fuente
+  visual completa, leída íntegra).

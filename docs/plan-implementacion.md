@@ -490,6 +490,35 @@ filtro por punto de entrega) era funcionalmente correcto y se conserva —
 lo que se rehace es la capa visual completa más el canal nuevo de Carril.
 Ver ADR-071 para la especificación completa.
 
+## Registro y verificación de correo (ADR-080) — hueco encontrado tarde, no una fase original
+
+Al auditar la integración de los 5 kits del design system contra las 3
+apps se confirmó que `ui_kits/acceso` nunca se terminó de construir —
+ADR-043 punto 4 lo dejó deshabilitado a propósito desde la plomería
+inicial ("hasta que se construyan [las pantallas]"), y nadie volvió a
+esto. Los endpoints (`POST /auth/register/institution`,
+`POST /auth/register/guardian`, `POST /auth/verify-email`,
+`POST /auth/resend-verification`) ya existen y funcionan — cero frontend
+los llama.
+
+- [ ] Registro de tutor (`apps/parent`) — más simple, se construye
+      primero (sin mapa, sin selector de tipo)
+- [ ] Verificación de correo en `apps/parent` (lee `?token=`, llama
+      `POST /auth/verify-email`, reenvío con el throttling ya existente
+      del servidor)
+- [ ] Registro de institución (`apps/portal`) — reutiliza `GeofenceMap`
+      (ADR-048) para dirección/ubicación, con los radios de geocerca/
+      activación en sus defaults de columna (100m/3000m), sin editar en
+      este paso; selector de `type` (`school`/`extracurricular`) nuevo,
+      no dibujado en el kit pero exigido por el DTO; `timezone`
+      auto-detectado del navegador
+- [ ] Verificación de correo en `apps/portal`
+- [ ] Mensaje post-registro ("revisa tu correo"), sin auto-login — ninguna
+      respuesta de registro trae tokens
+
+Sin backend nuevo en ningún punto — los 4 endpoints ya están completos y
+verificados, este trabajo es 100% frontend.
+
 ## Fase 10 — Pulido y defensa de tesis
 
 - [ ] **Extracción del patrón "canal WS con snapshot REST + deltas"
