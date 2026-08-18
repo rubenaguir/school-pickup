@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Button } from '@casillego/ui';
+import { BrandPanel, Button } from '@casillego/ui';
 import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import {
@@ -9,7 +9,6 @@ import {
 } from '../auth/auth-error-messages';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { BrandPanel } from './BrandPanel';
 import { LOGIN_PATH } from '../routes/paths';
 
 interface VerifyEmailResponse {

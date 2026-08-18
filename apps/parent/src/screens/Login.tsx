@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
-import { Button, Card } from '@casillego/ui';
+import { BrandPanel, Button } from '@casillego/ui';
 import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -37,7 +37,7 @@ export function Login() {
     <main
       style={{
         minHeight: '100vh',
-        background: 'var(--bg-app)',
+        background: 'var(--bg-canvas-alt)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -45,13 +45,40 @@ export function Login() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <Card style={{ width: 380, maxWidth: '100%' }} padding={32}>
-        {step === 'login' ? (
-          <LoginForm onCreateAccount={() => setStep('tutor')} />
-        ) : (
-          <TutorRegisterForm onBack={() => setStep('login')} />
-        )}
-      </Card>
+      <div
+        style={{
+          width: 1180,
+          maxWidth: '100%',
+          minHeight: 740,
+          display: 'flex',
+          borderRadius: 20,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-frame)',
+        }}
+      >
+        <BrandPanel />
+
+        <div
+          style={{
+            flex: 1,
+            background: 'var(--surface)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '48px 56px',
+            minWidth: 0,
+            overflow: 'auto',
+          }}
+        >
+          <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
+            {step === 'login' ? (
+              <LoginForm onCreateAccount={() => setStep('tutor')} />
+            ) : (
+              <TutorRegisterForm onBack={() => setStep('login')} />
+            )}
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

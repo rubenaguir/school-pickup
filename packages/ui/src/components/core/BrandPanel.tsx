@@ -1,4 +1,4 @@
-import pinMark from '../assets/pin-mark-inverse.svg';
+import pinMark from '../../assets/pin-mark-inverse.svg';
 
 const BULLETS = [
   'El tutor avisa que va en camino',

@@ -5831,3 +5831,50 @@ creadas por otro medio.
   `002-registro-tutor.md`, `007-verificacion-correo.md`.
 - `design/casillego-design-system/ui_kits/acceso/index.html` (fuente
   visual completa, leída íntegra).
+
+## ADR-081 — `BrandPanel` compartido; `apps/parent` se alinea al mismo tratamiento de `ui_kits/acceso` que ya tiene `apps/portal`
+
+**Contexto.** Señalado durante el trabajo de ADR-080: `apps/portal/src/screens/Login.tsx`
+ya coincide con `ui_kits/acceso` (panel de marca de 470px + formulario a
+1180px de ancho total) porque se construyó así desde el principio —
+`apps/parent/src/screens/Login.tsx` nunca lo tuvo, es una tarjeta
+centrada simple. `VerifyEmail.tsx` de `apps/parent` (ADR-080) se construyó
+sobre ese mismo estilo simple, heredando el mismo desvío. El kit es
+explícito: *"Compartido por los 3 roles"* — un solo `BrandPanel()`, sin
+variación de copy por rol.
+
+**Decisión.**
+
+1. **`BrandPanel` se promueve de `apps/portal` a `packages/ui`** — a
+   diferencia de casi todo lo demás duplicado esta sesión (5 canales WS,
+   `asApiError` ×17, etc.), aquí no hay divergencia real que justifique
+   mantenerlo separado: es el mismo componente, el mismo copy, para los 2
+   consumidores. `packages/ui/src/assets/pin-mark-inverse.svg` ya existe
+   sin ningún consumidor — confirma que se anticipó este movimiento en
+   algún punto anterior de la sesión, sin haberse completado.
+   `apps/portal/src/screens/Login.tsx` pasa a importar desde
+   `@casillego/ui` en vez de su copia local — cambio mecánico, sin
+   modificar su comportamiento.
+2. **`apps/parent/src/screens/Login.tsx` se reconstruye al layout de
+   1180px + `BrandPanel`** — mismo criterio estructural que
+   `apps/portal`'s Login.tsx ya prueba en producción (3 estados ahí,
+   2 aquí: `'login'`/`'tutor'`, sin `'choose'`/`'escuela'`, que son
+   exclusivos de institución). Se usa como referencia directa, no se
+   reinventa el patrón.
+3. **`apps/parent/src/screens/VerifyEmail.tsx` recibe el mismo
+   tratamiento** — mismo panel, mismo ancho.
+4. **Sin cambios de comportamiento** — es una alineación puramente
+   visual. Ningún endpoint, ninguna validación, ningún estado cambia.
+
+**Consecuencias.** Cierra el último desvío visual conocido del kit
+`acceso`. Con esto, los 5 kits del design system quedan correctamente
+integrados en las 3 apps, confirmado exhaustivamente a lo largo de esta
+sesión.
+
+## Referencias
+
+- ADR-043 punto 4 (primera vez que se documentó el estado de
+  `ui_kits/acceso` en el proyecto).
+- ADR-080 (registro/verificación — el trabajo que expuso este desvío).
+- `apps/portal/src/screens/BrandPanel.tsx` (el componente a promover,
+  ya fiel al kit desde su construcción original).

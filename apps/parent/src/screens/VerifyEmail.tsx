@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Button, Card } from '@casillego/ui';
+import { BrandPanel, Button } from '@casillego/ui';
 import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import {
@@ -78,7 +78,7 @@ export function VerifyEmail() {
     <main
       style={{
         minHeight: '100vh',
-        background: 'var(--bg-app)',
+        background: 'var(--bg-canvas-alt)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -86,37 +86,66 @@ export function VerifyEmail() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <Card style={{ width: 380, maxWidth: '100%' }} padding={32}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>CasiLlego</div>
-        <h1
+      <div
+        style={{
+          width: 1180,
+          maxWidth: '100%',
+          minHeight: 740,
+          display: 'flex',
+          borderRadius: 20,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-frame)',
+        }}
+      >
+        <BrandPanel />
+
+        <div
           style={{
-            margin: '6px 0 20px',
-            fontSize: 26,
-            fontWeight: 800,
-            color: 'var(--ink-900)',
-            letterSpacing: '-.02em',
+            flex: 1,
+            background: 'var(--surface)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '48px 56px',
+            minWidth: 0,
+            overflow: 'auto',
           }}
         >
-          Verificar correo
-        </h1>
+          <div style={{ maxWidth: 380, width: '100%', margin: '0 auto' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-200)' }}>CasiLlego</div>
+            <h1
+              style={{
+                margin: '6px 0 20px',
+                fontSize: 26,
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
+            >
+              Verificar correo
+            </h1>
 
-        {state === 'checking' && (
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-400)' }}>Verificando tu cuenta…</p>
-        )}
+            {state === 'checking' && (
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-400)' }}>
+                Verificando tu cuenta…
+              </p>
+            )}
 
-        {state === 'success' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-400)' }}>
-              Tu cuenta quedó activada. Ya puedes entrar.
-            </p>
-            <Button variant="primary" size="lg" full onClick={() => void navigate(LOGIN_PATH)}>
-              Entrar
-            </Button>
+            {state === 'success' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-400)' }}>
+                  Tu cuenta quedó activada. Ya puedes entrar.
+                </p>
+                <Button variant="primary" size="lg" full onClick={() => void navigate(LOGIN_PATH)}>
+                  Entrar
+                </Button>
+              </div>
+            )}
+
+            {state === 'error' && error && <VerifyEmailError code={error.code} />}
           </div>
-        )}
-
-        {state === 'error' && error && <VerifyEmailError code={error.code} />}
-      </Card>
+        </div>
+      </div>
     </main>
   );
 }

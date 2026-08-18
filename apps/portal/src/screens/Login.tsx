@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useNavigate } from 'react-router';
-import { Button, EmptyState, GeofenceMap, SegmentedTabs } from '@casillego/ui';
+import { BrandPanel, Button, EmptyState, GeofenceMap, SegmentedTabs } from '@casillego/ui';
 import type { LatLng } from '@casillego/ui';
 import {
   ApiError,
@@ -16,7 +16,6 @@ import { institutionRegistrationValidationError } from '../auth/register-institu
 import { resolveLoginOutcome } from '../auth/login-outcome';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { BrandPanel } from './BrandPanel';
 import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
 
 type Step = 'login' | 'choose' | 'escuela';
