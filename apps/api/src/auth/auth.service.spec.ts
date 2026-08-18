@@ -9,7 +9,7 @@ function buildAuthService(overrides?: {
   usersRepository?: Partial<Record<'findOneBy' | 'save', unknown>>;
   managerUsersRepo?: Partial<Record<'findOneBy' | 'create' | 'save', unknown>>;
   institutionsRepo?: Partial<Record<'exists' | 'create' | 'save', unknown>>;
-  membersRepo?: Partial<Record<'create' | 'save', unknown>>;
+  membersRepo?: Partial<Record<'create' | 'save' | 'exists', unknown>>;
 }) {
   const usersRepository = {
     findOneBy: vi.fn().mockResolvedValue(null),
@@ -46,6 +46,7 @@ function buildAuthService(overrides?: {
     save: vi.fn((entity: Partial<InstitutionMember>) =>
       Promise.resolve({ id: 'member-1', createdAt: new Date(), ...entity }),
     ),
+    exists: vi.fn().mockResolvedValue(false),
     ...overrides?.membersRepo,
   };
 
@@ -59,6 +60,10 @@ function buildAuthService(overrides?: {
           throw new Error('Unexpected entity in test manager.getRepository');
         },
       }),
+    getRepository: (entity: unknown) => {
+      if (entity === InstitutionMember) return membersRepo;
+      throw new Error('Unexpected entity in test dataSource.getRepository');
+    },
   };
 
   const emailProvider = { send: vi.fn().mockResolvedValue(undefined) };
@@ -123,7 +128,11 @@ describe('AuthService.registerInstitution', () => {
     expect(result.user).toMatchObject({ email: 'admin@example.com', status: 'invited' });
     expect(membersRepo.save).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin' }));
     expect(emailProvider.send).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'email_verification', to: 'admin@example.com' }),
+      expect.objectContaining({
+        kind: 'email_verification',
+        to: 'admin@example.com',
+        audience: 'portal',
+      }),
     );
   });
 
@@ -200,7 +209,11 @@ describe('AuthService.registerGuardian', () => {
 
     expect(result.user).toMatchObject({ email: 'tutor@example.com', status: 'invited' });
     expect(emailProvider.send).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'email_verification', to: 'tutor@example.com' }),
+      expect.objectContaining({
+        kind: 'email_verification',
+        to: 'tutor@example.com',
+        audience: 'parent',
+      }),
     );
   });
 
@@ -422,5 +435,80 @@ describe('AuthService.verifyEmail', () => {
       status: 410,
       response: { code: 'VERIFICATION_TOKEN_EXPIRED' },
     });
+  });
+});
+
+describe('AuthService.resendVerification', () => {
+  it('sends a verification email with audience "portal" when the user is an institution member', async () => {
+    const { service, emailProvider, membersRepo } = buildAuthService({
+      usersRepository: {
+        findOneBy: vi
+          .fn()
+          .mockResolvedValue({ id: 'u1', email: 'admin@example.com', status: 'invited' }),
+      },
+      membersRepo: { exists: vi.fn().mockResolvedValue(true) },
+    });
+
+    await service.resendVerification({ email: 'admin@example.com' });
+
+    expect(membersRepo.exists).toHaveBeenCalledWith({ where: { user: { id: 'u1' } } });
+    expect(emailProvider.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'email_verification',
+        to: 'admin@example.com',
+        audience: 'portal',
+      }),
+    );
+  });
+
+  it('sends a verification email with audience "parent" when the user is not an institution member', async () => {
+    const { service, emailProvider, membersRepo } = buildAuthService({
+      usersRepository: {
+        findOneBy: vi
+          .fn()
+          .mockResolvedValue({ id: 'u1', email: 'tutor@example.com', status: 'invited' }),
+      },
+      membersRepo: { exists: vi.fn().mockResolvedValue(false) },
+    });
+
+    await service.resendVerification({ email: 'tutor@example.com' });
+
+    expect(membersRepo.exists).toHaveBeenCalledWith({ where: { user: { id: 'u1' } } });
+    expect(emailProvider.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'email_verification',
+        to: 'tutor@example.com',
+        audience: 'parent',
+      }),
+    );
+  });
+
+  it('sends the same generic response and no email when the user does not exist', async () => {
+    const { service, emailProvider, membersRepo } = buildAuthService({
+      usersRepository: { findOneBy: vi.fn().mockResolvedValue(null) },
+    });
+
+    const result = await service.resendVerification({ email: 'nope@example.com' });
+
+    expect(result).toEqual({
+      message: 'If this account requires verification, a new email has been sent.',
+    });
+    expect(membersRepo.exists).not.toHaveBeenCalled();
+    expect(emailProvider.send).not.toHaveBeenCalled();
+  });
+
+  it('does not send when the user is already active (anti-enumeration, no audience lookup)', async () => {
+    const { service, emailProvider, membersRepo } = buildAuthService({
+      usersRepository: {
+        findOneBy: vi
+          .fn()
+          .mockResolvedValue({ id: 'u1', email: 'admin@example.com', status: 'active' }),
+      },
+    });
+
+    await service.resendVerification({ email: 'admin@example.com' });
+
+    expect(membersRepo.exists).not.toHaveBeenCalled();
+    expect(emailProvider.send).not.toHaveBeenCalled();
   });
 });

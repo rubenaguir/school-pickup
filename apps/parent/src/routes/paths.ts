@@ -5,7 +5,7 @@ export const LOGIN_PATH = '/login';
  * verificación con `?token=...`. Fuera de `ProtectedRoute`: quien llega aquí
  * todavía no tiene sesión.
  */
-export const VERIFY_EMAIL_PATH = '/verify-email';
+export const VERIFY_EMAIL_PATH = '/verificar-correo';
 
 /**
  * "Inicio / Mis hijos" (docs/design-brief.md, "App del padre"): list of the

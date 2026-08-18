@@ -148,6 +148,7 @@ export class AuthService {
           kind: 'email_verification',
           to: user.email,
           token: this.activationTokenService.issue({ sub: user.id, kind: 'email_verification' }),
+          audience: 'portal',
         });
       } catch (error) {
         this.logger.error('Failed to send verification email', error as Error);
@@ -194,6 +195,7 @@ export class AuthService {
         kind: 'email_verification',
         to: user.email,
         token: this.activationTokenService.issue({ sub: user.id, kind: 'email_verification' }),
+        audience: 'parent',
       });
     } catch (error) {
       this.logger.error('Failed to send verification email', error as Error);
@@ -313,10 +315,14 @@ export class AuthService {
     // already active — same anti-enumeration criterion as login.
     if (user && user.status === 'invited') {
       try {
+        const isInstitutionMember = await this.dataSource
+          .getRepository(InstitutionMember)
+          .exists({ where: { user: { id: user.id } } });
         await this.emailProvider.send({
           kind: 'email_verification',
           to: user.email,
           token: this.activationTokenService.issue({ sub: user.id, kind: 'email_verification' }),
+          audience: isInstitutionMember ? 'portal' : 'parent',
         });
       } catch (error) {
         this.logger.error('Failed to send verification email', error as Error);

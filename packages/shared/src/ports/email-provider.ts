@@ -1,5 +1,5 @@
 export type EmailMessage =
-  | { kind: 'email_verification'; to: string; token: string }
+  | { kind: 'email_verification'; to: string; token: string; audience: 'portal' | 'parent' }
   | { kind: 'password_reset'; to: string; token: string }
   | { kind: 'institution_member_invitation'; to: string; token: string; institutionName: string }
   | {

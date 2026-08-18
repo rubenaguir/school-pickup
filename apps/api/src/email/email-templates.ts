@@ -22,7 +22,9 @@ function buildLink(baseUrl: string, path: string, token: string): string {
 export function buildEmailTemplate(message: EmailMessage): RenderedEmail {
   switch (message.kind) {
     case 'email_verification': {
-      const link = buildLink(process.env.PARENT_APP_URL ?? '', '/verificar-correo', message.token);
+      const baseUrl =
+        message.audience === 'portal' ? process.env.PORTAL_APP_URL : process.env.PARENT_APP_URL;
+      const link = buildLink(baseUrl ?? '', '/verificar-correo', message.token);
       return {
         subject: 'Confirma tu correo para activar tu cuenta en CasiLlego',
         html: wrapHtml(`

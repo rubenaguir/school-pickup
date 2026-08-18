@@ -13,7 +13,7 @@ vi.mock('resend', () => ({
 const { ResendEmailProvider } = await import('./resend-email.provider');
 
 const ALL_MESSAGES: EmailMessage[] = [
-  { kind: 'email_verification', to: 'tutor@example.com', token: 'token-123' },
+  { kind: 'email_verification', to: 'tutor@example.com', token: 'token-123', audience: 'parent' },
   { kind: 'password_reset', to: 'tutor@example.com', token: 'token-123' },
   {
     kind: 'institution_member_invitation',
@@ -59,6 +59,36 @@ describe('buildEmailTemplate', () => {
       expect(html).toContain(message.inviterName);
     }
   });
+
+  // ADR-082 Hallazgo 4: the verification link must route back to the app the
+  // recipient actually registered from, not always apps/parent.
+  it('links to PORTAL_APP_URL when audience is portal and PARENT_APP_URL when audience is parent', () => {
+    const originalPortalUrl = process.env.PORTAL_APP_URL;
+    const originalParentUrl = process.env.PARENT_APP_URL;
+    process.env.PORTAL_APP_URL = 'https://portal.example.com';
+    process.env.PARENT_APP_URL = 'https://parent.example.com';
+
+    try {
+      const portalEmail = buildEmailTemplate({
+        kind: 'email_verification',
+        to: 'admin@example.com',
+        token: 'token-123',
+        audience: 'portal',
+      });
+      const parentEmail = buildEmailTemplate({
+        kind: 'email_verification',
+        to: 'tutor@example.com',
+        token: 'token-123',
+        audience: 'parent',
+      });
+
+      expect(portalEmail.html).toContain('https://portal.example.com/verificar-correo');
+      expect(parentEmail.html).toContain('https://parent.example.com/verificar-correo');
+    } finally {
+      process.env.PORTAL_APP_URL = originalPortalUrl;
+      process.env.PARENT_APP_URL = originalParentUrl;
+    }
+  });
 });
 
 describe('ResendEmailProvider', () => {
@@ -74,6 +104,7 @@ describe('ResendEmailProvider', () => {
       kind: 'email_verification',
       to: 'tutor@example.com',
       token: 'token-123',
+      audience: 'parent',
     });
 
     expect(sendMock).toHaveBeenCalledWith(
@@ -92,7 +123,12 @@ describe('ResendEmailProvider', () => {
     const provider = new ResendEmailProvider();
 
     await expect(
-      provider.send({ kind: 'email_verification', to: 'tutor@example.com', token: 'token-123' }),
+      provider.send({
+        kind: 'email_verification',
+        to: 'tutor@example.com',
+        token: 'token-123',
+        audience: 'parent',
+      }),
     ).rejects.toThrow();
   });
 
@@ -101,7 +137,12 @@ describe('ResendEmailProvider', () => {
     const provider = new ResendEmailProvider();
 
     await expect(
-      provider.send({ kind: 'email_verification', to: 'tutor@example.com', token: 'token-123' }),
+      provider.send({
+        kind: 'email_verification',
+        to: 'tutor@example.com',
+        token: 'token-123',
+        audience: 'parent',
+      }),
     ).rejects.toThrow('network error');
   });
 });

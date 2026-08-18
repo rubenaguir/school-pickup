@@ -5,7 +5,7 @@ export const LOGIN_PATH = '/login';
  * verificación con `?token=...`. Fuera de `AuthenticatedLayout`: quien llega
  * aquí todavía no tiene sesión — mismo criterio que `apps/parent`.
  */
-export const VERIFY_EMAIL_PATH = '/verify-email';
+export const VERIFY_EMAIL_PATH = '/verificar-correo';
 
 /**
  * Dashboard of the Institución role (ADR-072) — real-time KPI cards plus the
