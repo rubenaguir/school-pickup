@@ -12,8 +12,8 @@ import {
   TUTOR_PORTAL_STUDENTS_PATH,
 } from './routes/paths';
 import { AssociateAndGuardians } from './portal-web/AssociateAndGuardians';
+import { PortalProfile } from './portal-web/PortalProfile';
 import { PortalStudents } from './portal-web/PortalStudents';
-import { TutorPlaceholder } from './portal-web/TutorPlaceholder';
 import { TutorShell } from './portal-web/TutorShell';
 import { Home } from './screens/Home';
 import { Login } from './screens/Login';
@@ -34,12 +34,7 @@ export function App() {
               <Route path={TUTOR_PORTAL_STUDENTS_PATH} element={<PortalStudents />} />
               <Route path={TUTOR_PORTAL_ASSOCIATE_PATH} element={<AssociateAndGuardians />} />
               <Route path={TUTOR_PORTAL_GUARDIANS_PATH} element={<AssociateAndGuardians />} />
-              <Route
-                path={TUTOR_PORTAL_PROFILE_PATH}
-                element={
-                  <TutorPlaceholder description="Tu cuenta, vehículos y preferencias de aviso." />
-                }
-              />
+              <Route path={TUTOR_PORTAL_PROFILE_PATH} element={<PortalProfile />} />
             </Route>
           </Route>
         </Routes>

@@ -51,7 +51,7 @@ export const TUTOR_PORTAL_ASSOCIATE_PATH = '/portal/associate';
 export const TUTOR_PORTAL_GUARDIANS_PATH = '/portal/guardians';
 
 /**
- * "Perfil" del Portal web. Placeholder route only — misma nota que
- * TUTOR_PORTAL_ASSOCIATE_PATH.
+ * "Perfil" del Portal web (docs/decisiones.md ADR-078 punto 3): cuenta,
+ * cambio de contraseña, vehículos y notificaciones.
  */
 export const TUTOR_PORTAL_PROFILE_PATH = '/portal/profile';

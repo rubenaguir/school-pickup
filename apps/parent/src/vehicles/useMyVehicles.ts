@@ -12,18 +12,52 @@ export interface MyVehicle {
 
 export type MyVehiclesStatus = 'loading' | 'ready' | 'empty' | 'error';
 
+/** Body of POST /vehicles. */
+export interface CreateVehicleDraft {
+  description: string;
+  plate: string;
+  isPrimary?: boolean;
+}
+
+/** Body of PATCH /vehicles/:id — same 3 fields, all optional. */
+export type UpdateVehicleDraft = Partial<CreateVehicleDraft>;
+
 export interface MyVehiclesValue {
   status: MyVehiclesStatus;
   vehicles: MyVehicle[];
   error: ApiError | null;
   retry: () => void;
+
+  creating: boolean;
+  createError: ApiError | null;
+  create: (draft: CreateVehicleDraft, onSuccess?: () => void) => void;
+
+  /** Id of the row currently being updated/removed, if any — one at a time. */
+  busyId: string | null;
+  /** Last update/remove failure, scoped to the row it happened on. */
+  rowError: { id: string; error: ApiError } | null;
+  update: (id: string, changes: UpdateVehicleDraft, onSuccess?: () => void) => void;
+  /** `newPrimaryVehicleId` is required by the API only when removing the primary vehicle while others exist. */
+  remove: (id: string, newPrimaryVehicleId?: string, onSuccess?: () => void) => void;
 }
 
 interface MyVehiclesResponse {
   vehicles: MyVehicle[];
 }
 
-/** Loads the authenticated tutor's vehicle catalog. Same status/retry shape as `useMyStudents`. */
+function asApiError(caught: unknown): ApiError {
+  return caught instanceof ApiError
+    ? caught
+    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
+}
+
+/**
+ * Loads the authenticated tutor's vehicle catalog and owns its mutations
+ * (feature 014 + ADR-078 punto 3 "Perfil"). Create/update/remove all settle
+ * through `retry()` on success rather than patching the local array —
+ * simpler than re-deriving which row lost `isPrimary` on the client, and the
+ * list is small enough that a refetch is cheap.
+ */
 export function useMyVehicles(): MyVehiclesValue {
   const [status, setStatus] = useState<MyVehiclesStatus>('loading');
   const [vehicles, setVehicles] = useState<MyVehicle[]>([]);
@@ -48,11 +82,7 @@ export function useMyVehicles(): MyVehiclesValue {
       })
       .catch((caught: unknown) => {
         if (cancelled) return;
-        setError(
-          caught instanceof ApiError
-            ? caught
-            : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 }),
-        );
+        setError(asApiError(caught));
         setStatus('error');
       });
 
@@ -61,5 +91,89 @@ export function useMyVehicles(): MyVehiclesValue {
     };
   }, [attempt]);
 
-  return { status, vehicles, error, retry };
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const create = useCallback(
+    (draft: CreateVehicleDraft, onSuccess?: () => void) => {
+      setCreating(true);
+      setCreateError(null);
+
+      apiClient
+        .post<MyVehicle>('/vehicles', draft)
+        .then(() => {
+          retry();
+          onSuccess?.();
+        })
+        .catch((caught: unknown) => {
+          setCreateError(asApiError(caught));
+        })
+        .finally(() => {
+          setCreating(false);
+        });
+    },
+    [retry],
+  );
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const update = useCallback(
+    (id: string, changes: UpdateVehicleDraft, onSuccess?: () => void) => {
+      setBusyId(id);
+      setRowError(null);
+
+      apiClient
+        .patch<MyVehicle>(`/vehicles/${encodeURIComponent(id)}`, changes)
+        .then(() => {
+          retry();
+          onSuccess?.();
+        })
+        .catch((caught: unknown) => {
+          setRowError({ id, error: asApiError(caught) });
+        })
+        .finally(() => {
+          setBusyId((current) => (current === id ? null : current));
+        });
+    },
+    [retry],
+  );
+
+  const remove = useCallback(
+    (id: string, newPrimaryVehicleId?: string, onSuccess?: () => void) => {
+      setBusyId(id);
+      setRowError(null);
+
+      apiClient
+        .del<void>(
+          `/vehicles/${encodeURIComponent(id)}`,
+          newPrimaryVehicleId ? { newPrimaryVehicleId } : undefined,
+        )
+        .then(() => {
+          retry();
+          onSuccess?.();
+        })
+        .catch((caught: unknown) => {
+          setRowError({ id, error: asApiError(caught) });
+        })
+        .finally(() => {
+          setBusyId((current) => (current === id ? null : current));
+        });
+    },
+    [retry],
+  );
+
+  return {
+    status,
+    vehicles,
+    error,
+    retry,
+    creating,
+    createError,
+    create,
+    busyId,
+    rowError,
+    update,
+    remove,
+  };
 }
