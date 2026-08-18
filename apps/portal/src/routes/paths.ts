@@ -8,6 +8,16 @@ export const LOGIN_PATH = '/login';
 export const VERIFY_EMAIL_PATH = '/verificar-correo';
 
 /**
+ * "Aceptar invitación" (ADR-082 punto 3), enlazada desde el correo de
+ * invitación (personal de institución) con `?token=...`. Fuera de
+ * `AuthenticatedLayout`: mismo criterio que `VERIFY_EMAIL_PATH` — quien llega
+ * aquí no tiene sesión todavía. Coincide con el link real que arma
+ * `apps/api/src/email/email-templates.ts` para las dos clases de invitación
+ * (personal de institución/tutor autorizado); solo cambia el dominio base.
+ */
+export const ACCEPT_INVITATION_PATH = '/aceptar-invitacion';
+
+/**
  * Dashboard of the Institución role (ADR-072) — real-time KPI cards plus the
  * live activity table, inside `InstitutionShell`. Where a signed-in
  * institution member lands now that a real landing screen exists.

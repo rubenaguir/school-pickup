@@ -8,6 +8,16 @@ export const LOGIN_PATH = '/login';
 export const VERIFY_EMAIL_PATH = '/verificar-correo';
 
 /**
+ * "Aceptar invitación" (ADR-082 punto 3), enlazada desde el correo de
+ * invitación (tutor autorizado) con `?token=...`. Fuera de `ProtectedRoute`:
+ * mismo criterio que `VERIFY_EMAIL_PATH` — quien llega aquí no tiene sesión
+ * todavía. Coincide con el link real que arma
+ * `apps/api/src/email/email-templates.ts` para las dos clases de invitación
+ * (personal de institución/tutor autorizado); solo cambia el dominio base.
+ */
+export const ACCEPT_INVITATION_PATH = '/aceptar-invitacion';
+
+/**
  * "Inicio / Mis hijos" (docs/design-brief.md, "App del padre"): list of the
  * tutor's students with the dominant "¡Ya voy!" action per student. Where a
  * signed-in user lands.

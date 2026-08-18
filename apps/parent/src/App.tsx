@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './auth/AuthContext';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import {
+  ACCEPT_INVITATION_PATH,
   HOME_PATH,
   LOGIN_PATH,
   SELECT_INSTITUTION_PATH,
@@ -16,6 +17,7 @@ import { AssociateAndGuardians } from './portal-web/AssociateAndGuardians';
 import { PortalProfile } from './portal-web/PortalProfile';
 import { PortalStudents } from './portal-web/PortalStudents';
 import { TutorShell } from './portal-web/TutorShell';
+import { AcceptInvitation } from './screens/AcceptInvitation';
 import { Home } from './screens/Home';
 import { Login } from './screens/Login';
 import { SelectInstitution } from './screens/SelectInstitution';
@@ -29,6 +31,7 @@ export function App() {
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
+          <Route path={ACCEPT_INVITATION_PATH} element={<AcceptInvitation />} />
           <Route element={<ProtectedRoute />}>
             <Route path={HOME_PATH} element={<Home />} />
             <Route path={SELECT_INSTITUTION_PATH} element={<SelectInstitution />} />

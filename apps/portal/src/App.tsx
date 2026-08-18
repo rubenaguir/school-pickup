@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { AuthenticatedLayout, InstitutionGate } from './routes/AuthenticatedLayout';
 import { SuperAdminRoute } from './routes/SuperAdminRoute';
 import {
+  ACCEPT_INVITATION_PATH,
   ADMIN_INSTITUTIONS_PATH,
   ADMIN_METRICS_PATH,
   DASHBOARD_PATH,
@@ -18,6 +19,7 @@ import {
   REPORTS_PATH,
   VERIFY_EMAIL_PATH,
 } from './routes/paths';
+import { AcceptInvitation } from './screens/AcceptInvitation';
 import { Dashboard } from './screens/Dashboard';
 import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
@@ -41,6 +43,7 @@ export function App() {
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
+          <Route path={ACCEPT_INVITATION_PATH} element={<AcceptInvitation />} />
           <Route element={<AuthenticatedLayout />}>
             {/* InstitutionGate wraps only the institution routes; PROFILE_PATH
                 stays outside it since Profile.tsx applies to any signed-in
