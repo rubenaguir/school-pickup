@@ -17,7 +17,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource, type QueryRunner, type Repository } from 'typeorm';
 import { PickupsService } from './pickups.service';
-import { DeliveryPoint, Institution, type Enrollment } from '@casillego/shared/entities';
+import {
+  DeliveryPoint,
+  DeliveryPointGroup,
+  Institution,
+  InstitutionGroup,
+  type Enrollment,
+} from '@casillego/shared/entities';
 import * as entities from '@casillego/shared/entities';
 
 function buildDataSource(): DataSource {
@@ -46,6 +52,8 @@ describe.skipIf(!databaseReachable)('resolveDeliveryPointId (Postgres real, ADR-
   let qr: QueryRunner;
   let deliveryPointsRepo: Repository<DeliveryPoint>;
   let institutionsRepo: Repository<Institution>;
+  let institutionGroupsRepo: Repository<InstitutionGroup>;
+  let deliveryPointGroupsRepo: Repository<DeliveryPointGroup>;
   let service: PickupsService;
 
   const suffix = Date.now().toString(36);
@@ -89,6 +97,8 @@ describe.skipIf(!databaseReachable)('resolveDeliveryPointId (Postgres real, ADR-
 
     deliveryPointsRepo = qr.manager.getRepository(DeliveryPoint);
     institutionsRepo = qr.manager.getRepository(Institution);
+    institutionGroupsRepo = qr.manager.getRepository(InstitutionGroup);
+    deliveryPointGroupsRepo = qr.manager.getRepository(DeliveryPointGroup);
 
     // Solo deliveryPointsRepository importa a resolveDeliveryPointId — el
     // resto de las dependencias del constructor nunca se invoca en este
@@ -120,48 +130,46 @@ describe.skipIf(!databaseReachable)('resolveDeliveryPointId (Postgres real, ADR-
 
   it('resuelve al punto con match exacto de grupo', async () => {
     const institution = await newInstitution();
+    const group3b = await institutionGroupsRepo.save(
+      institutionGroupsRepo.create({ institution, name: '3B' }),
+    );
     const grouped = await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Puerta 3B',
-        assignedGroups: ['3B'],
-        status: 'active',
-      }),
+      deliveryPointsRepo.create({ institution, name: 'Puerta 3B', status: 'active' }),
+    );
+    await deliveryPointGroupsRepo.save(
+      deliveryPointGroupsRepo.create({ deliveryPoint: grouped, group: group3b }),
     );
     await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Atrapa-todo',
-        assignedGroups: null,
-        status: 'active',
-      }),
+      deliveryPointsRepo.create({ institution, name: 'Atrapa-todo', status: 'active' }),
     );
 
-    const result = await resolve({ institutionId: institution.id, gradeOrGroup: '3B' });
+    const result = await resolve({ institutionId: institution.id, groupId: group3b.id });
 
     expect(result).toBe(grouped.id);
   });
 
   it('cae al atrapa-todo cuando el grupo es huérfano (ningún punto activo lo cubre)', async () => {
     const institution = await newInstitution();
-    await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Puerta 3B',
-        assignedGroups: ['3B'],
-        status: 'active',
-      }),
+    const group3b = await institutionGroupsRepo.save(
+      institutionGroupsRepo.create({ institution, name: '3B' }),
+    );
+    // Grupo real del catálogo, pero sin ningún delivery_point_groups que lo
+    // reclame — el caso que motivó ADR-084: una reconfiguración dejó al
+    // grupo huérfano.
+    const orphanGroup = await institutionGroupsRepo.save(
+      institutionGroupsRepo.create({ institution, name: 'grupo-huérfano' }),
+    );
+    const puerta3b = await deliveryPointsRepo.save(
+      deliveryPointsRepo.create({ institution, name: 'Puerta 3B', status: 'active' }),
+    );
+    await deliveryPointGroupsRepo.save(
+      deliveryPointGroupsRepo.create({ deliveryPoint: puerta3b, group: group3b }),
     );
     const catchAll = await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Atrapa-todo',
-        assignedGroups: [],
-        status: 'active',
-      }),
+      deliveryPointsRepo.create({ institution, name: 'Atrapa-todo', status: 'active' }),
     );
 
-    const result = await resolve({ institutionId: institution.id, gradeOrGroup: 'grupo-huérfano' });
+    const result = await resolve({ institutionId: institution.id, groupId: orphanGroup.id });
 
     expect(result).toBe(catchAll.id);
   });
@@ -169,31 +177,27 @@ describe.skipIf(!databaseReachable)('resolveDeliveryPointId (Postgres real, ADR-
   it('cae al atrapa-todo cuando el alumno no tiene grupo', async () => {
     const institution = await newInstitution();
     const catchAll = await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Atrapa-todo',
-        assignedGroups: null,
-        status: 'active',
-      }),
+      deliveryPointsRepo.create({ institution, name: 'Atrapa-todo', status: 'active' }),
     );
 
-    const result = await resolve({ institutionId: institution.id, gradeOrGroup: null });
+    const result = await resolve({ institutionId: institution.id, groupId: null });
 
     expect(result).toBe(catchAll.id);
   });
 
   it('devuelve null cuando no hay atrapa-todo ni match (comportamiento previo a ADR-083 preservado)', async () => {
     const institution = await newInstitution();
-    await deliveryPointsRepo.save(
-      deliveryPointsRepo.create({
-        institution,
-        name: 'Solo con grupo',
-        assignedGroups: ['1A'],
-        status: 'active',
-      }),
+    const group1a = await institutionGroupsRepo.save(
+      institutionGroupsRepo.create({ institution, name: '1A' }),
+    );
+    const soloConGrupo = await deliveryPointsRepo.save(
+      deliveryPointsRepo.create({ institution, name: 'Solo con grupo', status: 'active' }),
+    );
+    await deliveryPointGroupsRepo.save(
+      deliveryPointGroupsRepo.create({ deliveryPoint: soloConGrupo, group: group1a }),
     );
 
-    const result = await resolve({ institutionId: institution.id, gradeOrGroup: null });
+    const result = await resolve({ institutionId: institution.id, groupId: null });
 
     expect(result).toBeNull();
   });

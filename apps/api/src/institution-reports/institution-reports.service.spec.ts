@@ -5,6 +5,7 @@ import type {
   DismissalWindow,
   Enrollment,
   Institution,
+  InstitutionGroup,
   PickupRequest,
 } from '@casillego/shared/entities';
 
@@ -46,7 +47,9 @@ function buildPickup(overrides: {
     id: `pickup-${Math.random()}`,
     startedAt: overrides.startedAt,
     completedAt: overrides.completedAt,
-    enrollment: { gradeOrGroup: overrides.gradeOrGroup ?? null } as Enrollment,
+    enrollment: {
+      group: overrides.gradeOrGroup ? ({ name: overrides.gradeOrGroup } as InstitutionGroup) : null,
+    } as Enrollment,
   } as PickupRequest;
 }
 
@@ -70,7 +73,7 @@ function buildService(options: BuildServiceOptions = {}) {
   const queryBuilder: Record<string, unknown> = {
     getMany: vi.fn().mockResolvedValue(options.pickups ?? []),
   };
-  for (const method of ['innerJoinAndSelect', 'where', 'andWhere']) {
+  for (const method of ['innerJoinAndSelect', 'leftJoinAndSelect', 'where', 'andWhere']) {
     queryBuilder[method] = vi.fn(() => queryBuilder);
   }
   const pickupRequestsRepo = {

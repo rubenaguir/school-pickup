@@ -28,6 +28,7 @@ function buildInstitution(overrides?: Partial<Institution>): Institution {
     enrollments: [],
     dismissalWindows: [],
     dismissalExceptions: [],
+    groups: [],
     ...overrides,
   };
 }

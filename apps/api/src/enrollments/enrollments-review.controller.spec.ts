@@ -17,6 +17,7 @@ import { InstitutionMembershipGuard } from '../auth/guards/institution-membershi
 import {
   Enrollment,
   Institution,
+  InstitutionGroup,
   InstitutionMember,
   StudentGuardian,
   AuditLog,
@@ -54,12 +55,18 @@ interface EnrollmentRecord {
   studentId: string;
   institutionId: string;
   status: EnrollmentStatus;
-  gradeOrGroup: string | null;
+  groupId: string | null;
   enrollmentCode: string;
   requestedByUserId: string;
   reviewedByUserId: string | null;
   requestedAt: Date;
   reviewedAt: Date | null;
+}
+
+interface InstitutionGroupRecord {
+  id: string;
+  institutionId: string;
+  name: string;
 }
 
 interface FakeHttpRequest {
@@ -102,6 +109,11 @@ function matchesEnrollment(entity: Record<string, unknown>, where: WhereClause):
 // so the fixtures below must be real UUID-shaped strings, not readable slugs.
 const INST_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const INST_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+// groupId is validated with @IsUUID() by ApproveEnrollmentDto/UpdateEnrollmentGroupDto
+// (ADR-084), same reason INST_A/INST_B above are UUID-shaped rather than readable slugs.
+const GROUP_A_3B = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const GROUP_A_2A = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const GROUP_B_X = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 describe('EnrollmentsController / EnrollmentsDetailController — staff review (HTTP)', () => {
   let app: INestApplication;
@@ -111,6 +123,7 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
   let students: Map<string, StudentRecord>;
   let users: Map<string, UserRecord>;
   let enrollments: Map<string, EnrollmentRecord>;
+  let institutionGroups: Map<string, InstitutionGroupRecord>;
   let auditCreateCalls: { action: string; entityType: string; actor: { id: string } }[];
 
   function toEnrollmentEntity(record: EnrollmentRecord): Enrollment {
@@ -123,7 +136,7 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       institutionId: record.institutionId,
       institution: { id: record.institutionId },
       status: record.status,
-      gradeOrGroup: record.gradeOrGroup,
+      group: record.groupId ? (institutionGroups.get(record.groupId) ?? null) : null,
       enrollmentCode: record.enrollmentCode,
       requestedBy: {
         id: record.requestedByUserId,
@@ -167,10 +180,10 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         const updated: EnrollmentRecord = {
           ...existing,
           status: (entity.status as EnrollmentStatus | undefined) ?? existing.status,
-          gradeOrGroup:
-            'gradeOrGroup' in entity
-              ? (entity.gradeOrGroup as string | null)
-              : existing.gradeOrGroup,
+          groupId:
+            'group' in entity
+              ? ((entity.group as { id: string } | null)?.id ?? null)
+              : existing.groupId,
           reviewedByUserId: entity.reviewedBy
             ? (entity.reviewedBy as { id: string }).id
             : existing.reviewedByUserId,
@@ -207,6 +220,16 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         return Promise.resolve(
           found ? { id: found.id, institutionId: found.institutionId, role: found.role } : null,
         );
+      }),
+    };
+
+    const institutionGroupsRepo = {
+      findOne: vi.fn(({ where }: { where: { id: string; institution: { id: string } } }) => {
+        const record = institutionGroups.get(where.id);
+        if (!record || record.institutionId !== where.institution.id) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve({ ...record });
       }),
     };
 
@@ -258,6 +281,7 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         { provide: getRepositoryToken(Institution), useValue: institutionsRepo },
         { provide: getRepositoryToken(StudentGuardian), useValue: studentGuardiansRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: institutionMembersRepo },
+        { provide: getRepositoryToken(InstitutionGroup), useValue: institutionGroupsRepo },
         { provide: DataSource, useValue: fakeDataSource },
         { provide: EMAIL_PROVIDER, useValue: fakeEmailProvider },
       ],
@@ -315,6 +339,11 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       ['tutor-2', { id: 'tutor-2', email: 'tutor2@example.com' }],
     ]);
     enrollments = new Map();
+    institutionGroups = new Map([
+      [GROUP_A_3B, { id: GROUP_A_3B, institutionId: INST_A, name: '3° B' }],
+      [GROUP_A_2A, { id: GROUP_A_2A, institutionId: INST_A, name: '2A' }],
+      [GROUP_B_X, { id: GROUP_B_X, institutionId: INST_B, name: 'X' }],
+    ]);
     auditCreateCalls = [];
   });
 
@@ -325,7 +354,7 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
     enrollments.set(id, {
       studentId: 'stu-1',
       status: 'pending',
-      gradeOrGroup: null,
+      groupId: null,
       enrollmentCode: `ENR-${id.slice(0, 8)}`,
       requestedByUserId: 'tutor-1',
       reviewedByUserId: null,
@@ -449,41 +478,68 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
     });
 
-    // ADR-083: gradeOrGroup is optional on approve.
-    it('assigns gradeOrGroup when the body includes it', async () => {
+    // ADR-083: groupId is optional on approve. Renamed from gradeOrGroup
+    // (ADR-084): the field is a catalog reference now, not free text.
+    it('assigns groupId when the body includes it', async () => {
       const id = seedEnrollment({ institutionId: INST_A });
 
       const res = await request(server)
         .patch(`/enrollments/${id}/approve`)
         .set('x-test-user-id', 'admin-a')
-        .send({ gradeOrGroup: '3° B' });
+        .send({ groupId: GROUP_A_3B });
 
       expect(res.status).toBe(200);
-      expect(enrollments.get(id)?.gradeOrGroup).toBe('3° B');
+      expect(res.body).toMatchObject({ id, status: 'approved' });
+      expect(enrollments.get(id)?.groupId).toBe(GROUP_A_3B);
+    });
+
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when groupId belongs to another institution', async () => {
+      const id = seedEnrollment({ institutionId: INST_A });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/approve`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ groupId: GROUP_B_X });
+
+      expect(res.status).toBe(422);
+      expect(res.body).toMatchObject({ code: 'GROUP_NOT_IN_INSTITUTION' });
     });
   });
 
-  describe('PATCH /enrollments/:id/grade', () => {
+  // Renamed from PATCH /enrollments/:id/grade (ADR-084).
+  describe('PATCH /enrollments/:id/group', () => {
     it('corrects the group of an approved enrollment when the caller is an admin', async () => {
-      const id = seedEnrollment({ institutionId: INST_A, status: 'approved', gradeOrGroup: '1A' });
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved', groupId: GROUP_A_2A });
 
       const res = await request(server)
-        .patch(`/enrollments/${id}/grade`)
+        .patch(`/enrollments/${id}/group`)
         .set('x-test-user-id', 'admin-a')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_3B });
 
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ id, status: 'approved', gradeOrGroup: '2A' });
-      expect(enrollments.get(id)?.gradeOrGroup).toBe('2A');
+      expect(res.body).toMatchObject({ id, status: 'approved', gradeOrGroup: '3° B' });
+      expect(enrollments.get(id)?.groupId).toBe(GROUP_A_3B);
+    });
+
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when groupId belongs to another institution', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/group`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ groupId: GROUP_B_X });
+
+      expect(res.status).toBe(422);
+      expect(res.body).toMatchObject({ code: 'GROUP_NOT_IN_INSTITUTION' });
     });
 
     it('does not write an audit_log entry', async () => {
       const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
 
       const res = await request(server)
-        .patch(`/enrollments/${id}/grade`)
+        .patch(`/enrollments/${id}/group`)
         .set('x-test-user-id', 'admin-a')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_2A });
 
       expect(res.status).toBe(200);
       expect(auditCreateCalls).toHaveLength(0);
@@ -493,9 +549,9 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       const id = seedEnrollment({ institutionId: INST_A, status: 'pending' });
 
       const res = await request(server)
-        .patch(`/enrollments/${id}/grade`)
+        .patch(`/enrollments/${id}/group`)
         .set('x-test-user-id', 'admin-a')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_2A });
 
       expect(res.status).toBe(409);
       expect(res.body).toMatchObject({ code: 'ENROLLMENT_NOT_APPROVED' });
@@ -505,9 +561,9 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
 
       const res = await request(server)
-        .patch(`/enrollments/${id}/grade`)
+        .patch(`/enrollments/${id}/group`)
         .set('x-test-user-id', 'teacher-a')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_2A });
 
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({ code: 'ADMIN_ROLE_REQUIRED' });
@@ -517,9 +573,9 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
 
       const res = await request(server)
-        .patch(`/enrollments/${id}/grade`)
+        .patch(`/enrollments/${id}/group`)
         .set('x-test-user-id', 'admin-b')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_2A });
 
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({ code: 'NOT_INSTITUTION_MEMBER' });
@@ -527,9 +583,9 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
 
     it('rejects with 404 RESOURCE_NOT_FOUND for a non-existent enrollment id', async () => {
       const res = await request(server)
-        .patch(`/enrollments/${randomUUID()}/grade`)
+        .patch(`/enrollments/${randomUUID()}/group`)
         .set('x-test-user-id', 'admin-a')
-        .send({ gradeOrGroup: '2A' });
+        .send({ groupId: GROUP_A_2A });
 
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });

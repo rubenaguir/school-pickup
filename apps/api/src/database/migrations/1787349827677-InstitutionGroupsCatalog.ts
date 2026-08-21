@@ -105,7 +105,9 @@ export class InstitutionGroupsCatalog1787349827677 implements MigrationInterface
       );
     }
 
-    await queryRunner.query(`CREATE INDEX "IDX_52e3e34305ad0800648eab215e" ON "enrollments" ("group_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_52e3e34305ad0800648eab215e" ON "enrollments" ("group_id")`,
+    );
     await queryRunner.query(
       `ALTER TABLE "enrollments" ADD CONSTRAINT "FK_52e3e34305ad0800648eab215ed" FOREIGN KEY ("group_id") REFERENCES "institution_groups"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
     );
@@ -157,7 +159,9 @@ export class InstitutionGroupsCatalog1787349827677 implements MigrationInterface
     // Not guaranteed lossless if two case-variant names were fused into one
     // catalog row during up() (ADR-084 9.2/consequences) — that fusion cannot
     // be undone since the original distinct casings are no longer recorded.
-    await queryRunner.query(`ALTER TABLE "delivery_points" ADD "assigned_groups" character varying(100) array`);
+    await queryRunner.query(
+      `ALTER TABLE "delivery_points" ADD "assigned_groups" character varying(100) array`,
+    );
     await queryRunner.query(
       `
       UPDATE "delivery_points" dp
@@ -183,7 +187,9 @@ export class InstitutionGroupsCatalog1787349827677 implements MigrationInterface
     );
     await queryRunner.query(`DROP TABLE "delivery_point_groups"`);
 
-    await queryRunner.query(`ALTER TABLE "enrollments" ADD "grade_or_group" character varying(100)`);
+    await queryRunner.query(
+      `ALTER TABLE "enrollments" ADD "grade_or_group" character varying(100)`,
+    );
     await queryRunner.query(
       `
       UPDATE "enrollments" e
@@ -192,12 +198,16 @@ export class InstitutionGroupsCatalog1787349827677 implements MigrationInterface
       WHERE g.id = e.group_id
       `,
     );
-    await queryRunner.query(`ALTER TABLE "enrollments" DROP CONSTRAINT "FK_52e3e34305ad0800648eab215ed"`);
+    await queryRunner.query(
+      `ALTER TABLE "enrollments" DROP CONSTRAINT "FK_52e3e34305ad0800648eab215ed"`,
+    );
     await queryRunner.query(`DROP INDEX "public"."IDX_52e3e34305ad0800648eab215e"`);
     await queryRunner.query(`ALTER TABLE "enrollments" DROP COLUMN "group_id"`);
 
     await queryRunner.query(`DROP INDEX "public"."IDX_institution_groups_name_ci"`);
-    await queryRunner.query(`ALTER TABLE "institution_groups" DROP CONSTRAINT "FK_6826eabede0d16fdce0be5821ed"`);
+    await queryRunner.query(
+      `ALTER TABLE "institution_groups" DROP CONSTRAINT "FK_6826eabede0d16fdce0be5821ed"`,
+    );
     await queryRunner.query(`DROP TABLE "institution_groups"`);
   }
 }

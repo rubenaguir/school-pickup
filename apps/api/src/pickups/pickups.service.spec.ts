@@ -8,6 +8,7 @@ import {
   type DeliveryPoint,
   type Enrollment,
   type Institution,
+  type InstitutionGroup,
   type Student,
   type Vehicle,
 } from '@casillego/shared/entities';
@@ -19,7 +20,8 @@ function buildEnrollment(overrides?: Partial<Enrollment>): Enrollment {
     institutionId: 'inst-1',
     institution: { id: 'inst-1', name: 'Escuela Uno', status: 'approved' } as Institution,
     status: 'approved',
-    gradeOrGroup: null,
+    groupId: null,
+    group: null,
     enrollmentCode: 'ENR-ABCD1234',
     requestedBy: { id: 'user-1' },
     reviewedBy: null,
@@ -58,21 +60,26 @@ interface FakeDeliveryPoint {
   id: string;
   institutionId: string;
   status: 'active' | 'inactive';
-  assignedGroups: string[];
+  groupIds: string[];
   createdAt: Date;
 }
 
 // Mirrors the real query in resolveDeliveryPointId (institution + status,
 // ordered by oldest created_at) — ADR-083 replaced the createQueryBuilder
 // call with a plain find() over the institution's active points, with the
-// group match resolved in memory afterwards.
+// group match resolved in memory afterwards. ADR-084: the match itself now
+// compares deliveryPointGroups[].groupId (ids), not assignedGroups (strings).
 function buildDeliveryPointsRepo(deliveryPoints: FakeDeliveryPoint[]) {
   return {
     find: vi.fn(({ where }: { where: { institution: { id: string }; status: string } }) => {
       const matches = deliveryPoints
         .filter((dp) => dp.institutionId === where.institution.id)
         .filter((dp) => dp.status === where.status)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .map((dp) => ({
+          ...dp,
+          deliveryPointGroups: dp.groupIds.map((groupId) => ({ groupId })),
+        }));
       return Promise.resolve(matches);
     }),
   };
@@ -84,7 +91,8 @@ function buildOwnedPickupRequest(overrides?: Partial<PickupRequest>): PickupRequ
     enrollment: {
       id: 'enr-1',
       institutionId: 'inst-1',
-      gradeOrGroup: '3°B',
+      groupId: 'group-3b',
+      group: { name: '3°B' } as InstitutionGroup,
       student: { id: 'stu-1', fullName: 'Ana Pérez' },
     } as Enrollment,
     institution: {
@@ -98,7 +106,10 @@ function buildOwnedPickupRequest(overrides?: Partial<PickupRequest>): PickupRequ
 
 function buildService(overrides?: {
   pickupRequests?: Partial<
-    Record<'exists' | 'create' | 'save' | 'findOne' | 'findAndCount', unknown>
+    Record<
+      'exists' | 'create' | 'save' | 'findOne' | 'findAndCount' | 'createQueryBuilder',
+      unknown
+    >
   >;
   enrollments?: Partial<Record<'findOne', unknown>>;
   studentGuardians?: Partial<Record<'findOne' | 'exists' | 'find', unknown>>;
@@ -231,12 +242,12 @@ describe('PickupsService', () => {
             id: 'dp-1',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
         ],
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '3°B' })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: 'group-3b' })),
         },
       });
 
@@ -284,12 +295,16 @@ describe('PickupsService', () => {
             id: 'dp-1',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
         ],
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '3°B' })),
+          findOne: vi
+            .fn()
+            .mockResolvedValue(
+              buildEnrollment({ groupId: 'group-3b', group: { name: '3°B' } as InstitutionGroup }),
+            ),
         },
       });
 
@@ -365,14 +380,14 @@ describe('PickupsService', () => {
     it('does not assign an inactive delivery point even when it matches the group', async () => {
       const { service } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '3°B' })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: 'group-3b' })),
         },
         deliveryPoints: [
           {
             id: 'dp-inactive',
             institutionId: 'inst-1',
             status: 'inactive',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
         ],
@@ -386,21 +401,21 @@ describe('PickupsService', () => {
     it('assigns the active point when an inactive point also matches the same group', async () => {
       const { service } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '3°B' })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: 'group-3b' })),
         },
         deliveryPoints: [
           {
             id: 'dp-inactive',
             institutionId: 'inst-1',
             status: 'inactive',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
           {
             id: 'dp-active',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-02T00:00:00.000Z'),
           },
         ],
@@ -414,21 +429,21 @@ describe('PickupsService', () => {
     it('breaks ties between two active points matching the same group by oldest created_at', async () => {
       const { service } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '3°B' })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: 'group-3b' })),
         },
         deliveryPoints: [
           {
             id: 'dp-newer',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-02-01T00:00:00.000Z'),
           },
           {
             id: 'dp-older',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
         ],
@@ -445,21 +460,21 @@ describe('PickupsService', () => {
     it('falls back to the catch-all point when the group matches no active point (ADR-083)', async () => {
       const { service } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: 'huérfano' })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: 'group-huerfano' })),
         },
         deliveryPoints: [
           {
             id: 'dp-grouped',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: ['3°B'],
+            groupIds: ['group-3b'],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
           {
             id: 'dp-catch-all',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: [],
+            groupIds: [],
             createdAt: new Date('2026-01-02T00:00:00.000Z'),
           },
         ],
@@ -475,14 +490,14 @@ describe('PickupsService', () => {
     it('falls back to the catch-all point when the student has no group at all (ADR-083)', async () => {
       const { service } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: null })),
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ groupId: null })),
         },
         deliveryPoints: [
           {
             id: 'dp-catch-all',
             institutionId: 'inst-1',
             status: 'active',
-            assignedGroups: [],
+            groupIds: [],
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
           },
         ],
@@ -937,7 +952,7 @@ describe('PickupsService', () => {
         pickupRequestId: pickupRequest.id,
         status: pickupRequest.status,
         studentFullName: pickupRequest.enrollment.student.fullName,
-        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
         deliveryPointId: DP_ID,
         estimatedArrivalAt: null,
         etaSeconds: null,
@@ -978,7 +993,7 @@ describe('PickupsService', () => {
           deliveryPoint: { id: DP_ID },
           status: In(['en_route', 'arriving', 'arrived']),
         },
-        relations: { enrollment: { student: true }, guardian: true },
+        relations: { enrollment: { student: true, group: true }, guardian: true },
         order: { createdAt: 'DESC' },
         take: 20,
         skip: 0,
@@ -1129,7 +1144,7 @@ describe('PickupsService', () => {
         pickupRequestId: pickupRequest.id,
         status: pickupRequest.status,
         studentFullName: pickupRequest.enrollment.student.fullName,
-        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
         deliveryPointId: 'dp-1',
         estimatedArrivalAt: null,
         etaSeconds: null,
@@ -1167,7 +1182,7 @@ describe('PickupsService', () => {
           institution: { id: INST_ID },
           status: In(['en_route', 'arriving', 'arrived']),
         },
-        relations: { enrollment: { student: true }, deliveryPoint: true },
+        relations: { enrollment: { student: true, group: true }, deliveryPoint: true },
         order: { createdAt: 'DESC' },
         take: 20,
         skip: 0,
@@ -1335,7 +1350,7 @@ describe('PickupsService', () => {
         pickupRequestId: pickupRequest.id,
         status: pickupRequest.status,
         studentFullName: pickupRequest.enrollment.student.fullName,
-        gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+        gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
         deliveryPointId: 'dp-1',
         estimatedArrivalAt: null,
         etaSeconds: null,
@@ -1378,7 +1393,11 @@ describe('PickupsService', () => {
           institution: { id: INST_ID },
           status: In(['en_route', 'arriving', 'arrived']),
         },
-        relations: { enrollment: { student: true }, deliveryPoint: true, guardian: true },
+        relations: {
+          enrollment: { student: true, group: true },
+          deliveryPoint: true,
+          guardian: true,
+        },
         order: { createdAt: 'DESC' },
         take: 20,
         skip: 0,
@@ -1432,7 +1451,7 @@ describe('PickupsService', () => {
       const queryBuilder: Record<string, unknown> = {
         getMany: vi.fn().mockResolvedValue(pickups),
       };
-      for (const method of ['innerJoinAndSelect', 'where', 'andWhere']) {
+      for (const method of ['innerJoinAndSelect', 'leftJoinAndSelect', 'where', 'andWhere']) {
         queryBuilder[method] = vi.fn(() => queryBuilder);
       }
       return queryBuilder;
@@ -1442,12 +1461,18 @@ describe('PickupsService', () => {
       vi.useRealTimers();
     });
 
-    it('groups delivered pickups by gradeOrGroup, "Sin grupo" for a missing one, sorted es-MX', async () => {
+    it('groups delivered pickups by group name, "Sin grupo" for a missing one, sorted es-MX', async () => {
       const pickups = [
-        buildPickupRequest({ enrollment: { gradeOrGroup: '5° A' } as Enrollment }),
-        buildPickupRequest({ enrollment: { gradeOrGroup: '3° B' } as Enrollment }),
-        buildPickupRequest({ enrollment: { gradeOrGroup: '3° B' } as Enrollment }),
-        buildPickupRequest({ enrollment: { gradeOrGroup: null } as Enrollment }),
+        buildPickupRequest({
+          enrollment: { group: { name: '5° A' } as InstitutionGroup } as Enrollment,
+        }),
+        buildPickupRequest({
+          enrollment: { group: { name: '3° B' } as InstitutionGroup } as Enrollment,
+        }),
+        buildPickupRequest({
+          enrollment: { group: { name: '3° B' } as InstitutionGroup } as Enrollment,
+        }),
+        buildPickupRequest({ enrollment: { group: null } as Enrollment }),
       ];
       const queryBuilder = buildDeliveredTodayQueryBuilder(pickups);
       const { service } = buildService({

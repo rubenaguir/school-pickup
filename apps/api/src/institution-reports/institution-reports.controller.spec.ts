@@ -67,6 +67,9 @@ describe('InstitutionReportsController (HTTP)', () => {
       innerJoinAndSelect: vi.fn(function (this: unknown) {
         return this;
       }),
+      leftJoinAndSelect: vi.fn(function (this: unknown) {
+        return this;
+      }),
       where: vi.fn(function (this: unknown) {
         return this;
       }),

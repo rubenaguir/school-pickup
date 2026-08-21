@@ -10,7 +10,7 @@ function buildPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
     id: PICKUP_REQUEST_ID,
     enrollment: {
       id: 'enr-1',
-      gradeOrGroup: '3A',
+      group: { name: '3A' },
       student: { id: 'stu-1', fullName: 'Ana Pérez' },
     },
     institution: {
