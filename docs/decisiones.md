@@ -6000,3 +6000,260 @@ frontend.
   sin que nadie lo notara en su momento).
 - `apps/api/src/email/email-templates.ts` (fuente de verdad de los paths
   reales — leída completa, no una sola línea, antes de este ADR).
+
+## ADR-083 — Alumnos sin grupo configurado: punto de entrega atrapa-todo, asignación al aprobar, y pantalla de edición post-aprobación
+
+**Contexto.** Durante pruebas manuales del tablero tras el cierre de
+ADR-082 (verificación de los 39 endpoints mutantes), el humano encontró
+filas de `pickup_requests` sin punto de entrega asignado al filtrar por
+una puerta específica. La causa está confirmada en código real:
+
+- `apps/api/src/pickups/pickups.service.ts`, `resolveDeliveryPointId()`:
+  si `enrollment.gradeOrGroup` es `null`, devuelve `null` sin buscar
+  coincidencia — el `pickup_request` nunca tiene punto de entrega. El
+  mismo resultado ocurre si `gradeOrGroup` tiene valor pero ningún punto
+  de entrega activo lo tiene en `assigned_groups` (typo, o el punto se
+  reconfiguró y dejó de cubrir ese grupo).
+- `apps/board/src/screens/Home.tsx` (líneas 269-278): el filtro
+  `row.deliveryPointId === selectedDeliveryPointId` esconde esas filas
+  fuera de "Todos" — confirmado que el tablero no tiene lógica propia
+  aquí, es un efecto secundario directo del bug de arriba.
+- No existe ningún endpoint que permita asignar o corregir
+  `gradeOrGroup` después de crear la inscripción (`approve()`/`reject()`
+  no reciben `@Body()`).
+
+Evaluando casos de uso reales, el humano identificó dos observaciones
+que cambian el diagnóstico original:
+
+1. **No todas las instituciones tienen grupos** (ej. una escuela de
+   taekwondo con un solo punto de entrega). Forzar a asignar un grupo
+   inventado solo para que el matching funcione es una solución
+   equivocada — de hecho el propio ADR-012 ya declaraba como consecuencia
+   que "instituciones con un solo punto de entrega no necesitan asignar
+   grupos", pero `resolveDeliveryPointId()` nunca implementó ese caso.
+   Es una omisión contra la propia especificación del proyecto, no un
+   caso nuevo.
+2. **El texto libre de `assigned_groups`/`grade_or_group` es frágil ante
+   mantenimiento real**: si una institución reconfigura un punto de
+   entrega (ej. deja de cubrir "1A" y pasa a cubrir "2A"), cualquier
+   matrícula con `grade_or_group = "1A"` deja de matchear en silencio,
+   sin aviso. Confirmado que hoy no existe ningún mecanismo que lo
+   detecte.
+
+La observación 2 (catálogo de grupos como entidad propia, con FK en vez
+de texto libre) es un cambio de modelo de datos real que toca dos
+entidades y revisita ADR-012 — se separa a **ADR-084** (pendiente,
+`docs/plan-implementacion.md`), fuera de alcance de este ADR.
+
+**Decisión.**
+
+### 1. `resolveDeliveryPointId()` — matching en dos pasos, con atrapa-todo
+
+```ts
+private async resolveDeliveryPointId(enrollment: Enrollment): Promise<string | null> {
+  const activePoints = await this.deliveryPointsRepository.find({
+    where: { institution: { id: enrollment.institutionId }, status: 'active' },
+    order: { createdAt: 'ASC' },
+  });
+
+  if (enrollment.gradeOrGroup) {
+    const exactMatch = activePoints.find((point) =>
+      (point.assignedGroups ?? []).includes(enrollment.gradeOrGroup as string),
+    );
+    if (exactMatch) return exactMatch.id;
+  }
+
+  // Atrapa-todo: cubre tanto al alumno sin grupo (gradeOrGroup === null)
+  // como al que tiene un grupo que no está configurado en ningún punto
+  // activo (typo, o reconfiguración que dejó huérfano al grupo). Único
+  // por construcción — DeliveryPointsService lo garantiza al crear/editar
+  // (punto 3 de este ADR), así que no hay ambigüedad de cuál usar.
+  const catchAll = activePoints.find(
+    (point) => !point.assignedGroups || point.assignedGroups.length === 0,
+  );
+  return catchAll?.id ?? null;
+}
+```
+
+Reemplaza el `createQueryBuilder` actual — se resuelve en memoria sobre
+la lista ya cargada de puntos activos en vez de dos queries separadas,
+porque el segundo paso (atrapa-todo) necesita la misma lista que el
+primero. El comentario existente sobre "no hay prioridad de negocio
+entre puntos que se solapan en el mismo grupo" deja de aplicar: el punto
+3 de este ADR hace que ese solape sea imposible por construcción, así
+que el único `orderBy('createdAt', 'ASC')` que sobrevive es el que
+ordena la carga inicial (irrelevante para el resultado, ya no hay
+empate posible).
+
+Consecuencia directa en el tablero, sin tocar `apps/board`: una vez que
+`pickup_requests.delivery_point_id` apunta al atrapa-todo real, la fila
+ya no es `null` — `Home.tsx` la muestra igual que cualquier otra al
+filtrar por ese punto específico, porque el filtro es una simple
+igualdad de `id`. Cubre exactamente lo que pediste: todo alumno sin
+grupo, o con un grupo que no está configurado en ningún otro punto,
+aparece en el punto atrapa-todo.
+
+### 2. `gradeOrGroup` opcional en `PATCH /enrollments/:id/approve`
+
+Nuevo DTO, mismo criterio que `CreateEnrollmentDto` (texto libre,
+`@IsOptional`):
+
+```ts
+// apps/api/src/enrollments/dto/approve-enrollment.dto.ts
+export class ApproveEnrollmentDto {
+  @IsOptional()
+  @IsString()
+  gradeOrGroup?: string | null;
+}
+```
+
+`EnrollmentsDetailController.approve()` gana `@Body() dto:
+ApproveEnrollmentDto`. `EnrollmentsService.approve()` gana un tercer
+parámetro; si viene definido, se asigna a `enrollment.gradeOrGroup`
+antes del `save()`, dentro de la misma transacción que ya escribe
+`status`/`reviewedBy`/`reviewedAt`. No toca `reject()`.
+
+Sigue siendo útil pese al punto 1: instituciones que sí tienen grupos
+reales quieren poder asignarlos al aprobar, no solo depender del
+atrapa-todo.
+
+### 3. Validación nueva en `DeliveryPointsService` — sin ella, el punto 1 sería ambiguo
+
+Capa de servicio, no FK/trigger (mismo criterio que la validación
+cruzada de `operatorUserId`, spec 009 + ADR-017):
+
+```ts
+const DUPLICATE_CATCH_ALL_DELIVERY_POINT = {
+  code: 'DUPLICATE_CATCH_ALL_DELIVERY_POINT',
+  message: 'Another active delivery point of this institution already has no assigned groups.',
+} as const;
+
+const DUPLICATE_ASSIGNED_GROUP = {
+  code: 'DUPLICATE_ASSIGNED_GROUP',
+  message: 'One or more groups are already assigned to another active delivery point.',
+} as const;
+
+private async assertNoGroupConflicts(
+  institutionId: string,
+  candidateGroups: string[] | null | undefined,
+  excludeId?: string,
+): Promise<void> {
+  const others = await this.deliveryPointsRepository.find({
+    where: { institution: { id: institutionId }, status: 'active' },
+  });
+  const otherActive = others.filter((point) => point.id !== excludeId);
+
+  const groups = candidateGroups ?? [];
+  if (groups.length === 0) {
+    const hasOtherCatchAll = otherActive.some(
+      (point) => !point.assignedGroups || point.assignedGroups.length === 0,
+    );
+    if (hasOtherCatchAll) throw new UnprocessableEntityException(DUPLICATE_CATCH_ALL_DELIVERY_POINT);
+    return;
+  }
+
+  const taken = new Set(otherActive.flatMap((point) => point.assignedGroups ?? []));
+  if (groups.some((group) => taken.has(group))) {
+    throw new UnprocessableEntityException(DUPLICATE_ASSIGNED_GROUP);
+  }
+}
+```
+
+- `create()`: siempre corre (el punto siempre nace `active`).
+- `update()`: corre cuando el estado **final** del punto (tras aplicar el
+  DTO) es `active` — cubre tanto editar `assignedGroups` de un punto ya
+  activo como reactivar uno que estaba `inactive` (podría chocar con lo
+  que se configuró en otro punto mientras estuvo apagado). Puntos
+  `inactive` quedan fuera del chequeo, igual que ya quedan fuera del
+  pool de ruteo en `resolveDeliveryPointId`.
+- Dos códigos nuevos en `SAVE_MESSAGES`
+  (`apps/portal/src/delivery-points/delivery-point-error-messages.ts`),
+  mismo mapa que ya traduce `OPERATOR_NOT_INSTITUTION_MEMBER` — sin
+  cambio de UI más allá del mensaje, se muestra con el `Alert` que
+  `DeliveryPoints.tsx` ya tiene.
+
+Sin migración: valida sobre columnas que ya existen (`assigned_groups`,
+`status`).
+
+### 4. Pantalla nueva en `apps/portal`: "Alumnos" — buscar y editar matrículas `approved`
+
+Ruta nueva `ALUMNOS_PATH = '/students'`, entrada nueva en el `NAV` de
+`InstitutionShell.tsx` (8 items, ícono `'student'` nuevo en `icons.tsx`
+— SVG propio, sin librería, ADR-036).
+
+`useApprovedEnrollments(institutionId)` (nuevo hook,
+`apps/portal/src/enrollments/`, mismo esqueleto que
+`usePendingEnrollments.ts`): `GET /enrollments?status=approved&institutionId=...`
+— ya soportado por `ListInstitutionEnrollmentsQueryDto`, sin cambio de
+backend en el listado. Búsqueda por nombre en cliente (sin parámetro
+nuevo en el DTO — sin evidencia de volumen que lo justifique, mismo
+criterio que otros ítems del backlog técnico).
+
+Endpoint nuevo dedicado a la edición, separado de `approve()` a
+propósito: `approve()` exige `status = pending` y reenvía el correo de
+aprobación en cada llamada — reusarlo para corregir una matrícula ya
+aprobada dispararía un correo falso.
+
+```ts
+// PATCH /enrollments/:id/grade
+export class UpdateEnrollmentGradeDto {
+  @IsOptional()
+  @IsString()
+  gradeOrGroup?: string | null;
+}
+```
+
+Mismo guard que `approve`/`reject`
+(`InstitutionMembershipGuard` + `@InstitutionResource` + `assertAdmin`).
+`EnrollmentsService.updateGrade(id, actorUserId, gradeOrGroup)` exige
+`status = approved` (nuevo código `ENROLLMENT_NOT_APPROVED`, 409, mismo
+patrón que `ENROLLMENT_NOT_PENDING`) y devuelve
+`InstitutionEnrollmentListItem` (reusa `toInstitutionResponse()`). No
+escribe `AuditLog` — es corrección de dato operativo, no una decisión de
+control de acceso como aprobar/rechazar/invitar; si la revisión de
+cobertura de `audit_log` ya prevista en Fase 10 concluye lo contrario, se
+agrega ahí.
+
+Cada fila: nombre, `gradeOrGroup` actual (o "Sin grupo"), campo de texto
+libre editable — mismo criterio ADR-012, sin `<select>` nuevo. Solo
+`role = admin` edita, mismo patrón `canReview`/`NOT_ADMIN_REASON` que
+`PendingEnrollments.tsx`.
+
+**Consecuencias.**
+- Cierra el hueco operativo real sin forzar a instituciones sin grupos a
+  inventar uno. El tablero muestra correctamente a estos alumnos en el
+  punto atrapa-todo, sin ningún cambio en `apps/board`.
+- Las dos validaciones nuevas de `DeliveryPointsService` son las que
+  hacen que el atrapa-todo sea determinista — sin ellas, el punto 1
+  tendría un empate sin criterio de negocio.
+- No repara retroactivamente `pickup_requests` ya creados con
+  `delivery_point_id = null` — `resolveDeliveryPointId()` solo corre al
+  crear un `pickup_request` nuevo; la corrección aplica desde la
+  siguiente solicitud del alumno en adelante.
+- La fragilidad de fondo del texto libre (observación 2 del humano)
+  queda explícitamente fuera de este ADR — ver ADR-084 (pendiente).
+- Ninguna migración de esquema en ninguna de las cuatro piezas.
+
+## Referencias
+
+- `apps/api/src/pickups/pickups.service.ts` (`resolveDeliveryPointId`,
+  líneas 790-807 — el hueco original).
+- `apps/board/src/screens/Home.tsx` (líneas 227-286 — confirmado sin
+  lógica propia, efecto secundario puro del bug de arriba).
+- `apps/api/src/delivery-points/delivery-points.service.ts` — leído
+  completo antes de este ADR; confirmado que hoy no valida ningún cruce
+  entre puntos de entrega de la misma institución.
+- ADR-012 (consecuencia ya declarada — "instituciones con un solo punto
+  de entrega no necesitan asignar grupos" — nunca implementada hasta
+  ahora; también el origen del criterio de texto libre que este ADR
+  mantiene).
+- ADR-017 y spec 009 (criterio de validación cruzada en capa de
+  servicio, no FK/trigger — reutilizado para las dos reglas nuevas de
+  puntos de entrega).
+- spec 006 (`specs/features/006-aprobacion-enrollment.md` — precondición
+  de `role = admin` reutilizada por el endpoint de edición).
+- spec nueva `specs/features/029-editar-grupo-alumno.md` (a redactar
+  junto con el prompt de implementación).
+- ADR-084 (pendiente, `docs/plan-implementacion.md`) — catálogo de
+  grupos como entidad propia, para la fragilidad de texto libre
+  (observación 2 del humano), fuera de alcance aquí.
