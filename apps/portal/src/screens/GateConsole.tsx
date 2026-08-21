@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Avatar, Badge, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { Avatar, Badge, EmptyState, ErrorState, pinMarkUrl, SkeletonRow } from '@casillego/ui';
 import { relationshipLabel, type PickupRequestStatus } from '@casillego/shared';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
@@ -216,7 +216,7 @@ function TopBar({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
-          <img src="/pin-mark.svg" width={28} height={32} alt="" />
+          <img src={pinMarkUrl} width={28} height={32} alt="" />
           <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>
             Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
           </span>

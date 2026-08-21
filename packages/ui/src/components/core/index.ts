@@ -3,6 +3,8 @@ export type { AvatarProps } from './Avatar';
 export { Badge } from './Badge';
 export type { BadgeProps } from './Badge';
 export { BrandPanel } from './BrandPanel';
+export { default as pinMarkUrl } from '../../assets/pin-mark.svg';
+export { default as pinMarkInverseUrl } from '../../assets/pin-mark-inverse.svg';
 export { Button } from './Button';
 export type { ButtonProps } from './Button';
 export { Card } from './Card';

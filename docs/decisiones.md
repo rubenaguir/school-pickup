@@ -6257,3 +6257,79 @@ libre editable — mismo criterio ADR-012, sin `<select>` nuevo. Solo
 - ADR-084 (pendiente, `docs/plan-implementacion.md`) — catálogo de
   grupos como entidad propia, para la fragilidad de texto libre
   (observación 2 del humano), fuera de alcance aquí.
+
+## ADR-085 — Logo de marca (`pin-mark.svg`) consolidado en `@casillego/ui`; deja de depender de copias manuales en `public/`
+
+**Contexto.** El humano reportó, con captura de pantalla, el logo roto en
+la barra lateral de `apps/parent` (pantalla "Asociar institución",
+`TutorShell.tsx`). Causa confirmada en código real: la línea
+`<img src="/pin-mark.svg" ... />` referencia un archivo que nunca existió
+en `apps/parent/public/`.
+
+Investigando el alcance real (no solo el síntoma puntual): la misma
+referencia de texto a `/pin-mark.svg` o `/pin-mark-inverse.svg` aparece en
+**siete lugares** repartidos en los tres frontends —
+`apps/board/src/board/{SerenoBoard,AndenBoard,CarrilBoard}.tsx`,
+`apps/portal/src/{admin/OpsShell,institution/InstitutionShell,screens/GateConsole}.tsx`,
+y `apps/parent/src/portal-web/TutorShell.tsx`. Ninguna de las siete pasa
+por `packages/ui` — cada una asume que el SVG existe como archivo estático
+en el `public/` de su propia app. `apps/portal/public/pin-mark.svg` y
+`apps/board/public/{pin-mark,pin-mark-inverse}.svg` sí existen —copiados
+ahí a mano, en algún momento no documentado—, así que esas seis
+referencias "funcionan" por esa copia manual, no porque el patrón sea
+correcto. `apps/parent/public/` nunca recibió esa copia: es el único caso
+que se rompió, pero el patrón subyacente es igual de frágil en las otras
+seis.
+
+`packages/ui/src/components/core/BrandPanel.tsx` ya resuelve esto
+correctamente: `import pinMark from '../../assets/pin-mark-inverse.svg'`
+— un import de módulo, que Vite empaqueta en build time y nunca puede
+quedar roto por un archivo faltante en un `public/`. ADR-081 promovió
+`BrandPanel` a `packages/ui` con ese mismo criterio, pero solo tocó las
+pantallas del kit `acceso` (Login/VerifyEmail) — los logos de barra
+lateral y tableros quedaron fuera de ese barrido, con el patrón viejo, sin
+que nadie lo notara hasta este reporte.
+
+**Decisión.**
+
+1. `packages/ui/src/components/core/index.ts` exporta dos constantes
+   nuevas, mismo criterio de "barrel único" ya establecido por ADR-036
+   (el paquete no tiene build propio ni `exports` map que permita imports
+   profundos — todo lo que expone pasa por `src/index.ts`):
+   ```ts
+   export { default as pinMarkUrl } from '../../assets/pin-mark.svg';
+   export { default as pinMarkInverseUrl } from '../../assets/pin-mark-inverse.svg';
+   ```
+2. Las siete referencias `<img src="/pin-mark...svg">` se reemplazan por
+   `<img src={pinMarkUrl} .../>` o `{pinMarkInverseUrl}` según corresponda,
+   importado desde `@casillego/ui` — mismo paquete del que los tres apps
+   ya importan `BrandPanel`, sin dependencia nueva que agregar a ningún
+   `package.json`.
+3. Se eliminan las copias duplicadas: `apps/portal/public/pin-mark.svg`,
+   `apps/board/public/pin-mark.svg`, `apps/board/public/pin-mark-inverse.svg`.
+   `apps/parent/public/` nunca tuvo una copia que borrar.
+
+**Consecuencias.** Cierra el bug puntual del screenshot y, con el mismo
+cambio, elimina la clase de bug completa: ningún logo de este proyecto
+vuelve a depender de que alguien recuerde copiar un archivo a un `public/`
+nuevo cuando se crea o se toca una pantalla. Único punto de origen para el
+asset, consistente con el criterio que ADR-036 y ADR-081 ya habían fijado
+para el resto del design system — este ADR solo termina de aplicarlo a
+los dos lugares (barras laterales, tableros) que quedaron fuera. Sin
+cambio de comportamiento visual: el logo se ve igual, solo cambia de
+dónde se sirve. Ninguna migración, ningún endpoint, ningún `package.json`
+tocado.
+
+## Referencias
+
+- `packages/ui/src/components/core/BrandPanel.tsx` (el patrón correcto ya
+  existente, replicado aquí).
+- ADR-036 (`@casillego/ui`: barrel único, sin build propio — criterio que
+  motiva exportar por el barrel en vez de un `exports` map con imports
+  profundos).
+- ADR-081 (promoción de `BrandPanel` a `packages/ui`; mismo criterio de
+  consolidar un asset duplicado en una sola fuente, aplicado entonces solo
+  al kit `acceso` y ahora extendido a barras laterales y tableros).
+- `design/casillego-design-system/ui_kits/app-padre/index.html` (mockup
+  estático de referencia, confirma que el logo es el mismo asset en los 5
+  kits del design system).

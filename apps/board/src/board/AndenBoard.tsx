@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { pinMarkInverseUrl } from '@casillego/ui';
 import { etaDisplay, STATUS_META } from './board-display';
 import type { BoardRow } from './board-rows';
 
@@ -79,7 +80,7 @@ export function AndenBoard({
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-            <img src="/pin-mark-inverse.svg" width={24} height={28} alt="" />
+            <img src={pinMarkInverseUrl} width={24} height={28} alt="" />
             <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.02em' }}>
               Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
             </span>

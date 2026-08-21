@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { relationshipLabel } from '@casillego/shared';
+import { pinMarkInverseUrl } from '@casillego/ui';
 import type { BoardMonitorRow } from './board-monitor-rows';
 import { etaShort, horaText, progressPercent, STATUS_META } from './board-display';
 
@@ -70,7 +71,7 @@ export function CarrilBoard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-            <img src="/pin-mark-inverse.svg" width={22} height={26} alt="" />
+            <img src={pinMarkInverseUrl} width={22} height={26} alt="" />
             <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>
               Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
             </span>

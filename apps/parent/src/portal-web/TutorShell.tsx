@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { NavItem } from '@casillego/ui';
+import { NavItem, pinMarkUrl } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { setSurface } from '../surface/surface';
 import {
@@ -119,7 +119,7 @@ export function TutorShell() {
         )}
 
         <div style={{ padding: '24px 22px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <img src="/pin-mark.svg" width={28} height={32} alt="" />
+          <img src={pinMarkUrl} width={28} height={32} alt="" />
           <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>
             Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
           </span>
