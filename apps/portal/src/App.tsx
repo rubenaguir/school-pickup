@@ -6,6 +6,7 @@ import {
   ACCEPT_INVITATION_PATH,
   ADMIN_INSTITUTIONS_PATH,
   ADMIN_METRICS_PATH,
+  ALUMNOS_PATH,
   DASHBOARD_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
@@ -34,6 +35,7 @@ import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
 import { Profile } from './screens/Profile';
 import { Reports } from './screens/Reports';
+import { Students } from './screens/Students';
 import { VerifyEmail } from './screens/VerifyEmail';
 
 export function App() {
@@ -56,6 +58,7 @@ export function App() {
               <Route element={<InstitutionShell />}>
                 <Route path={DASHBOARD_PATH} element={<Dashboard />} />
                 <Route path={PENDING_ENROLLMENTS_PATH} element={<PendingEnrollments />} />
+                <Route path={ALUMNOS_PATH} element={<Students />} />
                 <Route path={INSTITUTION_PROFILE_PATH} element={<InstitutionProfile />} />
                 <Route path={DELIVERY_POINTS_PATH} element={<DeliveryPoints />} />
                 <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />

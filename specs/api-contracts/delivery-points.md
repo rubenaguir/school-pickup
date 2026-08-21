@@ -96,6 +96,8 @@ opcional (texto libre, ADR-012).
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
+| 422 | ya existe otro punto de entrega **activo** de esta institución sin `assignedGroups` (el atrapa-todo debe ser único, ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
+| 422 | uno o más de los `assignedGroups` enviados ya están asignados a otro punto de entrega **activo** de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
 
 No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
 `InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
@@ -140,6 +142,13 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | el `delivery_points` no existe |
 | 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
+| 422 | el punto queda `active` (ya lo era, o se reactiva vía `status`) y ya existe otro punto activo de esta institución sin `assignedGroups` (ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
+| 422 | el punto queda `active` y uno o más de los `assignedGroups` enviados ya están asignados a otro punto activo de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
+
+Las dos validaciones de 422 nuevas solo corren cuando el estado **final** del
+punto (tras aplicar el DTO) es `active` — cubre tanto editar `assignedGroups`
+de un punto ya activo como reactivar uno que estaba `inactive`. Un punto que
+queda o se mantiene `inactive` nunca las dispara. Ver ADR-083.
 
 ## Referencias
 
@@ -154,6 +163,8 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
 - ADR-019 (punto 5: restricción a `role = admin`).
 - ADR-022 (punto 1: escritura exige `role = admin`; punto 4:
   `InstitutionMembershipGuard`; punto 5: código 422 para validaciones cruzadas).
+- ADR-083 (`DUPLICATE_CATCH_ALL_DELIVERY_POINT` y `DUPLICATE_ASSIGNED_GROUP`;
+  determinismo del punto atrapa-todo usado por `resolveDeliveryPointId()`).
 
 ## Preguntas abiertas
 

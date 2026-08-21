@@ -167,6 +167,10 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         const updated: EnrollmentRecord = {
           ...existing,
           status: (entity.status as EnrollmentStatus | undefined) ?? existing.status,
+          gradeOrGroup:
+            'gradeOrGroup' in entity
+              ? (entity.gradeOrGroup as string | null)
+              : existing.gradeOrGroup,
           reviewedByUserId: entity.reviewedBy
             ? (entity.reviewedBy as { id: string }).id
             : existing.reviewedByUserId,
@@ -440,6 +444,92 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       const res = await request(server)
         .patch(`/enrollments/${randomUUID()}/approve`)
         .set('x-test-user-id', 'admin-a');
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
+    });
+
+    // ADR-083: gradeOrGroup is optional on approve.
+    it('assigns gradeOrGroup when the body includes it', async () => {
+      const id = seedEnrollment({ institutionId: INST_A });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/approve`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ gradeOrGroup: '3° B' });
+
+      expect(res.status).toBe(200);
+      expect(enrollments.get(id)?.gradeOrGroup).toBe('3° B');
+    });
+  });
+
+  describe('PATCH /enrollments/:id/grade', () => {
+    it('corrects the group of an approved enrollment when the caller is an admin', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved', gradeOrGroup: '1A' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/grade`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ gradeOrGroup: '2A' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id, status: 'approved', gradeOrGroup: '2A' });
+      expect(enrollments.get(id)?.gradeOrGroup).toBe('2A');
+    });
+
+    it('does not write an audit_log entry', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/grade`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ gradeOrGroup: '2A' });
+
+      expect(res.status).toBe(200);
+      expect(auditCreateCalls).toHaveLength(0);
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_APPROVED when the enrollment is still pending', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'pending' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/grade`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ gradeOrGroup: '2A' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_NOT_APPROVED' });
+    });
+
+    it('rejects with 403 ADMIN_ROLE_REQUIRED when the caller is a member without role = admin', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/grade`)
+        .set('x-test-user-id', 'teacher-a')
+        .send({ gradeOrGroup: '2A' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ code: 'ADMIN_ROLE_REQUIRED' });
+    });
+
+    it('rejects with 403 NOT_INSTITUTION_MEMBER when the caller belongs to another institution', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, status: 'approved' });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/grade`)
+        .set('x-test-user-id', 'admin-b')
+        .send({ gradeOrGroup: '2A' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ code: 'NOT_INSTITUTION_MEMBER' });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND for a non-existent enrollment id', async () => {
+      const res = await request(server)
+        .patch(`/enrollments/${randomUUID()}/grade`)
+        .set('x-test-user-id', 'admin-a')
+        .send({ gradeOrGroup: '2A' });
 
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });

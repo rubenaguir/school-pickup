@@ -51,7 +51,13 @@ export interface PendingEnrollmentsValue {
   /** Id of the row whose approve/reject call is in flight, if any. */
   busyId: string | null;
   reload: () => void;
-  review: (enrollmentId: string, action: ReviewAction) => void;
+  /**
+   * `gradeOrGroup` only applies to `action === 'approve'` (ADR-083) — sent as
+   * the PATCH body so an institution can assign or correct the student's
+   * group in the same step it approves the request, instead of depending
+   * only on the catch-all delivery point. Ignored for `'reject'`.
+   */
+  review: (enrollmentId: string, action: ReviewAction, gradeOrGroup?: string) => void;
 }
 
 interface PendingEnrollmentsResponse {
@@ -137,14 +143,17 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
   }, [institutionId, attempt]);
 
   const review = useCallback(
-    (enrollmentId: string, action: ReviewAction) => {
+    (enrollmentId: string, action: ReviewAction, gradeOrGroup?: string) => {
       if (!institutionId) return;
       setBusyId(enrollmentId);
       setBanner(null);
       setRowError(null);
 
       void apiClient
-        .patch(`/enrollments/${enrollmentId}/${action}`)
+        .patch(
+          `/enrollments/${enrollmentId}/${action}`,
+          action === 'approve' ? { gradeOrGroup } : undefined,
+        )
         .then(() => {
           // Drop just the resolved row: the rest of the inbox is untouched, so
           // there is nothing to re-fetch.

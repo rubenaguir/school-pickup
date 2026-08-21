@@ -150,7 +150,18 @@ feature 006.
 
 Ver feature 006.
 
-**Request:** sin body.
+**Request** (opcional; body vacío es válido)
+```json
+{
+  "gradeOrGroup": "string | null"
+}
+```
+
+`gradeOrGroup`, si viene definido, se asigna a `enrollments.grade_or_group`
+dentro de la misma transacción que ya escribe `status`/`reviewedByUserId`/
+`reviewedAt` — permite asignar o corregir el grupo del alumno en el mismo
+paso en que se aprueba, en vez de depender solo del punto de entrega
+atrapa-todo (ADR-083). Si se omite, `grade_or_group` no se toca.
 
 **Response 200**
 ```json
@@ -174,6 +185,55 @@ Ver feature 006.
 **Auditoría.** La aprobación registra una fila en `audit_log` con
 `action = enrollment.approved` (aprobación = acción sensible según `CLAUDE.md`;
 convención libre `entity.verb`, ADR-018 punto 9; ADR-025 punto 6).
+
+## `PATCH /enrollments/:id/grade`
+
+Corrige `gradeOrGroup` de una matrícula ya `approved`, fuera del momento de
+aprobación (pantalla "Alumnos", ver `specs/features/029-editar-grupo-alumno.md`).
+Endpoint nuevo y deliberadamente separado de `approve()`: `approve()` exige
+`status = pending` y reenvía el correo de aprobación en cada llamada —
+reusarlo para corregir una matrícula ya aprobada dispararía un correo falso.
+Ver ADR-083.
+
+**Autorización:** misma que `approve`/`reject` — `institution_members` de la
+institución del enrollment, con `role = admin` (ADR-019, punto 5).
+
+**Request**
+```json
+{
+  "gradeOrGroup": "string | null"
+}
+```
+
+**Response 200** — mismo shape que una fila de
+`GET /enrollments?status=...&institutionId=...` (`InstitutionEnrollmentListItem`,
+ver más abajo).
+```json
+{
+  "id": "uuid",
+  "studentId": "uuid",
+  "studentFullName": "string",
+  "status": "approved",
+  "gradeOrGroup": "string | null",
+  "enrollmentCode": "string",
+  "requestedByUserId": "uuid",
+  "requestedAt": "string (timestamptz)",
+  "reviewedByUserId": "uuid | null",
+  "reviewedAt": "string (timestamptz) | null"
+}
+```
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 400 | payload inválido |
+| 403 | el usuario autenticado no es `institution_members` de la institución del enrollment |
+| 403 | el usuario autenticado es `institution_members` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
+| 404 | `enrollments` no existe |
+| 409 | `enrollments.status != approved`; `code: ENROLLMENT_NOT_APPROVED` |
+
+Sin auditoría: es corrección de dato operativo, no una decisión de control de
+acceso como aprobar/rechazar/invitar (ADR-083).
 
 ## `PATCH /enrollments/:id/reject`
 
@@ -225,6 +285,10 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 - ADR-057 (`GET /enrollments/mine` enriquecido con `institutionName`,
   `institutionType`, `institutionCategory`; `GET /enrollments?institutionId=...`
   sin cambios).
+- ADR-083 (`gradeOrGroup` opcional en `approve`; endpoint nuevo
+  `PATCH /enrollments/:id/grade` para matrículas ya `approved`).
+- `specs/features/029-editar-grupo-alumno.md` (pantalla "Alumnos" del
+  portal, consumidora de `PATCH /enrollments/:id/grade`).
 
 ## Preguntas abiertas
 

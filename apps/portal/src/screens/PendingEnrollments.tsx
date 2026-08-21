@@ -1,6 +1,8 @@
+import { useId, useState } from 'react';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useOutletContext } from 'react-router';
 import { Alert } from '../components/Alert';
+import { Field, INPUT_STYLE } from '../components/Field';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -88,8 +90,20 @@ function EnrollmentRow({
   busy: boolean;
   rowErrorMessage?: string;
   rowErrorCode?: string;
-  onReview: (action: 'approve' | 'reject') => void;
+  onReview: (action: 'approve' | 'reject', gradeOrGroup?: string) => void;
 }) {
+  const fieldId = useId();
+  // ADR-083: pre-filled if the request already carries a group; editable so
+  // the institution can assign or correct it in the same step it approves —
+  // a plain text input, same criterion as DeliveryPoints' assignedGroups
+  // (ADR-012, no <select>).
+  const [gradeDraft, setGradeDraft] = useState(enrollment.gradeOrGroup ?? '');
+
+  function handleApprove() {
+    const trimmed = gradeDraft.trim();
+    onReview('approve', trimmed.length > 0 ? trimmed : undefined);
+  }
+
   return (
     <Card>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -108,12 +122,9 @@ function EnrollmentRow({
               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)' }}>
                 {enrollment.studentFullName}
               </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {enrollment.gradeOrGroup && <Badge tone="neutral">{enrollment.gradeOrGroup}</Badge>}
-                <span style={{ fontSize: 13, color: 'var(--ink-400)', fontWeight: 500 }}>
-                  Solicitud del {formatRequestedAt(enrollment.requestedAt)}
-                </span>
-              </div>
+              <span style={{ fontSize: 13, color: 'var(--ink-400)', fontWeight: 500 }}>
+                Solicitud del {formatRequestedAt(enrollment.requestedAt)}
+              </span>
             </div>
           </div>
 
@@ -141,7 +152,7 @@ function EnrollmentRow({
               variant="subtle"
               size="sm"
               disabled={!canReview || busy}
-              onClick={() => onReview('approve')}
+              onClick={handleApprove}
             >
               {busy ? 'Resolviendo…' : 'Aprobar'}
             </Button>
@@ -153,6 +164,7 @@ function EnrollmentRow({
             display: 'flex',
             gap: 28,
             flexWrap: 'wrap',
+            alignItems: 'flex-end',
             borderTop: '1px solid var(--border-hairline)',
             paddingTop: 12,
           }}
@@ -163,6 +175,25 @@ function EnrollmentRow({
               name, no email. Static placeholder instead of an invented field,
               same treatment as ADR-035. See ADR-047. */}
           <Meta label="Tutor solicitante" value="—" />
+          {/* ADR-083: assigning the group here, at approval time, is the first
+              of the two vías this feature adds — the second is the "Alumnos"
+              screen, for matrículas ya approved. */}
+          <span style={{ minWidth: 160 }}>
+            <Field
+              label="Grupo"
+              htmlFor={`${fieldId}-grade`}
+              hint={canReview ? 'Opcional. Se guarda al aprobar.' : undefined}
+            >
+              <input
+                id={`${fieldId}-grade`}
+                value={gradeDraft}
+                disabled={!canReview || busy}
+                placeholder="Sin grupo"
+                onChange={(event) => setGradeDraft(event.target.value)}
+                style={INPUT_STYLE}
+              />
+            </Field>
+          </span>
         </div>
 
         {rowErrorMessage && rowErrorCode && <Alert message={rowErrorMessage} code={rowErrorCode} />}
@@ -307,7 +338,7 @@ export function PendingEnrollments() {
               rowError?.enrollmentId === enrollment.id ? rowError.message : undefined
             }
             rowErrorCode={rowError?.enrollmentId === enrollment.id ? rowError.code : undefined}
-            onReview={(action) => review(enrollment.id, action)}
+            onReview={(action, gradeOrGroup) => review(enrollment.id, action, gradeOrGroup)}
           />
         ))}
     </div>

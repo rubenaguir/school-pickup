@@ -788,25 +788,28 @@ export class PickupsService {
   }
 
   private async resolveDeliveryPointId(enrollment: Enrollment): Promise<string | null> {
-    if (!enrollment.gradeOrGroup) {
-      return null;
+    const activePoints = await this.deliveryPointsRepository.find({
+      where: { institution: { id: enrollment.institutionId }, status: 'active' },
+      order: { createdAt: 'ASC' },
+    });
+
+    if (enrollment.gradeOrGroup) {
+      const exactMatch = activePoints.find((point) =>
+        (point.assignedGroups ?? []).includes(enrollment.gradeOrGroup as string),
+      );
+      if (exactMatch) return exactMatch.id;
     }
-    const match = await this.deliveryPointsRepository
-      .createQueryBuilder('deliveryPoint')
-      .where('deliveryPoint.institution_id = :institutionId', {
-        institutionId: enrollment.institutionId,
-      })
-      .andWhere('deliveryPoint.status = :status', { status: 'active' })
-      .andWhere(':gradeOrGroup = ANY(deliveryPoint.assigned_groups)', {
-        gradeOrGroup: enrollment.gradeOrGroup,
-      })
-      // No hay prioridad de negocio entre puntos activos que se solapan en el
-      // mismo grupo (mala configuración de la institución) — created_at ASC
-      // es un criterio arbitrario, elegido solo para que el resultado sea
-      // determinista/reproducible, no porque tenga significado de negocio.
-      .orderBy('deliveryPoint.created_at', 'ASC')
-      .getOne();
-    return match?.id ?? null;
+
+    // Atrapa-todo: cubre tanto al alumno sin grupo (gradeOrGroup === null)
+    // como al que tiene un grupo que no está configurado en ningún punto
+    // activo (typo, o reconfiguración que dejó huérfano al grupo). Único
+    // por construcción — DeliveryPointsService lo garantiza al crear/editar
+    // (assertNoGroupConflicts, ADR-083), así que no hay ambigüedad de cuál
+    // usar.
+    const catchAll = activePoints.find(
+      (point) => !point.assignedGroups || point.assignedGroups.length === 0,
+    );
+    return catchAll?.id ?? null;
   }
 
   private async insertWithUniqueDeliveryCode(

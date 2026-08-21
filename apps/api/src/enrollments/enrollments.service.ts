@@ -20,6 +20,7 @@ import {
   type User,
 } from '@casillego/shared/entities';
 import { generateUniqueEnrollmentCode } from './enrollment-code.util';
+import { ApproveEnrollmentDto } from './dto/approve-enrollment.dto';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { ListMyEnrollmentsQueryDto } from './dto/list-my-enrollments-query.dto';
 import { ListInstitutionEnrollmentsQueryDto } from './dto/list-institution-enrollments-query.dto';
@@ -31,6 +32,11 @@ import type {
   MyEnrollmentResponse,
   ReviewEnrollmentResponse,
 } from './dto/responses';
+
+const ENROLLMENT_NOT_APPROVED = {
+  code: 'ENROLLMENT_NOT_APPROVED',
+  message: 'This enrollment is not approved.',
+} as const;
 
 const NOT_STUDENT_GUARDIAN = {
   code: 'NOT_STUDENT_GUARDIAN',
@@ -167,7 +173,11 @@ export class EnrollmentsService {
     };
   }
 
-  async approve(id: string, actorUserId: string): Promise<ReviewEnrollmentResponse> {
+  async approve(
+    id: string,
+    actorUserId: string,
+    dto?: ApproveEnrollmentDto,
+  ): Promise<ReviewEnrollmentResponse> {
     const enrollment = await this.findPendingOrFail(id);
     const institution = await this.getInstitutionOrFail(enrollment.institutionId);
     if (institution.status !== 'approved') {
@@ -181,6 +191,7 @@ export class EnrollmentsService {
       enrollment.status = 'approved';
       enrollment.reviewedBy = { id: actorUserId } as User;
       enrollment.reviewedAt = new Date();
+      if (dto?.gradeOrGroup !== undefined) enrollment.gradeOrGroup = dto.gradeOrGroup;
       const saved = await enrollmentsRepo.save(enrollment);
 
       await auditRepo.save(
@@ -253,6 +264,40 @@ export class EnrollmentsService {
     }
 
     return this.toReviewResponse(saved, actorUserId);
+  }
+
+  // ADR-083: dedicated to correcting an already-approved enrollment, kept
+  // separate from approve() on purpose — approve() requires status = pending
+  // and re-sends the approval email on every call, so reusing it here to fix
+  // a typo would fire a false email. No audit_log entry either: this is an
+  // operational data correction, not an access-control decision like
+  // approve/reject/invite.
+  async updateGrade(
+    id: string,
+    actorUserId: string,
+    gradeOrGroup: string | null | undefined,
+  ): Promise<InstitutionEnrollmentListItem> {
+    const enrollment = await this.findApprovedOrFail(id);
+    if (gradeOrGroup !== undefined) enrollment.gradeOrGroup = gradeOrGroup;
+    const saved = await this.enrollmentsRepository.save(enrollment);
+    return this.toInstitutionResponse(saved);
+  }
+
+  private async findApprovedOrFail(id: string): Promise<Enrollment> {
+    const enrollment = await this.enrollmentsRepository.findOne({
+      where: { id },
+      relations: { student: true, requestedBy: true, reviewedBy: true },
+    });
+    if (!enrollment) {
+      // Defensive: InstitutionMembershipGuard's own @InstitutionResource
+      // lookup already 404s a missing id before this ever runs — same
+      // redundant-but-safe pattern as findPendingOrFail.
+      throw new NotFoundException(RESOURCE_NOT_FOUND);
+    }
+    if (enrollment.status !== 'approved') {
+      throw new ConflictException(ENROLLMENT_NOT_APPROVED);
+    }
+    return enrollment;
   }
 
   private async assertActiveGuardian(studentId: string, userId: string): Promise<void> {

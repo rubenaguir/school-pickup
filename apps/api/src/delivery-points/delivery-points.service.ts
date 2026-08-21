@@ -12,6 +12,16 @@ import { CreateDeliveryPointDto } from './dto/create-delivery-point.dto';
 import { UpdateDeliveryPointDto } from './dto/update-delivery-point.dto';
 import type { DeliveryPointResponse, ListDeliveryPointsResponse } from './dto/responses';
 
+const DUPLICATE_CATCH_ALL_DELIVERY_POINT = {
+  code: 'DUPLICATE_CATCH_ALL_DELIVERY_POINT',
+  message: 'Another active delivery point of this institution already has no assigned groups.',
+} as const;
+
+const DUPLICATE_ASSIGNED_GROUP = {
+  code: 'DUPLICATE_ASSIGNED_GROUP',
+  message: 'One or more groups are already assigned to another active delivery point.',
+} as const;
+
 @Injectable()
 export class DeliveryPointsService {
   constructor(
@@ -38,6 +48,8 @@ export class DeliveryPointsService {
   async create(institutionId: string, dto: CreateDeliveryPointDto): Promise<DeliveryPointResponse> {
     const operatorUserId = dto.operatorUserId ?? null;
     await this.assertValidOperator(institutionId, operatorUserId);
+    // Always runs: a delivery point is always born active (ADR-083).
+    await this.assertNoGroupConflicts(institutionId, dto.assignedGroups);
 
     const entity = this.deliveryPointsRepository.create({
       institution: { id: institutionId } as Institution,
@@ -71,6 +83,18 @@ export class DeliveryPointsService {
     if (dto.assignedGroups !== undefined) deliveryPoint.assignedGroups = dto.assignedGroups;
     if (dto.status !== undefined) deliveryPoint.status = dto.status;
 
+    // Runs on the *final* state (ADR-083): covers both editing assignedGroups
+    // on an already-active point and reactivating one that was inactive — it
+    // could now collide with what another point picked up while it was off.
+    // A point that ends up (or stays) inactive never triggers this.
+    if (deliveryPoint.status === 'active') {
+      await this.assertNoGroupConflicts(
+        deliveryPoint.institutionId,
+        deliveryPoint.assignedGroups,
+        id,
+      );
+    }
+
     const saved = await this.deliveryPointsRepository.save(deliveryPoint);
     return this.toResponse(saved);
   }
@@ -88,6 +112,38 @@ export class DeliveryPointsService {
         code: 'OPERATOR_NOT_INSTITUTION_MEMBER',
         message: 'operatorUserId must belong to an institution_members record of this institution.',
       });
+    }
+  }
+
+  // ADR-083: makes the catch-all point deterministic — without this, two
+  // active points could both lack assignedGroups (ambiguous atrapa-todo) or
+  // both claim the same group (ambiguous exact match) for
+  // resolveDeliveryPointId() in pickups.service.ts. Capa de servicio, no
+  // FK/trigger — mismo criterio que assertValidOperator.
+  private async assertNoGroupConflicts(
+    institutionId: string,
+    candidateGroups: string[] | null | undefined,
+    excludeId?: string,
+  ): Promise<void> {
+    const others = await this.deliveryPointsRepository.find({
+      where: { institution: { id: institutionId }, status: 'active' },
+    });
+    const otherActive = others.filter((point) => point.id !== excludeId);
+
+    const groups = candidateGroups ?? [];
+    if (groups.length === 0) {
+      const hasOtherCatchAll = otherActive.some(
+        (point) => !point.assignedGroups || point.assignedGroups.length === 0,
+      );
+      if (hasOtherCatchAll) {
+        throw new UnprocessableEntityException(DUPLICATE_CATCH_ALL_DELIVERY_POINT);
+      }
+      return;
+    }
+
+    const taken = new Set(otherActive.flatMap((point) => point.assignedGroups ?? []));
+    if (groups.some((group) => taken.has(group))) {
+      throw new UnprocessableEntityException(DUPLICATE_ASSIGNED_GROUP);
     }
   }
 

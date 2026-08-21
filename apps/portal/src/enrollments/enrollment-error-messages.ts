@@ -27,6 +27,20 @@ const REVIEW_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
 };
 
+/**
+ * Codes reachable from PATCH /enrollments/:id/grade
+ * (specs/api-contracts/enrollments.md, ADR-083). `ENROLLMENT_NOT_APPROVED`
+ * only reaches this endpoint — approve/reject answer `ENROLLMENT_NOT_PENDING`
+ * instead, a different code for a different transition.
+ */
+const GRADE_MESSAGES: Record<string, string> = {
+  ENROLLMENT_NOT_APPROVED: 'Esta matrícula ya no está aprobada; alguien más la cambió.',
+  ADMIN_ROLE_REQUIRED: 'Solo un administrador puede editar el grupo de un alumno.',
+  NOT_INSTITUTION_MEMBER: 'No perteneces a esta institución.',
+  RESOURCE_NOT_FOUND: 'Este alumno ya no existe.',
+  NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
+};
+
 const FALLBACK = 'Error desconocido';
 
 export function enrollmentListErrorMessage(code: string): string {
@@ -35,4 +49,8 @@ export function enrollmentListErrorMessage(code: string): string {
 
 export function enrollmentReviewErrorMessage(code: string): string {
   return REVIEW_MESSAGES[code] ?? FALLBACK;
+}
+
+export function enrollmentGradeErrorMessage(code: string): string {
+  return GRADE_MESSAGES[code] ?? FALLBACK;
 }

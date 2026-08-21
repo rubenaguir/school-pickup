@@ -48,6 +48,14 @@ export const INSTITUTION_PROFILE_PATH = '/institution';
 export const DELIVERY_POINTS_PATH = '/delivery-points';
 
 /**
+ * Alumnos con matrícula aprobada: buscar y corregir su `gradeOrGroup`
+ * (specs/features/029-editar-grupo-alumno.md, ADR-083). Protegida como las
+ * otras pantallas de configuración: cualquier miembro puede leer, solo
+ * `admin` puede editar.
+ */
+export const ALUMNOS_PATH = '/students';
+
+/**
  * Recurring dismissal windows and special days
  * (specs/features/010-gestionar-horarios-recurrentes.md and
  * 011-gestionar-dias-especiales.md). One route for the two entities: they are

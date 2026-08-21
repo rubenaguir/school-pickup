@@ -134,6 +134,59 @@ describe('DeliveryPointsService', () => {
 
       expect(result.operatorUserId).toBe('operator-1');
     });
+
+    // ADR-083: makes the catch-all point deterministic.
+    it('rejects with 422 DUPLICATE_CATCH_ALL_DELIVERY_POINT when another active point of the institution already has no assigned groups', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          find: vi
+            .fn()
+            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-catch-all', assignedGroups: null })]),
+        },
+      });
+
+      await expect(service.create('inst-1', { name: 'Segundo atrapa-todo' })).rejects.toMatchObject(
+        {
+          status: 422,
+          response: { code: 'DUPLICATE_CATCH_ALL_DELIVERY_POINT' },
+        },
+      );
+    });
+
+    it('rejects with 422 DUPLICATE_ASSIGNED_GROUP when a group is already assigned to another active point', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          find: vi
+            .fn()
+            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-3b', assignedGroups: ['3°B'] })]),
+        },
+      });
+
+      await expect(
+        service.create('inst-1', { name: 'Puerta duplicada', assignedGroups: ['3°B'] }),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'DUPLICATE_ASSIGNED_GROUP' },
+      });
+    });
+
+    it('an inactive point does not count toward either group-conflict check', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          // find() is stubbed to already filter by status = 'active' in real
+          // TypeORM; this test's find mock returns [] to model an inactive
+          // point never showing up in that query.
+          find: vi.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.create('inst-1', {
+        name: 'Puerta nueva',
+        assignedGroups: ['3°B'],
+      });
+
+      expect(result.assignedGroups).toEqual(['3°B']);
+    });
   });
 
   describe('update', () => {
@@ -187,6 +240,83 @@ describe('DeliveryPointsService', () => {
       const result = await service.update('dp-1', { status: 'inactive' });
 
       expect(result.status).toBe('inactive');
+    });
+
+    // ADR-083: editing assignedGroups on an already-active point runs the
+    // same conflict check as create().
+    it('rejects with 422 DUPLICATE_ASSIGNED_GROUP when editing assignedGroups on an already-active point collides with another active point', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          findOne: vi.fn().mockResolvedValue(buildDeliveryPoint({ id: 'dp-1', status: 'active' })),
+          find: vi
+            .fn()
+            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-2', assignedGroups: ['3°B'] })]),
+        },
+      });
+
+      await expect(service.update('dp-1', { assignedGroups: ['3°B'] })).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'DUPLICATE_ASSIGNED_GROUP' },
+      });
+    });
+
+    // ADR-083: reactivating a point could collide with what was configured
+    // on another point while it was off.
+    it('rejects with 422 DUPLICATE_CATCH_ALL_DELIVERY_POINT when reactivating a point whose lack of groups now collides with another point that became the catch-all meanwhile', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(
+              buildDeliveryPoint({ id: 'dp-1', status: 'inactive', assignedGroups: null }),
+            ),
+          find: vi
+            .fn()
+            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-2', assignedGroups: null })]),
+        },
+      });
+
+      await expect(service.update('dp-1', { status: 'active' })).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'DUPLICATE_CATCH_ALL_DELIVERY_POINT' },
+      });
+    });
+
+    // The point being edited must never collide with itself: assertNoGroupConflicts
+    // excludes it by id.
+    it('does not conflict with itself when its own row is included in the active set', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(
+              buildDeliveryPoint({ id: 'dp-1', status: 'active', assignedGroups: ['3°B'] }),
+            ),
+          find: vi
+            .fn()
+            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-1', assignedGroups: ['3°B'] })]),
+        },
+      });
+
+      const result = await service.update('dp-1', { name: 'Nuevo nombre' });
+
+      expect(result.name).toBe('Nuevo nombre');
+    });
+
+    it('a point that stays inactive never triggers the group-conflict check', async () => {
+      const findSpy = vi.fn().mockResolvedValue([]);
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(buildDeliveryPoint({ id: 'dp-1', status: 'inactive' })),
+          find: findSpy,
+        },
+      });
+
+      await service.update('dp-1', { assignedGroups: ['3°B'] });
+
+      expect(findSpy).not.toHaveBeenCalled();
     });
   });
 });

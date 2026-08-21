@@ -362,6 +362,33 @@ describe('EnrollmentsService', () => {
       expect(result.status).toBe('approved');
       expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
     });
+
+    // ADR-083: gradeOrGroup is optional on approve — assigning or correcting
+    // the student's group in the same step, instead of relying only on the
+    // catch-all delivery point.
+    it('assigns gradeOrGroup when the approve body includes it', async () => {
+      const { service, enrollmentsRepo } = buildService();
+
+      await service.approve('enr-1', 'admin-1', { gradeOrGroup: '3° B' });
+
+      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ gradeOrGroup: '3° B' }),
+      );
+    });
+
+    it('leaves gradeOrGroup untouched when the approve body omits it', async () => {
+      const { service, enrollmentsRepo } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '1A' })),
+        },
+      });
+
+      await service.approve('enr-1', 'admin-1');
+
+      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ gradeOrGroup: '1A' }),
+      );
+    });
   });
 
   describe('reject', () => {
@@ -398,6 +425,102 @@ describe('EnrollmentsService', () => {
       await expect(service.reject('enr-1', 'admin-1')).rejects.toMatchObject({
         status: 409,
         response: { code: 'ENROLLMENT_NOT_PENDING' },
+      });
+    });
+  });
+
+  describe('updateGrade', () => {
+    it('corrects gradeOrGroup on an approved enrollment', async () => {
+      const { service, enrollmentsRepo } = buildService({
+        enrollments: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(buildEnrollment({ status: 'approved', gradeOrGroup: '1A' })),
+        },
+      });
+
+      const result = await service.updateGrade('enr-1', 'admin-1', '2A');
+
+      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ gradeOrGroup: '2A' }),
+      );
+      expect(result).toMatchObject({ id: 'enr-1', status: 'approved', gradeOrGroup: '2A' });
+    });
+
+    it('accepts null to clear the group', async () => {
+      const { service, enrollmentsRepo } = buildService({
+        enrollments: {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(buildEnrollment({ status: 'approved', gradeOrGroup: '1A' })),
+        },
+      });
+
+      await service.updateGrade('enr-1', 'admin-1', null);
+
+      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ gradeOrGroup: null }),
+      );
+    });
+
+    it('does not write an audit_log entry', async () => {
+      const { service, auditRepo } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+      });
+
+      await service.updateGrade('enr-1', 'admin-1', '2A');
+
+      expect(auditRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('does not send an email', async () => {
+      const { service, emailProvider } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+      });
+
+      await service.updateGrade('enr-1', 'admin-1', '2A');
+
+      expect(emailProvider.send).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND when the enrollment does not exist', async () => {
+      const { service } = buildService({
+        enrollments: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.updateGrade('missing', 'admin-1', '2A')).rejects.toMatchObject({
+        status: 404,
+        response: { code: 'RESOURCE_NOT_FOUND' },
+      });
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_APPROVED when the enrollment is still pending', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'pending' })),
+        },
+      });
+
+      await expect(service.updateGrade('enr-1', 'admin-1', '2A')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'ENROLLMENT_NOT_APPROVED' },
+      });
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_APPROVED when the enrollment is rejected (terminal)', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'rejected' })),
+        },
+      });
+
+      await expect(service.updateGrade('enr-1', 'admin-1', '2A')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'ENROLLMENT_NOT_APPROVED' },
       });
     });
   });

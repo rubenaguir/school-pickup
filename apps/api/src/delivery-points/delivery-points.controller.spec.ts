@@ -172,7 +172,15 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
     deliveryPoints = new Map([
       [
         'dp-a1',
-        buildDeliveryPointRecord({ id: 'dp-a1', institutionId: 'inst-a', name: 'Puerta A1' }),
+        // assignedGroups set (ADR-083): otherwise dp-a1 is itself the
+        // institution's catch-all, and every test below that creates a
+        // second groupless point would collide with it.
+        buildDeliveryPointRecord({
+          id: 'dp-a1',
+          institutionId: 'inst-a',
+          name: 'Puerta A1',
+          assignedGroups: ['A'],
+        }),
       ],
       [
         'dp-b1',

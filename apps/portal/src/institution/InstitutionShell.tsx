@@ -7,6 +7,7 @@ import { roleLabel } from './institution-labels';
 import { useInstitution } from './InstitutionContext';
 import { Icon, type IconName } from './icons';
 import {
+  ALUMNOS_PATH,
   DASHBOARD_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
@@ -23,10 +24,11 @@ interface NavEntry {
   icon: IconName;
 }
 
-/** 7 items (ADR-072 point 2) — not the kit's 6: "Puntos de entrega" keeps its own screen. */
+/** 8 items (ADR-072 point 2, ADR-083) — "Alumnos" es el octavo, para buscar y corregir el grupo de matrículas ya aprobadas. */
 const NAV: readonly NavEntry[] = [
   { path: DASHBOARD_PATH, label: 'Dashboard', icon: 'grid' },
   { path: PENDING_ENROLLMENTS_PATH, label: 'Aprobaciones', icon: 'inbox' },
+  { path: ALUMNOS_PATH, label: 'Alumnos', icon: 'student' },
   { path: INSTITUTION_PROFILE_PATH, label: 'Institución', icon: 'school' },
   { path: DELIVERY_POINTS_PATH, label: 'Puntos de entrega', icon: 'pin' },
   { path: DISMISSAL_SCHEDULE_PATH, label: 'Horarios', icon: 'clock' },

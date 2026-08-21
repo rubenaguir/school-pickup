@@ -12,7 +12,7 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
-  'inbox' | 'users' | 'grid' | 'school' | 'clock' | 'chart' | 'pin' | 'building';
+  'inbox' | 'users' | 'grid' | 'school' | 'clock' | 'chart' | 'pin' | 'building' | 'student';
 
 interface IconProps {
   name: IconName;
@@ -91,6 +91,16 @@ export function Icon({ name, size = 20 }: IconProps) {
         <path d="M3 3v18h18" />
         <rect x={7} y={11} width={3} height={6} rx={1} />
         <rect x={13} y={7} width={3} height={10} rx={1} />
+      </svg>
+    );
+  }
+
+  if (name === 'student') {
+    return (
+      <svg {...props}>
+        <path d="M2 9 12 4l10 5-10 5-10-5z" />
+        <path d="M6 11.5V16c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5" />
+        <path d="M22 9v6" />
       </svg>
     );
   }

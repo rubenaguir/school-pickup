@@ -29,6 +29,12 @@ const SAVE_MESSAGES: Record<string, string> = {
   RESOURCE_NOT_FOUND: 'Este punto de entrega ya no existe.',
   INVALID_PAYLOAD: 'Revisa los datos del formulario: alguno no tiene el formato esperado.',
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
+  // ADR-083: hacen determinista al punto atrapa-todo — se validan en capa de
+  // servicio, mismo criterio que OPERATOR_NOT_INSTITUTION_MEMBER.
+  DUPLICATE_CATCH_ALL_DELIVERY_POINT:
+    'Ya existe otro punto activo sin grupos asignados. Solo puede haber uno: es el que recibe a los alumnos sin grupo.',
+  DUPLICATE_ASSIGNED_GROUP:
+    'Uno o más de estos grupos ya están asignados a otro punto activo. Quítalos de ahí primero.',
 };
 
 // Los códigos de GET /institutions/:id/members —la fuente del selector de

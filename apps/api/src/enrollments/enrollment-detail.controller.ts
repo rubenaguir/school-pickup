@@ -1,11 +1,13 @@
-import { Controller, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
 import { InstitutionResource } from '../auth/guards/institution-resource.decorator';
 import { Enrollment, type InstitutionMember } from '@casillego/shared/entities';
 import { EnrollmentsService } from './enrollments.service';
 import { assertAdmin } from './assert-admin.util';
-import type { ReviewEnrollmentResponse } from './dto/responses';
+import { ApproveEnrollmentDto } from './dto/approve-enrollment.dto';
+import { UpdateEnrollmentGradeDto } from './dto/update-enrollment-grade.dto';
+import type { InstitutionEnrollmentListItem, ReviewEnrollmentResponse } from './dto/responses';
 
 interface AuthenticatedRequest {
   user: { sub: string };
@@ -33,10 +35,11 @@ export class EnrollmentsDetailController {
   @Patch(':id/approve')
   approve(
     @Param('id') id: string,
+    @Body() dto: ApproveEnrollmentDto,
     @Req() request: AuthenticatedRequest & InstitutionScopedRequest,
   ): Promise<ReviewEnrollmentResponse> {
     assertAdmin(request);
-    return this.enrollmentsService.approve(id, request.user.sub);
+    return this.enrollmentsService.approve(id, request.user.sub, dto);
   }
 
   @UseGuards(InstitutionMembershipGuard)
@@ -48,5 +51,17 @@ export class EnrollmentsDetailController {
   ): Promise<ReviewEnrollmentResponse> {
     assertAdmin(request);
     return this.enrollmentsService.reject(id, request.user.sub);
+  }
+
+  @UseGuards(InstitutionMembershipGuard)
+  @InstitutionResource(ENROLLMENT_RESOURCE)
+  @Patch(':id/grade')
+  updateGrade(
+    @Param('id') id: string,
+    @Body() dto: UpdateEnrollmentGradeDto,
+    @Req() request: AuthenticatedRequest & InstitutionScopedRequest,
+  ): Promise<InstitutionEnrollmentListItem> {
+    assertAdmin(request);
+    return this.enrollmentsService.updateGrade(id, request.user.sub, dto.gradeOrGroup);
   }
 }

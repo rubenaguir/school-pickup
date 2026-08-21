@@ -62,38 +62,18 @@ interface FakeDeliveryPoint {
   createdAt: Date;
 }
 
-// Mirrors the real query in resolveDeliveryPointId (institution + status +
-// grade-or-group containment, oldest created_at first) by reading the
-// params actually passed to where()/andWhere() — a fixed-result stub
-// couldn't distinguish "filtered out by status" from "no match at all",
-// which is exactly what these tests need to tell apart.
+// Mirrors the real query in resolveDeliveryPointId (institution + status,
+// ordered by oldest created_at) — ADR-083 replaced the createQueryBuilder
+// call with a plain find() over the institution's active points, with the
+// group match resolved in memory afterwards.
 function buildDeliveryPointsRepo(deliveryPoints: FakeDeliveryPoint[]) {
   return {
-    createQueryBuilder: vi.fn(() => {
-      let institutionId: string | undefined;
-      let status: string | undefined;
-      let gradeOrGroup: string | undefined;
-      const qb = {
-        where: vi.fn((_sql: string, params: Record<string, string>) => {
-          institutionId = params.institutionId;
-          return qb;
-        }),
-        andWhere: vi.fn((_sql: string, params: Record<string, string>) => {
-          if (params.status !== undefined) status = params.status;
-          if (params.gradeOrGroup !== undefined) gradeOrGroup = params.gradeOrGroup;
-          return qb;
-        }),
-        orderBy: vi.fn(() => qb),
-        getOne: vi.fn(() => {
-          const matches = deliveryPoints
-            .filter((dp) => dp.institutionId === institutionId)
-            .filter((dp) => status === undefined || dp.status === status)
-            .filter((dp) => gradeOrGroup === undefined || dp.assignedGroups.includes(gradeOrGroup))
-            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-          return Promise.resolve(matches[0] ?? null);
-        }),
-      };
-      return qb;
+    find: vi.fn(({ where }: { where: { institution: { id: string }; status: string } }) => {
+      const matches = deliveryPoints
+        .filter((dp) => dp.institutionId === where.institution.id)
+        .filter((dp) => dp.status === where.status)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return Promise.resolve(matches);
     }),
   };
 }
@@ -457,6 +437,60 @@ describe('PickupsService', () => {
       const result = await service.create('user-1', { enrollmentId: 'enr-1' });
 
       expect(result.deliveryPointId).toBe('dp-older');
+    });
+
+    // ADR-083: a group that no active point covers (typo, or the point was
+    // reconfigured to stop covering it) falls back to the catch-all instead
+    // of leaving delivery_point_id null.
+    it('falls back to the catch-all point when the group matches no active point (ADR-083)', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: 'huérfano' })),
+        },
+        deliveryPoints: [
+          {
+            id: 'dp-grouped',
+            institutionId: 'inst-1',
+            status: 'active',
+            assignedGroups: ['3°B'],
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          },
+          {
+            id: 'dp-catch-all',
+            institutionId: 'inst-1',
+            status: 'active',
+            assignedGroups: [],
+            createdAt: new Date('2026-01-02T00:00:00.000Z'),
+          },
+        ],
+      });
+
+      const result = await service.create('user-1', { enrollmentId: 'enr-1' });
+
+      expect(result.deliveryPointId).toBe('dp-catch-all');
+    });
+
+    // ADR-083: an ungrouped student (institutions without real groups, e.g.
+    // a single-point taekwondo school) is exactly the catch-all's purpose.
+    it('falls back to the catch-all point when the student has no group at all (ADR-083)', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: null })),
+        },
+        deliveryPoints: [
+          {
+            id: 'dp-catch-all',
+            institutionId: 'inst-1',
+            status: 'active',
+            assignedGroups: [],
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        ],
+      });
+
+      const result = await service.create('user-1', { enrollmentId: 'enr-1' });
+
+      expect(result.deliveryPointId).toBe('dp-catch-all');
     });
 
     it('creates a walking pickup request with no delivery point when the institution has none configured', async () => {
