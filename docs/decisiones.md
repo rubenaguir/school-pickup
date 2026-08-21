@@ -6333,3 +6333,227 @@ tocado.
 - `design/casillego-design-system/ui_kits/app-padre/index.html` (mockup
   estático de referencia, confirma que el logo es el mismo asset en los 5
   kits del design system).
+
+## ADR-084 — Catálogo de grupos (`institution_groups`) con FK, reemplaza el texto libre de `assigned_groups`/`grade_or_group`
+
+**Contexto.** Pendiente desde ADR-083 (observación del humano: reconfigurar
+un punto de entrega — ej. "1A" deja de estar ahí y pasa a otro punto — deja
+huérfanas en silencio a las matrículas que apuntaban al nombre anterior,
+sin aviso ni forma de detectarlo). ADR-012 ya sabía que tomaba este riesgo
+al elegir texto libre; este ADR construye el catálogo curado que en su
+momento se decidió posponer.
+
+Antes de diseñar, se mapeó el radio de impacto real contra el código —
+resultó ser mayor que "dos entidades, una migración": **más de 25
+archivos** leen `gradeOrGroup`/`assignedGroups` solo para mostrarlos
+(payload MQTT/WS de tiempo real usado por `board`/`board-monitor`/
+`delivery-point-queue`/`pickup-request-tracking`, el panel "Por nivel" del
+dashboard, reportes de puntualidad, la vista del tutor en `apps/parent`,
+filas de tablero y consola de puerta). Solo un puñado de lugares
+**escriben o validan** el valor: los tres DTOs de `enrollments`/
+`delivery-points`, `resolveDeliveryPointId()`, y
+`assertNoGroupConflicts()` (ambos en ADR-083).
+
+**Decisión.**
+
+### 1. Principio de diseño: el catálogo con FK resuelve la fragilidad solo en la escritura
+
+Las respuestas de API **siguen exponiendo** `gradeOrGroup: string | null` en
+`enrollments` y `assignedGroups: string[] | null` en `delivery_points` —
+resueltas por join al nombre del catálogo, no por columna de texto. Cero
+cambio en los ~20 archivos que solo leen y muestran el valor (payloads
+WS, dashboard, reportes, tablero, consola de puerta, vista del tutor). El
+cambio real de modelo de datos y de contrato de escritura queda acotado a
+los DTOs de creación/edición y a la lógica de matching/validación de
+ADR-083.
+
+### 2. Entidad nueva `InstitutionGroup` (`institution_groups`)
+
+```ts
+@Entity('institution_groups')
+@Index('IDX_institution_groups_name_ci', ['institution', 'name'], {
+  unique: true,
+  // Funcional, sobre lower(name) — case-insensitive a propósito: el punto
+  // de este catálogo es eliminar la clase de ambigüedad "1A" vs "1a" que
+  // el texto libre permitía. Ver migración, punto 6.
+})
+export class InstitutionGroup {
+  id: uuid (PK)
+  institution: Institution (@ManyToOne, onDelete: 'CASCADE')
+  institutionId: string (@RelationId, mismo patrón ADR-044/ADR-029)
+  name: varchar(100)
+  createdAt: timestamptz
+}
+```
+
+`Institution` gana `@OneToMany(() => InstitutionGroup, ...)`, mismo patrón
+que sus otras relaciones (`deliveryPoints`, `enrollments`, etc.).
+
+### 3. `enrollments`: `grade_or_group` (texto) → `group_id` (FK)
+
+- Columna nueva `group_id uuid nullable`, FK → `institution_groups.id`,
+  `ON DELETE SET NULL` — coincide con la decisión confirmada: borrar un
+  grupo deja sin grupo a lo que lo usaba, no lo bloquea.
+- `grade_or_group` se elimina de la tabla. La entidad TypeORM ya no la
+  expone.
+- **La respuesta de API no cambia de nombre**: `EnrollmentsService` sigue
+  devolviendo `gradeOrGroup: string | null` en `toResponse()`/
+  `toInstitutionResponse()`, ahora resuelto desde `enrollment.group?.name
+  ?? null` (relación cargada, no columna).
+
+### 4. `delivery_points`: `assigned_groups` (array de texto) → tabla de relación `delivery_point_groups`
+
+Mismo criterio de tabla de relación que `student_guardians` (el precedente
+ya existente en el proyecto), pero sin columnas adicionales — solo dos FK:
+
+```ts
+@Entity('delivery_point_groups')
+export class DeliveryPointGroup {
+  deliveryPoint: DeliveryPoint (@ManyToOne, onDelete: 'CASCADE', parte de la PK compuesta)
+  group: InstitutionGroup (@ManyToOne, onDelete: 'CASCADE', parte de la PK compuesta)
+}
+```
+
+`assigned_groups` (columna y su índice GIN) se elimina. La respuesta de
+`DeliveryPointsService` sigue devolviendo `assignedGroups: string[] |
+null`, resuelto por join a los nombres de los grupos relacionados.
+
+### 5. Matching y validación (ADR-083) pasan a comparar IDs, no strings
+
+- `resolveDeliveryPointId()`: el match exacto ahora compara
+  `enrollment.groupId` contra las filas de `delivery_point_groups` de los
+  puntos activos — comparación de UUID, ya no de texto. El atrapa-todo
+  sigue siendo el único punto activo sin ninguna fila en
+  `delivery_point_groups`. Mejora real, no solo paridad: elimina cualquier
+  riesgo de mayúsculas/espacios que el texto libre permitía.
+- `assertNoGroupConflicts()`: misma lógica de ADR-083 (máximo un
+  atrapa-todo activo, ningún grupo repetido entre puntos activos), ahora
+  sobre `groupIds: string[]` en vez de `assignedGroups: string[] | null`.
+
+### 6. Endpoints nuevos — CRUD del catálogo (`InstitutionGroupsController`)
+
+Mismo criterio de autorización que `delivery-points` (ADR-022 punto 1):
+lectura para cualquier `institution_members`, escritura (`POST`/`PATCH`/
+`DELETE`) restringida a `role = admin`.
+
+- `GET /institutions/:id/groups` — lista con conteo de uso:
+  `{ id, name, enrollmentsCount, deliveryPointsCount }[]`. Los conteos
+  alimentan tanto la pantalla "Grupos" como la advertencia de borrado.
+- `POST /institutions/:id/groups` — `{ name: string }`, `name` se
+  recorta (`trim`) y se valida contra el índice único case-insensitive →
+  422 `DUPLICATE_GROUP_NAME` si ya existe (con cualquier capitalización).
+- `PATCH /groups/:id` — renombrar, misma validación de unicidad.
+- `DELETE /groups/:id` — **requiere confirmación explícita si el grupo
+  está en uso**, decisión confirmada con el humano:
+  1. Sin `?confirm=true`: si `enrollmentsCount > 0` o
+     `deliveryPointsCount > 0`, responde 409 `GROUP_IN_USE` con
+     `{ enrollmentsCount, deliveryPointsCount }` — el frontend arma la
+     advertencia ("N alumnos y M puntos de entrega se quedarán sin este
+     grupo") a partir de esos números, no los inventa.
+  2. Con `?confirm=true` (o si el grupo no está en uso, sin necesidad de
+     confirmar): procede. El `ON DELETE SET NULL`/`CASCADE` del punto 3/4
+     hace el resto — el service solo borra la fila del catálogo, no
+     escribe él mismo los `NULL` ni borra las filas de
+     `delivery_point_groups` a mano.
+
+### 7. DTOs de escritura existentes — de texto libre a `groupId`/`groupIds`
+
+Cambio de contrato deliberado, no un descuido — el propio campo pasó de
+texto libre a referencia real, así que se renombra para reflejarlo:
+
+- `ApproveEnrollmentDto.gradeOrGroup?: string | null` →
+  `groupId?: string | null` (`@IsUUID`).
+- `UpdateEnrollmentGradeDto` → **`UpdateEnrollmentGroupDto`**, mismo
+  campo `groupId?: string | null`. El endpoint se renombra
+  `PATCH /enrollments/:id/grade` → `PATCH /enrollments/:id/group` —
+  coherente con que ya no es "un grado", es una referencia a un grupo del
+  catálogo. `specs/features/029-editar-grupo-alumno.md` se actualiza para
+  reflejar el nombre nuevo.
+- `CreateDeliveryPointDto`/`UpdateDeliveryPointDto.assignedGroups?:
+  string[]` → `groupIds?: string[]` (`@IsUUID({ each: true })`).
+- Los tres, en el service correspondiente, validan que cada `groupId`
+  pertenezca a la misma institución que el recurso — mismo criterio de
+  validación cruzada en capa de servicio que ya usa `operatorUserId`
+  (ADR-017/018) — 422 `GROUP_NOT_IN_INSTITUTION` si no.
+
+### 8. Frontend — pantalla "Grupos" + autocompletar-o-crear en los inputs existentes
+
+Decisión confirmada con el humano: ambas cosas, no una sola.
+
+- **Pantalla nueva `apps/portal/src/screens/Groups.tsx`** — lista de
+  grupos con sus conteos de uso, crear, renombrar inline, borrar con el
+  flujo de confirmación del punto 6. Ruta nueva, entrada nueva en `NAV`
+  (9 ítems), ícono nuevo en `icons.tsx`.
+- **`DeliveryPoints.tsx`**: el input de chips de texto libre para
+  `assignedGroups` se convierte en un autocompletar-o-crear sobre
+  `useInstitutionGroups(institutionId)` — al escribir un nombre que no
+  matchea ningún grupo existente, aparece la opción "Crear grupo
+  '{texto}'"; seleccionarla llama `POST /institutions/:id/groups` de
+  inmediato (no se batch-crea al guardar el punto de entrega) y añade el
+  `id` resultante a la lista de chips, igual que hoy se añade un chip de
+  texto.
+- **`PendingEnrollments.tsx`/`Students.tsx`**: mismo tratamiento,
+  autocompletar-o-crear de un solo valor en vez del `<input>` de texto
+  libre actual.
+
+### 9. Migración: una sola, con backfill incluido
+
+`typeorm migration:generate` no basta aquí — hay una transformación de
+datos real, no solo DDL. Pasos, en una sola migración (transaccional):
+
+1. `CREATE TABLE institution_groups` + índice único funcional sobre
+   `(institution_id, lower(name))`.
+2. Backfill: por cada `institution_id`, unión de valores distintos de
+   `enrollments.grade_or_group` **y** `unnest(delivery_points.assigned_groups)`
+   — ambas fuentes alimentan el mismo catálogo por institución, no
+   catálogos separados. Deduplicación **case-insensitive** confirmada por
+   el humano (mismo criterio que el índice único): si "1A" y "1a" existen
+   ambos hoy para la misma institución en cualquiera de las dos fuentes,
+   se conserva una sola fila (la de aparición determinista más temprana,
+   ej. por `id` de la fuente), no se inventa una regla de fusión más allá
+   de eso. Reportar en el log de la migración cuántas colisiones de este
+   tipo se resolvieron, para revisión posterior si el número es alto.
+3. `ALTER TABLE enrollments ADD COLUMN group_id uuid`; `UPDATE` uniendo
+   por `institution_id` + `lower(name) = lower(grade_or_group)`; `ADD
+   CONSTRAINT ... FOREIGN KEY ... ON DELETE SET NULL`; `DROP COLUMN
+   grade_or_group`.
+4. `CREATE TABLE delivery_point_groups` (PK compuesta, dos FK `ON DELETE
+   CASCADE`); backfill uniendo `unnest(assigned_groups)` contra el
+   catálogo ya poblado; `DROP INDEX` GIN; `ALTER TABLE delivery_points
+   DROP COLUMN assigned_groups`.
+5. **Verificación de sanidad obligatoria** antes de considerar la
+   migración terminada (no solo que corra sin error): el conteo de
+   `enrollments` con `grade_or_group IS NOT NULL` antes debe igualar el
+   conteo con `group_id IS NOT NULL` después; el conteo de
+   `delivery_points` con `assigned_groups IS NOT NULL` antes debe igualar
+   el conteo de `delivery_point_id` distintos en `delivery_point_groups`
+   después. Si no coinciden, la migración se revisa antes de aplicar en
+   ambientes reales — no se asume que "corrió" significa "correcta".
+
+**Consecuencias.** Elimina la clase de bug que motivó ADR-083 punto 2:
+renombrar/reconfigurar un grupo ahora es una operación atómica sobre el
+catálogo (una fila), no una edición de texto dispersa en N lugares
+desconectados. El radio de cambio real queda acotado a escritura/matching
+— ningún consumidor de solo lectura (WS, dashboard, reportes, tablero,
+consola, vista del tutor) se toca. Los dos endpoints de escritura de
+`enrollments` cambian de contrato (`gradeOrGroup`→`groupId`,
+`/grade`→`/group`) — aceptable porque son de ADR-083, todavía sin uso real
+en producción. Migración con backfill, no reversible con datos si "1A"/"1a"
+colisionaron y se fusionaron — el reporte de colisiones del punto 9.2 es
+la única red de seguridad para detectarlo antes de que nadie lo note.
+
+## Referencias
+
+- ADR-012 (decisión original de texto libre, con el riesgo ya declarado).
+- ADR-083 (el caso real de mantenimiento que confirmó el riesgo; DTOs y
+  lógica de matching/validación que este ADR reescribe sobre IDs).
+- `packages/shared/src/entities/student-guardian.entity.ts` (precedente
+  de tabla de relación, seguido para `delivery_point_groups`).
+- ADR-017/018 (validación cruzada en capa de servicio — mismo criterio
+  para `groupId pertenece a la institución del recurso`).
+- ADR-022 punto 1 (rol `admin` para escritura, lectura abierta a
+  cualquier miembro — mismo criterio para el CRUD de grupos).
+- ADR-029/044 (`@RelationId`, mismo mecanismo para `institutionId` en la
+  entidad nueva).
+- `specs/features/029-editar-grupo-alumno.md` (se actualiza: el endpoint
+  y el campo cambian de nombre).
