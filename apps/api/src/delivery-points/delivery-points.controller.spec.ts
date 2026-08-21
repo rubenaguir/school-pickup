@@ -13,7 +13,12 @@ import { DeliveryPointsDetailController } from './delivery-point-detail.controll
 import { DeliveryPointsService } from './delivery-points.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { DeliveryPoint, InstitutionMember } from '@casillego/shared/entities';
+import {
+  DeliveryPoint,
+  DeliveryPointGroup,
+  InstitutionGroup,
+  InstitutionMember,
+} from '@casillego/shared/entities';
 
 interface DeliveryPointRecord {
   id: string;
@@ -22,7 +27,6 @@ interface DeliveryPointRecord {
   name: string;
   description: string | null;
   operator: { id: string } | null;
-  assignedGroups: string[] | null;
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
@@ -52,7 +56,6 @@ function buildDeliveryPointRecord(
     name: 'Puerta principal',
     description: null,
     operator: null,
-    assignedGroups: null,
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -65,7 +68,20 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
   let app: INestApplication;
   let server: Server;
   let deliveryPoints: Map<string, DeliveryPointRecord>;
+  // Denormalized delivery_point_groups membership (ADR-084): id -> set of
+  // groupIds. Kept separate from `deliveryPoints` because the real service
+  // manages the join table through its own repository, not through
+  // DeliveryPoint.save().
+  let groupMemberships: Map<string, Set<string>>;
   let members: MemberRecord[];
+
+  function withGroups(record: DeliveryPointRecord) {
+    const groupIds = [...(groupMemberships.get(record.id) ?? [])];
+    return {
+      ...record,
+      deliveryPointGroups: groupIds.map((groupId) => ({ groupId, group: { name: groupId } })),
+    };
+  }
 
   beforeAll(async () => {
     const deliveryPointsRepo = {
@@ -75,11 +91,11 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
             record.institutionId === where.institution.id &&
             (!where.status || record.status === where.status),
         );
-        return Promise.resolve(results.map((record) => ({ ...record })));
+        return Promise.resolve(results.map((record) => withGroups(record)));
       }),
       findOne: vi.fn(({ where }: { where: { id: string } }) => {
         const record = deliveryPoints.get(where.id);
-        return Promise.resolve(record ? { ...record } : null);
+        return Promise.resolve(record ? withGroups(record) : null);
       }),
       create: vi.fn((partial: Partial<DeliveryPointRecord>) => ({ ...partial })),
       save: vi.fn((entity: Partial<DeliveryPointRecord> & { institution?: { id: string } }) => {
@@ -92,14 +108,32 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
           name: entity.name ?? '',
           description: entity.description ?? null,
           operator: entity.operator ?? null,
-          assignedGroups: entity.assignedGroups ?? null,
           status: entity.status ?? 'active',
           createdAt: entity.createdAt ?? new Date(),
           updatedAt: new Date(),
         };
         deliveryPoints.set(id, stored);
-        return Promise.resolve({ ...stored });
+        return Promise.resolve(withGroups(stored));
       }),
+    };
+
+    const institutionGroupsRepo = { find: vi.fn() };
+    const deliveryPointGroupsRepo = {
+      create: vi.fn((partial: unknown) => partial),
+      delete: vi.fn(({ deliveryPoint }: { deliveryPoint: { id: string } }) => {
+        groupMemberships.delete(deliveryPoint.id);
+        return Promise.resolve({ affected: 0 });
+      }),
+      save: vi.fn(
+        (rows: { deliveryPoint: { id: string }; group: { id: string } }[] | undefined) => {
+          for (const row of rows ?? []) {
+            const set = groupMemberships.get(row.deliveryPoint.id) ?? new Set<string>();
+            set.add(row.group.id);
+            groupMemberships.set(row.deliveryPoint.id, set);
+          }
+          return Promise.resolve(rows ?? []);
+        },
+      ),
     };
 
     const membersRepo = {
@@ -140,6 +174,8 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
         Reflector,
         { provide: getRepositoryToken(DeliveryPoint), useValue: deliveryPointsRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: membersRepo },
+        { provide: getRepositoryToken(InstitutionGroup), useValue: institutionGroupsRepo },
+        { provide: getRepositoryToken(DeliveryPointGroup), useValue: deliveryPointGroupsRepo },
         { provide: DataSource, useValue: fakeDataSource },
       ],
     })
@@ -172,21 +208,17 @@ describe('DeliveryPointsController / DeliveryPointsDetailController (HTTP)', () 
     deliveryPoints = new Map([
       [
         'dp-a1',
-        // assignedGroups set (ADR-083): otherwise dp-a1 is itself the
-        // institution's catch-all, and every test below that creates a
-        // second groupless point would collide with it.
-        buildDeliveryPointRecord({
-          id: 'dp-a1',
-          institutionId: 'inst-a',
-          name: 'Puerta A1',
-          assignedGroups: ['A'],
-        }),
+        buildDeliveryPointRecord({ id: 'dp-a1', institutionId: 'inst-a', name: 'Puerta A1' }),
       ],
       [
         'dp-b1',
         buildDeliveryPointRecord({ id: 'dp-b1', institutionId: 'inst-b', name: 'Puerta B1' }),
       ],
     ]);
+    // dp-a1 has a group (ADR-084): otherwise it is itself the institution's
+    // catch-all, and every test below that creates a second groupless point
+    // would collide with it.
+    groupMemberships = new Map([['dp-a1', new Set(['group-A'])]]);
     members = [
       {
         id: 'member-admin-a',

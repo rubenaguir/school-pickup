@@ -19,8 +19,8 @@ export class UpdateDeliveryPointDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  assignedGroups?: string[];
+  @IsUUID(undefined, { each: true })
+  groupIds?: string[];
 
   @IsOptional()
   @IsIn(DELIVERY_POINT_STATUS_VALUES)

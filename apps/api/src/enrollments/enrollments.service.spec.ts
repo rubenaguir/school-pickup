@@ -4,6 +4,7 @@ import {
   Enrollment,
   AuditLog,
   type Institution,
+  type InstitutionGroup,
   type Student,
   type User,
 } from '@casillego/shared/entities';
@@ -20,6 +21,10 @@ function buildInstitution(overrides?: Partial<Institution>): Institution {
   } as Institution;
 }
 
+function buildGroup(id: string, name: string): InstitutionGroup {
+  return { id, institutionId: 'inst-1', name, createdAt: new Date() } as InstitutionGroup;
+}
+
 function buildEnrollment(overrides?: Partial<Enrollment>): Enrollment {
   return {
     id: 'enr-1',
@@ -27,7 +32,7 @@ function buildEnrollment(overrides?: Partial<Enrollment>): Enrollment {
     institutionId: 'inst-1',
     institution: buildInstitution(),
     status: 'pending',
-    gradeOrGroup: null,
+    group: null,
     enrollmentCode: 'ENR-ABCD1234',
     requestedBy: { id: 'user-1', email: 'tutor@example.com' } as User,
     reviewedBy: null,
@@ -42,6 +47,7 @@ function buildService(overrides?: {
   institutions?: Partial<Record<'findOne' | 'findOneBy', unknown>>;
   studentGuardians?: Partial<Record<'find' | 'exists', unknown>>;
   institutionMembers?: Partial<Record<'exists', unknown>>;
+  institutionGroups?: Partial<Record<'findOne', unknown>>;
   dataSource?: Partial<Record<'transaction', unknown>>;
   emailProvider?: Partial<Record<'send', unknown>>;
 }) {
@@ -66,6 +72,16 @@ function buildService(overrides?: {
   const institutionMembersRepo = {
     exists: vi.fn().mockResolvedValue(true),
     ...overrides?.institutionMembers,
+  };
+  // Resolves any requested groupId as belonging to inst-1 by default, naming
+  // the group after its id — tests asserting a specific group name build one
+  // with buildGroup() and override this mock; tests asserting the 422
+  // GROUP_NOT_IN_INSTITUTION rejection override it to resolve null.
+  const institutionGroupsRepo = {
+    findOne: vi.fn(({ where }: { where: { id: string } }) =>
+      Promise.resolve(buildGroup(where.id, where.id)),
+    ),
+    ...overrides?.institutionGroups,
   };
   const auditRepo = {
     create: vi.fn((partial: object) => ({ ...partial })),
@@ -94,6 +110,7 @@ function buildService(overrides?: {
     institutionsRepo as never,
     studentGuardiansRepo as never,
     institutionMembersRepo as never,
+    institutionGroupsRepo as never,
     dataSource as never,
     emailProvider as never,
   );
@@ -103,6 +120,7 @@ function buildService(overrides?: {
     institutionsRepo,
     studentGuardiansRepo,
     institutionMembersRepo,
+    institutionGroupsRepo,
     auditRepo,
     dataSource,
     emailProvider,
@@ -363,31 +381,46 @@ describe('EnrollmentsService', () => {
       expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
     });
 
-    // ADR-083: gradeOrGroup is optional on approve — assigning or correcting
-    // the student's group in the same step, instead of relying only on the
-    // catch-all delivery point.
-    it('assigns gradeOrGroup when the approve body includes it', async () => {
+    // ADR-083: groupId is optional on approve — assigning or correcting the
+    // student's group in the same step, instead of relying only on the
+    // catch-all delivery point. Renamed from gradeOrGroup (ADR-084): the
+    // field is a catalog reference now, not free text.
+    it('assigns the resolved group when the approve body includes a groupId', async () => {
       const { service, enrollmentsRepo } = buildService();
 
-      await service.approve('enr-1', 'admin-1', { gradeOrGroup: '3° B' });
+      await service.approve('enr-1', 'admin-1', { groupId: 'group-3b' });
 
-      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ gradeOrGroup: '3° B' }),
-      );
+      expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
+      const saved = (enrollmentsRepo.save as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Partial<Enrollment>;
+      expect(saved.group?.id).toBe('group-3b');
     });
 
-    it('leaves gradeOrGroup untouched when the approve body omits it', async () => {
+    it('leaves the group untouched when the approve body omits groupId', async () => {
       const { service, enrollmentsRepo } = buildService({
         enrollments: {
-          findOne: vi.fn().mockResolvedValue(buildEnrollment({ gradeOrGroup: '1A' })),
+          findOne: vi
+            .fn()
+            .mockResolvedValue(buildEnrollment({ group: buildGroup('group-1a', '1A') })),
         },
       });
 
       await service.approve('enr-1', 'admin-1');
 
-      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ gradeOrGroup: '1A' }),
-      );
+      expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
+      const saved = (enrollmentsRepo.save as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Partial<Enrollment>;
+      expect(saved.group?.id).toBe('group-1a');
+    });
+
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when groupId does not belong to the enrollment institution', async () => {
+      const { service } = buildService({
+        institutionGroups: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.approve('enr-1', 'admin-1', { groupId: 'foreign-group' }),
+      ).rejects.toMatchObject({ status: 422, response: { code: 'GROUP_NOT_IN_INSTITUTION' } });
     });
   });
 
@@ -429,21 +462,26 @@ describe('EnrollmentsService', () => {
     });
   });
 
-  describe('updateGrade', () => {
-    it('corrects gradeOrGroup on an approved enrollment', async () => {
+  // Renamed from updateGrade (ADR-084): the field is a catalog reference now.
+  describe('updateGroup', () => {
+    it('corrects the group on an approved enrollment', async () => {
       const { service, enrollmentsRepo } = buildService({
         enrollments: {
           findOne: vi
             .fn()
-            .mockResolvedValue(buildEnrollment({ status: 'approved', gradeOrGroup: '1A' })),
+            .mockResolvedValue(
+              buildEnrollment({ status: 'approved', group: buildGroup('group-1a', '1A') }),
+            ),
         },
+        institutionGroups: { findOne: vi.fn().mockResolvedValue(buildGroup('group-2a', '2A')) },
       });
 
-      const result = await service.updateGrade('enr-1', 'admin-1', '2A');
+      const result = await service.updateGroup('enr-1', 'admin-1', 'group-2a');
 
-      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ gradeOrGroup: '2A' }),
-      );
+      expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
+      const saved = (enrollmentsRepo.save as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Partial<Enrollment>;
+      expect(saved.group?.id).toBe('group-2a');
       expect(result).toMatchObject({ id: 'enr-1', status: 'approved', gradeOrGroup: '2A' });
     });
 
@@ -452,15 +490,29 @@ describe('EnrollmentsService', () => {
         enrollments: {
           findOne: vi
             .fn()
-            .mockResolvedValue(buildEnrollment({ status: 'approved', gradeOrGroup: '1A' })),
+            .mockResolvedValue(
+              buildEnrollment({ status: 'approved', group: buildGroup('group-1a', '1A') }),
+            ),
         },
       });
 
-      await service.updateGrade('enr-1', 'admin-1', null);
+      await service.updateGroup('enr-1', 'admin-1', null);
 
-      expect(enrollmentsRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ gradeOrGroup: null }),
-      );
+      expect(enrollmentsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ group: null }));
+    });
+
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when groupId does not belong to the enrollment institution', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+        institutionGroups: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.updateGroup('enr-1', 'admin-1', 'foreign-group')).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'GROUP_NOT_IN_INSTITUTION' },
+      });
     });
 
     it('does not write an audit_log entry', async () => {
@@ -470,7 +522,7 @@ describe('EnrollmentsService', () => {
         },
       });
 
-      await service.updateGrade('enr-1', 'admin-1', '2A');
+      await service.updateGroup('enr-1', 'admin-1', 'group-2a');
 
       expect(auditRepo.save).not.toHaveBeenCalled();
     });
@@ -482,7 +534,7 @@ describe('EnrollmentsService', () => {
         },
       });
 
-      await service.updateGrade('enr-1', 'admin-1', '2A');
+      await service.updateGroup('enr-1', 'admin-1', 'group-2a');
 
       expect(emailProvider.send).not.toHaveBeenCalled();
     });
@@ -492,7 +544,7 @@ describe('EnrollmentsService', () => {
         enrollments: { findOne: vi.fn().mockResolvedValue(null) },
       });
 
-      await expect(service.updateGrade('missing', 'admin-1', '2A')).rejects.toMatchObject({
+      await expect(service.updateGroup('missing', 'admin-1', 'group-2a')).rejects.toMatchObject({
         status: 404,
         response: { code: 'RESOURCE_NOT_FOUND' },
       });
@@ -505,7 +557,7 @@ describe('EnrollmentsService', () => {
         },
       });
 
-      await expect(service.updateGrade('enr-1', 'admin-1', '2A')).rejects.toMatchObject({
+      await expect(service.updateGroup('enr-1', 'admin-1', 'group-2a')).rejects.toMatchObject({
         status: 409,
         response: { code: 'ENROLLMENT_NOT_APPROVED' },
       });
@@ -518,7 +570,7 @@ describe('EnrollmentsService', () => {
         },
       });
 
-      await expect(service.updateGrade('enr-1', 'admin-1', '2A')).rejects.toMatchObject({
+      await expect(service.updateGroup('enr-1', 'admin-1', 'group-2a')).rejects.toMatchObject({
         status: 409,
         response: { code: 'ENROLLMENT_NOT_APPROVED' },
       });

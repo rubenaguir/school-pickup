@@ -15,6 +15,6 @@ export class CreateDeliveryPointDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  assignedGroups?: string[];
+  @IsUUID(undefined, { each: true })
+  groupIds?: string[];
 }

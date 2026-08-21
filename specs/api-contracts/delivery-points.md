@@ -47,7 +47,9 @@ vacío es un estado válido (institución sin puntos configurados; ADR-012).
 ```
 
 `assignedGroups` puede ser `null` (o vacío) para instituciones que no asignan
-grupos (ADR-012).
+grupos (ADR-012). Sin cambio de nombre ni forma en la respuesta (ADR-084):
+sigue siendo `string[] | null` con los nombres de los grupos, ahora resuelto
+por join a `delivery_point_groups`/`institution_groups` en vez de columna.
 
 **Errores**
 | Código | Caso |
@@ -69,12 +71,15 @@ Crea un punto de entrega. Ver feature 009.
   "name": "string",
   "description": "string | null",
   "operatorUserId": "uuid | null",
-  "assignedGroups": ["string"]
+  "groupIds": ["uuid"]
 }
 ```
 
-`status` no se envía: se crea con `active` por defecto. `assignedGroups` es
-opcional (texto libre, ADR-012).
+`status` no se envía: se crea con `active` por defecto. `groupIds` es
+opcional — cada id debe corresponder a un `institution_groups` de esta
+institución. Campo renombrado desde `assignedGroups` (texto libre) por
+ADR-084 — la respuesta de lectura sigue exponiendo
+`assignedGroups: string[] | null`.
 
 **Response 201**
 ```json
@@ -96,8 +101,9 @@ opcional (texto libre, ADR-012).
 | 403 | el usuario autenticado no es `institution_members` de esa `:id` |
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
-| 422 | ya existe otro punto de entrega **activo** de esta institución sin `assignedGroups` (el atrapa-todo debe ser único, ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
-| 422 | uno o más de los `assignedGroups` enviados ya están asignados a otro punto de entrega **activo** de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
+| 422 | uno o más `groupIds` no corresponden a un `institution_groups` de esta institución; `code: GROUP_NOT_IN_INSTITUTION` |
+| 422 | ya existe otro punto de entrega **activo** de esta institución sin grupos asignados (el atrapa-todo debe ser único, ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
+| 422 | uno o más de los `groupIds` enviados ya están asignados a otro punto de entrega **activo** de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
 
 No hay un caso 404 "la institución no existe" separado en esta ruta anidada:
 `InstitutionMembershipGuard`, en modo ruta anidada, no distingue institución
@@ -116,10 +122,14 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
   "name": "string",
   "description": "string | null",
   "operatorUserId": "uuid | null",
-  "assignedGroups": ["string"],
+  "groupIds": ["uuid"],
   "status": "active | inactive"
 }
 ```
+
+`groupIds`, si viene, **reemplaza** el conjunto completo de grupos asignados
+(no hace merge con el conjunto anterior) — mismo criterio que reemplazar
+`assignedGroups` como array de texto antes de ADR-084.
 
 **Response 200**
 ```json
@@ -142,13 +152,15 @@ Edita un punto de entrega, incluyendo su desactivación/reactivación vía
 | 403 | el usuario es `institution_members` correcto, pero su `role` no es `admin` (ADR-022 punto 1) |
 | 404 | el `delivery_points` no existe |
 | 422 | `operatorUserId` no corresponde a un `institution_members` de esa institución (validación cruzada en capa de servicio, ADR-018 punto 11; código 422 por ADR-022 punto 5); `code: OPERATOR_NOT_INSTITUTION_MEMBER` |
-| 422 | el punto queda `active` (ya lo era, o se reactiva vía `status`) y ya existe otro punto activo de esta institución sin `assignedGroups` (ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
-| 422 | el punto queda `active` y uno o más de los `assignedGroups` enviados ya están asignados a otro punto activo de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
+| 422 | uno o más `groupIds` no corresponden a un `institution_groups` de esta institución; `code: GROUP_NOT_IN_INSTITUTION` |
+| 422 | el punto queda `active` (ya lo era, o se reactiva vía `status`) y ya existe otro punto activo de esta institución sin grupos asignados (ADR-083); `code: DUPLICATE_CATCH_ALL_DELIVERY_POINT` |
+| 422 | el punto queda `active` y uno o más de los `groupIds` enviados ya están asignados a otro punto activo de esta institución (ADR-083); `code: DUPLICATE_ASSIGNED_GROUP` |
 
-Las dos validaciones de 422 nuevas solo corren cuando el estado **final** del
-punto (tras aplicar el DTO) es `active` — cubre tanto editar `assignedGroups`
-de un punto ya activo como reactivar uno que estaba `inactive`. Un punto que
-queda o se mantiene `inactive` nunca las dispara. Ver ADR-083.
+Las dos validaciones de 422 de conflicto de grupo solo corren cuando el
+estado **final** del punto (tras aplicar el DTO) es `active` — cubre tanto
+editar `groupIds` de un punto ya activo como reactivar uno que estaba
+`inactive`. Un punto que queda o se mantiene `inactive` nunca las dispara.
+Ver ADR-083.
 
 ## Referencias
 
@@ -165,6 +177,9 @@ queda o se mantiene `inactive` nunca las dispara. Ver ADR-083.
   `InstitutionMembershipGuard`; punto 5: código 422 para validaciones cruzadas).
 - ADR-083 (`DUPLICATE_CATCH_ALL_DELIVERY_POINT` y `DUPLICATE_ASSIGNED_GROUP`;
   determinismo del punto atrapa-todo usado por `resolveDeliveryPointId()`).
+- ADR-084 (`assignedGroups`→`groupIds` en los bodies de escritura;
+  `GROUP_NOT_IN_INSTITUTION`; respuesta de lectura sin cambio de nombre;
+  `specs/api-contracts/institution-groups.md`, el CRUD del catálogo).
 
 ## Preguntas abiertas
 

@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DeliveryPointsService } from './delivery-points.service';
-import { DeliveryPoint, Institution, User } from '@casillego/shared/entities';
+import { DeliveryPoint, Institution, InstitutionGroup, User } from '@casillego/shared/entities';
+
+function buildGroup(id: string, name: string): InstitutionGroup {
+  return { id, institutionId: 'inst-1', name, createdAt: new Date() } as InstitutionGroup;
+}
+
+// deliveryPointGroups entries only ever need groupId (RelationId scalar) and
+// group.name (for the response) in these tests — never the full DeliveryPoint
+// back-reference, so the fixture only fills in what the service actually reads.
+function buildMembership(groupId: string, name: string) {
+  return {
+    groupId,
+    group: buildGroup(groupId, name),
+  } as DeliveryPoint['deliveryPointGroups'][number];
+}
 
 function buildDeliveryPoint(overrides?: Partial<DeliveryPoint>): DeliveryPoint {
   return {
@@ -10,7 +24,7 @@ function buildDeliveryPoint(overrides?: Partial<DeliveryPoint>): DeliveryPoint {
     name: 'Puerta principal',
     description: null,
     operator: null,
-    assignedGroups: null,
+    deliveryPointGroups: [],
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -22,6 +36,8 @@ function buildDeliveryPoint(overrides?: Partial<DeliveryPoint>): DeliveryPoint {
 function buildService(overrides?: {
   deliveryPointsRepo?: Partial<Record<'find' | 'findOne' | 'create' | 'save', unknown>>;
   institutionMembersRepo?: Partial<Record<'findOne', unknown>>;
+  institutionGroupsRepo?: Partial<Record<'find', unknown>>;
+  deliveryPointGroupsRepo?: Partial<Record<'create' | 'delete' | 'save', unknown>>;
 }) {
   const deliveryPointsRepo = {
     find: vi.fn().mockResolvedValue([]),
@@ -44,11 +60,34 @@ function buildService(overrides?: {
     }),
     ...overrides?.institutionMembersRepo,
   };
+  // find() resolves each requested groupId to a real InstitutionGroup of
+  // inst-1 by default — tests that need a groupId to be rejected as foreign
+  // override this to return fewer rows than requested.
+  const institutionGroupsRepo = {
+    find: vi.fn(({ where }: { where: { id: { value: string[] } } }) =>
+      Promise.resolve(where.id.value.map((id) => buildGroup(id, id))),
+    ),
+    ...overrides?.institutionGroupsRepo,
+  };
+  const deliveryPointGroupsRepo = {
+    create: vi.fn((partial: unknown) => partial),
+    delete: vi.fn().mockResolvedValue({ affected: 0 }),
+    save: vi.fn((rows: unknown[]) => Promise.resolve(rows)),
+    ...overrides?.deliveryPointGroupsRepo,
+  };
   const service = new DeliveryPointsService(
     deliveryPointsRepo as never,
     institutionMembersRepo as never,
+    institutionGroupsRepo as never,
+    deliveryPointGroupsRepo as never,
   );
-  return { service, deliveryPointsRepo, institutionMembersRepo };
+  return {
+    service,
+    deliveryPointsRepo,
+    institutionMembersRepo,
+    institutionGroupsRepo,
+    deliveryPointGroupsRepo,
+  };
 }
 
 describe('DeliveryPointsService', () => {
@@ -91,6 +130,22 @@ describe('DeliveryPointsService', () => {
       const result = await service.list('inst-1');
 
       expect(result.deliveryPoints[0]?.operatorUserId).toBe('operator-1');
+    });
+
+    it('maps assignedGroups from the loaded deliveryPointGroups relation', async () => {
+      const { service } = buildService({
+        deliveryPointsRepo: {
+          find: vi.fn().mockResolvedValue([
+            buildDeliveryPoint({
+              deliveryPointGroups: [buildMembership('group-3b', '3°B')],
+            }),
+          ]),
+        },
+      });
+
+      const result = await service.list('inst-1');
+
+      expect(result.deliveryPoints[0]?.assignedGroups).toEqual(['3°B']);
     });
   });
 
@@ -135,13 +190,24 @@ describe('DeliveryPointsService', () => {
       expect(result.operatorUserId).toBe('operator-1');
     });
 
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when a groupId does not resolve to this institution', async () => {
+      const { service } = buildService({
+        institutionGroupsRepo: { find: vi.fn().mockResolvedValue([]) },
+      });
+
+      await expect(
+        service.create('inst-1', { name: 'Puerta vehicular', groupIds: ['foreign-group'] }),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'GROUP_NOT_IN_INSTITUTION' },
+      });
+    });
+
     // ADR-083: makes the catch-all point deterministic.
     it('rejects with 422 DUPLICATE_CATCH_ALL_DELIVERY_POINT when another active point of the institution already has no assigned groups', async () => {
       const { service } = buildService({
         deliveryPointsRepo: {
-          find: vi
-            .fn()
-            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-catch-all', assignedGroups: null })]),
+          find: vi.fn().mockResolvedValue([buildDeliveryPoint({ id: 'dp-catch-all' })]),
         },
       });
 
@@ -156,14 +222,17 @@ describe('DeliveryPointsService', () => {
     it('rejects with 422 DUPLICATE_ASSIGNED_GROUP when a group is already assigned to another active point', async () => {
       const { service } = buildService({
         deliveryPointsRepo: {
-          find: vi
-            .fn()
-            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-3b', assignedGroups: ['3°B'] })]),
+          find: vi.fn().mockResolvedValue([
+            buildDeliveryPoint({
+              id: 'dp-3b',
+              deliveryPointGroups: [buildMembership('group-3b', '3°B')],
+            }),
+          ]),
         },
       });
 
       await expect(
-        service.create('inst-1', { name: 'Puerta duplicada', assignedGroups: ['3°B'] }),
+        service.create('inst-1', { name: 'Puerta duplicada', groupIds: ['group-3b'] }),
       ).rejects.toMatchObject({
         status: 422,
         response: { code: 'DUPLICATE_ASSIGNED_GROUP' },
@@ -182,10 +251,10 @@ describe('DeliveryPointsService', () => {
 
       const result = await service.create('inst-1', {
         name: 'Puerta nueva',
-        assignedGroups: ['3°B'],
+        groupIds: ['group-3b'],
       });
 
-      expect(result.assignedGroups).toEqual(['3°B']);
+      expect(result.assignedGroups).toEqual(['group-3b']);
     });
   });
 
@@ -242,19 +311,33 @@ describe('DeliveryPointsService', () => {
       expect(result.status).toBe('inactive');
     });
 
-    // ADR-083: editing assignedGroups on an already-active point runs the
-    // same conflict check as create().
-    it('rejects with 422 DUPLICATE_ASSIGNED_GROUP when editing assignedGroups on an already-active point collides with another active point', async () => {
+    it('rejects with 422 GROUP_NOT_IN_INSTITUTION when a groupId does not resolve to this institution', async () => {
+      const { service } = buildService({
+        institutionGroupsRepo: { find: vi.fn().mockResolvedValue([]) },
+      });
+
+      await expect(service.update('dp-1', { groupIds: ['foreign-group'] })).rejects.toMatchObject({
+        status: 422,
+        response: { code: 'GROUP_NOT_IN_INSTITUTION' },
+      });
+    });
+
+    // ADR-083: editing groupIds on an already-active point runs the same
+    // conflict check as create().
+    it('rejects with 422 DUPLICATE_ASSIGNED_GROUP when editing groupIds on an already-active point collides with another active point', async () => {
       const { service } = buildService({
         deliveryPointsRepo: {
           findOne: vi.fn().mockResolvedValue(buildDeliveryPoint({ id: 'dp-1', status: 'active' })),
-          find: vi
-            .fn()
-            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-2', assignedGroups: ['3°B'] })]),
+          find: vi.fn().mockResolvedValue([
+            buildDeliveryPoint({
+              id: 'dp-2',
+              deliveryPointGroups: [buildMembership('group-3b', '3°B')],
+            }),
+          ]),
         },
       });
 
-      await expect(service.update('dp-1', { assignedGroups: ['3°B'] })).rejects.toMatchObject({
+      await expect(service.update('dp-1', { groupIds: ['group-3b'] })).rejects.toMatchObject({
         status: 422,
         response: { code: 'DUPLICATE_ASSIGNED_GROUP' },
       });
@@ -267,12 +350,8 @@ describe('DeliveryPointsService', () => {
         deliveryPointsRepo: {
           findOne: vi
             .fn()
-            .mockResolvedValue(
-              buildDeliveryPoint({ id: 'dp-1', status: 'inactive', assignedGroups: null }),
-            ),
-          find: vi
-            .fn()
-            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-2', assignedGroups: null })]),
+            .mockResolvedValue(buildDeliveryPoint({ id: 'dp-1', status: 'inactive' })),
+          find: vi.fn().mockResolvedValue([buildDeliveryPoint({ id: 'dp-2' })]),
         },
       });
 
@@ -287,14 +366,19 @@ describe('DeliveryPointsService', () => {
     it('does not conflict with itself when its own row is included in the active set', async () => {
       const { service } = buildService({
         deliveryPointsRepo: {
-          findOne: vi
-            .fn()
-            .mockResolvedValue(
-              buildDeliveryPoint({ id: 'dp-1', status: 'active', assignedGroups: ['3°B'] }),
-            ),
-          find: vi
-            .fn()
-            .mockResolvedValue([buildDeliveryPoint({ id: 'dp-1', assignedGroups: ['3°B'] })]),
+          findOne: vi.fn().mockResolvedValue(
+            buildDeliveryPoint({
+              id: 'dp-1',
+              status: 'active',
+              deliveryPointGroups: [buildMembership('group-3b', '3°B')],
+            }),
+          ),
+          find: vi.fn().mockResolvedValue([
+            buildDeliveryPoint({
+              id: 'dp-1',
+              deliveryPointGroups: [buildMembership('group-3b', '3°B')],
+            }),
+          ]),
         },
       });
 
@@ -314,7 +398,7 @@ describe('DeliveryPointsService', () => {
         },
       });
 
-      await service.update('dp-1', { assignedGroups: ['3°B'] });
+      await service.update('dp-1', { groupIds: ['group-3b'] });
 
       expect(findSpy).not.toHaveBeenCalled();
     });

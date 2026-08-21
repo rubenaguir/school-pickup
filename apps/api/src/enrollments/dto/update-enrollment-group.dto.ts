@@ -1,6 +1,6 @@
 import { IsOptional, IsUUID } from 'class-validator';
 
-export class ApproveEnrollmentDto {
+export class UpdateEnrollmentGroupDto {
   @IsOptional()
   @IsUUID()
   groupId?: string | null;

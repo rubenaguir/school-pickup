@@ -1,7 +1,7 @@
 import {
   IsOptional,
-  IsString,
   IsNotEmpty,
+  IsString,
   IsUUID,
   Validate,
   ValidatorConstraint,
@@ -41,6 +41,6 @@ export class CreateEnrollmentDto {
   joinCode?: string;
 
   @IsOptional()
-  @IsString()
-  gradeOrGroup?: string | null;
+  @IsUUID()
+  groupId?: string | null;
 }

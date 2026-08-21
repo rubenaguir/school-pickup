@@ -32,13 +32,19 @@ Ver feature 005. Crea la solicitud de asociación (perspectiva del tutor).
   "studentId": "uuid",
   "institutionId": "uuid | omitido si se usa joinCode",
   "joinCode": "string | omitido si se usa institutionId",
-  "gradeOrGroup": "string | null"
+  "groupId": "uuid | null"
 }
 ```
 
 Debe enviarse exactamente uno de `institutionId` o `joinCode` (ver los dos
 casos de éxito de feature 005: búsqueda por nombre resuelve `institutionId`
 en el cliente antes de enviar; `joinCode` se resuelve en el servidor).
+
+`groupId`, si viene definido, debe corresponder a un `institution_groups` de
+la institución resuelta (por `institutionId` o `joinCode`) → 422
+`GROUP_NOT_IN_INSTITUTION` si no. Campo renombrado desde `gradeOrGroup`
+(texto libre) por ADR-084 — la respuesta de lectura sigue exponiendo
+`gradeOrGroup: string | null`, resuelto por join al nombre del grupo.
 
 **Response 201**
 ```json
@@ -60,6 +66,7 @@ en el cliente antes de enviar; `joinCode` se resuelve en el servidor).
 | 404 | `joinCode` no corresponde a ninguna institución **con `status = approved`** (ADR-019, punto 4 — una institución `pending`/`suspended` no resuelve, igual que si no existiera) |
 | 404 | `institutionId` no corresponde a ninguna institución `approved` |
 | 409 | ya existe un `enrollments` para ese `(studentId, institutionId)` |
+| 422 | `groupId` no corresponde a un `institution_groups` de la institución resuelta; `code: GROUP_NOT_IN_INSTITUTION` |
 
 ## `GET /enrollments/mine`
 
@@ -153,15 +160,18 @@ Ver feature 006.
 **Request** (opcional; body vacío es válido)
 ```json
 {
-  "gradeOrGroup": "string | null"
+  "groupId": "uuid | null"
 }
 ```
 
-`gradeOrGroup`, si viene definido, se asigna a `enrollments.grade_or_group`
-dentro de la misma transacción que ya escribe `status`/`reviewedByUserId`/
-`reviewedAt` — permite asignar o corregir el grupo del alumno en el mismo
-paso en que se aprueba, en vez de depender solo del punto de entrega
-atrapa-todo (ADR-083). Si se omite, `grade_or_group` no se toca.
+`groupId`, si viene definido, se asigna a `enrollments.group_id` dentro de la
+misma transacción que ya escribe `status`/`reviewedByUserId`/`reviewedAt` —
+permite asignar o corregir el grupo del alumno en el mismo paso en que se
+aprueba, en vez de depender solo del punto de entrega atrapa-todo (ADR-083).
+Si se omite, `group_id` no se toca. Debe corresponder a un
+`institution_groups` de la institución del enrollment → 422
+`GROUP_NOT_IN_INSTITUTION` si no. Campo renombrado desde `gradeOrGroup` por
+ADR-084.
 
 **Response 200**
 ```json
@@ -181,19 +191,22 @@ atrapa-todo (ADR-083). Si se omite, `grade_or_group` no se toca.
 | 404 | `enrollments` no existe |
 | 409 | `enrollments.status != pending` |
 | 422 | `institutions.status != approved` (regla cruzada entre entidades; ADR-018, ADR-025 punto 5) |
+| 422 | `groupId` no corresponde a un `institution_groups` de la institución del enrollment; `code: GROUP_NOT_IN_INSTITUTION` |
 
 **Auditoría.** La aprobación registra una fila en `audit_log` con
 `action = enrollment.approved` (aprobación = acción sensible según `CLAUDE.md`;
 convención libre `entity.verb`, ADR-018 punto 9; ADR-025 punto 6).
 
-## `PATCH /enrollments/:id/grade`
+## `PATCH /enrollments/:id/group`
 
 Corrige `gradeOrGroup` de una matrícula ya `approved`, fuera del momento de
 aprobación (pantalla "Alumnos", ver `specs/features/029-editar-grupo-alumno.md`).
-Endpoint nuevo y deliberadamente separado de `approve()`: `approve()` exige
-`status = pending` y reenvía el correo de aprobación en cada llamada —
-reusarlo para corregir una matrícula ya aprobada dispararía un correo falso.
-Ver ADR-083.
+Endpoint separado de `approve()`: `approve()` exige `status = pending` y
+reenvía el correo de aprobación en cada llamada — reusarlo para corregir una
+matrícula ya aprobada dispararía un correo falso. Ver ADR-083. Endpoint y DTO
+renombrados desde `PATCH /enrollments/:id/grade` /
+`UpdateEnrollmentGradeDto` por ADR-084 (coherente con que el campo ya no es
+texto libre, es una referencia al catálogo).
 
 **Autorización:** misma que `approve`/`reject` — `institution_members` de la
 institución del enrollment, con `role = admin` (ADR-019, punto 5).
@@ -201,13 +214,16 @@ institución del enrollment, con `role = admin` (ADR-019, punto 5).
 **Request**
 ```json
 {
-  "gradeOrGroup": "string | null"
+  "groupId": "uuid | null"
 }
 ```
 
+`groupId` debe corresponder a un `institution_groups` de la institución del
+enrollment → 422 `GROUP_NOT_IN_INSTITUTION` si no.
+
 **Response 200** — mismo shape que una fila de
 `GET /enrollments?status=...&institutionId=...` (`InstitutionEnrollmentListItem`,
-ver más abajo).
+ver más abajo). `gradeOrGroup` sin cambio de nombre en la respuesta.
 ```json
 {
   "id": "uuid",
@@ -231,6 +247,7 @@ ver más abajo).
 | 403 | el usuario autenticado es `institution_members` de la institución correcta, pero su `role` no es `admin` (ADR-019, punto 5) |
 | 404 | `enrollments` no existe |
 | 409 | `enrollments.status != approved`; `code: ENROLLMENT_NOT_APPROVED` |
+| 422 | `groupId` no corresponde a un `institution_groups` de la institución del enrollment; `code: GROUP_NOT_IN_INSTITUTION` |
 
 Sin auditoría: es corrección de dato operativo, no una decisión de control de
 acceso como aprobar/rechazar/invitar (ADR-083).
@@ -285,10 +302,14 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 - ADR-057 (`GET /enrollments/mine` enriquecido con `institutionName`,
   `institutionType`, `institutionCategory`; `GET /enrollments?institutionId=...`
   sin cambios).
-- ADR-083 (`gradeOrGroup` opcional en `approve`; endpoint nuevo
-  `PATCH /enrollments/:id/grade` para matrículas ya `approved`).
+- ADR-083 (`gradeOrGroup` opcional en `approve`; endpoint nuevo, luego
+  renombrado por ADR-084, para matrículas ya `approved`).
+- ADR-084 (`gradeOrGroup`→`groupId`/`grade`→`group` en los tres DTOs de
+  escritura; 422 `GROUP_NOT_IN_INSTITUTION`; respuestas de lectura sin
+  cambio de nombre; `specs/api-contracts/institution-groups.md`, el CRUD del
+  catálogo).
 - `specs/features/029-editar-grupo-alumno.md` (pantalla "Alumnos" del
-  portal, consumidora de `PATCH /enrollments/:id/grade`).
+  portal, consumidora de `PATCH /enrollments/:id/group`).
 
 ## Preguntas abiertas
 

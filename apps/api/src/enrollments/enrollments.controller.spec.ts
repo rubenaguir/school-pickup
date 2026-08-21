@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   Enrollment,
   Institution,
+  InstitutionGroup,
   InstitutionMember,
   StudentGuardian,
 } from '@casillego/shared/entities';
@@ -39,7 +40,7 @@ interface EnrollmentRecord {
   studentId: string;
   institutionId: string;
   status: 'pending' | 'approved' | 'rejected';
-  gradeOrGroup: string | null;
+  groupId: string | null;
   enrollmentCode: string;
   requestedByUserId: string;
   requestedAt: Date;
@@ -112,7 +113,7 @@ describe('EnrollmentsController (HTTP)', () => {
       institutionId: record.institutionId,
       institution: institutionRecord ? toInstitutionEntity(institutionRecord) : undefined,
       status: record.status,
-      gradeOrGroup: record.gradeOrGroup,
+      group: record.groupId ? ({ id: record.groupId } as unknown as Enrollment['group']) : null,
       enrollmentCode: record.enrollmentCode,
       requestedBy: { id: record.requestedByUserId },
       requestedAt: record.requestedAt,
@@ -171,7 +172,7 @@ describe('EnrollmentsController (HTTP)', () => {
           studentId,
           institutionId,
           status: entity.status as EnrollmentRecord['status'],
-          gradeOrGroup: entity.gradeOrGroup ?? null,
+          groupId: (entity.group as { id: string } | null | undefined)?.id ?? null,
           enrollmentCode: entity.enrollmentCode as string,
           requestedByUserId: (entity.requestedBy as { id: string }).id,
           requestedAt: new Date(),
@@ -209,6 +210,10 @@ describe('EnrollmentsController (HTTP)', () => {
     // enrollments-review.controller.spec.ts for those. Still required here
     // purely for DI resolution, since all endpoints share one EnrollmentsService.
     const institutionMembersRepo = { exists: vi.fn().mockResolvedValue(false) };
+    // Only used by approve()/updateGroup() (staff review endpoints, not
+    // covered by this spec) — required purely for DI resolution, same
+    // reasoning as institutionMembersRepo above.
+    const institutionGroupsRepo = { findOne: vi.fn() };
     const fakeDataSource = {
       transaction: () => {
         throw new Error('Not used by the tutor-facing endpoints covered in this spec.');
@@ -224,6 +229,7 @@ describe('EnrollmentsController (HTTP)', () => {
         { provide: getRepositoryToken(Institution), useValue: institutionsRepo },
         { provide: getRepositoryToken(StudentGuardian), useValue: studentGuardiansRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: institutionMembersRepo },
+        { provide: getRepositoryToken(InstitutionGroup), useValue: institutionGroupsRepo },
         { provide: DataSource, useValue: fakeDataSource },
         { provide: EMAIL_PROVIDER, useValue: fakeEmailProvider },
       ],
@@ -295,7 +301,7 @@ describe('EnrollmentsController (HTTP)', () => {
     const id = overrides.id ?? randomUUID();
     enrollments.set(id, {
       status: 'pending',
-      gradeOrGroup: null,
+      groupId: null,
       enrollmentCode: `ENR-${id.slice(0, 8)}`,
       requestedByUserId: 'user-1',
       requestedAt: new Date(),

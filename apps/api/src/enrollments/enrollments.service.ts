@@ -14,6 +14,7 @@ import {
   AuditLog,
   Enrollment,
   Institution,
+  InstitutionGroup,
   InstitutionMember,
   Student,
   StudentGuardian,
@@ -73,6 +74,11 @@ const INSTITUTION_NOT_APPROVED = {
   message: 'The institution is not approved.',
 } as const;
 
+const GROUP_NOT_IN_INSTITUTION = {
+  code: 'GROUP_NOT_IN_INSTITUTION',
+  message: 'groupId does not belong to this institution.',
+} as const;
+
 @Injectable()
 export class EnrollmentsService {
   constructor(
@@ -84,6 +90,8 @@ export class EnrollmentsService {
     private readonly studentGuardiansRepository: Repository<StudentGuardian>,
     @InjectRepository(InstitutionMember)
     private readonly institutionMembersRepository: Repository<InstitutionMember>,
+    @InjectRepository(InstitutionGroup)
+    private readonly institutionGroupsRepository: Repository<InstitutionGroup>,
     private readonly dataSource: DataSource,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
@@ -91,6 +99,9 @@ export class EnrollmentsService {
   async create(userId: string, dto: CreateEnrollmentDto): Promise<EnrollmentResponse> {
     await this.assertActiveGuardian(dto.studentId, userId);
     const institution = await this.resolveApprovedInstitution(dto);
+    const group = dto.groupId
+      ? await this.resolveGroupInInstitution(institution.id, dto.groupId)
+      : null;
 
     const enrollmentCode = await generateUniqueEnrollmentCode((candidate) =>
       this.enrollmentsRepository.exists({ where: { enrollmentCode: candidate } }),
@@ -102,7 +113,7 @@ export class EnrollmentsService {
           student: { id: dto.studentId } as Student,
           institution: { id: institution.id } as Institution,
           status: 'pending',
-          gradeOrGroup: dto.gradeOrGroup ?? null,
+          group,
           enrollmentCode,
           requestedBy: { id: userId } as User,
         }),
@@ -141,7 +152,7 @@ export class EnrollmentsService {
         student: { id: In(studentIds) },
         ...(query.status ? { status: query.status } : {}),
       },
-      relations: { student: true, institution: true },
+      relations: { student: true, institution: true, group: true },
       order: { requestedAt: 'DESC' },
     });
 
@@ -164,7 +175,7 @@ export class EnrollmentsService {
         institution: { id: query.institutionId },
         ...(query.status ? { status: query.status } : {}),
       },
-      relations: { student: true, requestedBy: true, reviewedBy: true },
+      relations: { student: true, requestedBy: true, reviewedBy: true, group: true },
       order: { requestedAt: 'DESC' },
     });
 
@@ -183,6 +194,12 @@ export class EnrollmentsService {
     if (institution.status !== 'approved') {
       throw new UnprocessableEntityException(INSTITUTION_NOT_APPROVED);
     }
+    const group =
+      dto?.groupId !== undefined
+        ? dto.groupId
+          ? await this.resolveGroupInInstitution(enrollment.institutionId, dto.groupId)
+          : null
+        : undefined;
 
     const saved = await this.dataSource.transaction(async (manager) => {
       const enrollmentsRepo = manager.getRepository(Enrollment);
@@ -191,7 +208,7 @@ export class EnrollmentsService {
       enrollment.status = 'approved';
       enrollment.reviewedBy = { id: actorUserId } as User;
       enrollment.reviewedAt = new Date();
-      if (dto?.gradeOrGroup !== undefined) enrollment.gradeOrGroup = dto.gradeOrGroup;
+      if (group !== undefined) enrollment.group = group;
       const saved = await enrollmentsRepo.save(enrollment);
 
       await auditRepo.save(
@@ -271,14 +288,19 @@ export class EnrollmentsService {
   // and re-sends the approval email on every call, so reusing it here to fix
   // a typo would fire a false email. No audit_log entry either: this is an
   // operational data correction, not an access-control decision like
-  // approve/reject/invite.
-  async updateGrade(
+  // approve/reject/invite. Renamed from updateGrade (ADR-084): the field is
+  // a catalog reference now, not free text.
+  async updateGroup(
     id: string,
     actorUserId: string,
-    gradeOrGroup: string | null | undefined,
+    groupId: string | null | undefined,
   ): Promise<InstitutionEnrollmentListItem> {
     const enrollment = await this.findApprovedOrFail(id);
-    if (gradeOrGroup !== undefined) enrollment.gradeOrGroup = gradeOrGroup;
+    if (groupId !== undefined) {
+      enrollment.group = groupId
+        ? await this.resolveGroupInInstitution(enrollment.institutionId, groupId)
+        : null;
+    }
     const saved = await this.enrollmentsRepository.save(enrollment);
     return this.toInstitutionResponse(saved);
   }
@@ -286,7 +308,7 @@ export class EnrollmentsService {
   private async findApprovedOrFail(id: string): Promise<Enrollment> {
     const enrollment = await this.enrollmentsRepository.findOne({
       where: { id },
-      relations: { student: true, requestedBy: true, reviewedBy: true },
+      relations: { student: true, requestedBy: true, reviewedBy: true, group: true },
     });
     if (!enrollment) {
       // Defensive: InstitutionMembershipGuard's own @InstitutionResource
@@ -298,6 +320,24 @@ export class EnrollmentsService {
       throw new ConflictException(ENROLLMENT_NOT_APPROVED);
     }
     return enrollment;
+  }
+
+  // Cross-institution validation, same criterion as operatorUserId
+  // (ADR-017/018): a groupId must belong to the same institution as the
+  // resource being written. Returns the loaded entity (not just a boolean) so
+  // callers can assign it straight onto enrollment.group and have
+  // toResponse()'s group?.name resolve without a second query. See ADR-084.
+  private async resolveGroupInInstitution(
+    institutionId: string,
+    groupId: string,
+  ): Promise<InstitutionGroup> {
+    const group = await this.institutionGroupsRepository.findOne({
+      where: { id: groupId, institution: { id: institutionId } },
+    });
+    if (!group) {
+      throw new UnprocessableEntityException(GROUP_NOT_IN_INSTITUTION);
+    }
+    return group;
   }
 
   private async assertActiveGuardian(studentId: string, userId: string): Promise<void> {
@@ -333,7 +373,7 @@ export class EnrollmentsService {
       institutionType: enrollment.institution.type,
       institutionCategory: enrollment.institution.category,
       status: enrollment.status,
-      gradeOrGroup: enrollment.gradeOrGroup,
+      gradeOrGroup: enrollment.group?.name ?? null,
       enrollmentCode: enrollment.enrollmentCode,
       requestedAt: enrollment.requestedAt.toISOString(),
       reviewedAt: enrollment.reviewedAt ? enrollment.reviewedAt.toISOString() : null,
@@ -373,7 +413,7 @@ export class EnrollmentsService {
       studentId: enrollment.student.id,
       studentFullName: enrollment.student.fullName,
       status: enrollment.status,
-      gradeOrGroup: enrollment.gradeOrGroup,
+      gradeOrGroup: enrollment.group?.name ?? null,
       enrollmentCode: enrollment.enrollmentCode,
       requestedByUserId: enrollment.requestedBy.id,
       requestedAt: enrollment.requestedAt.toISOString(),

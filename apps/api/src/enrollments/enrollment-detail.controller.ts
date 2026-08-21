@@ -6,7 +6,7 @@ import { Enrollment, type InstitutionMember } from '@casillego/shared/entities';
 import { EnrollmentsService } from './enrollments.service';
 import { assertAdmin } from './assert-admin.util';
 import { ApproveEnrollmentDto } from './dto/approve-enrollment.dto';
-import { UpdateEnrollmentGradeDto } from './dto/update-enrollment-grade.dto';
+import { UpdateEnrollmentGroupDto } from './dto/update-enrollment-group.dto';
 import type { InstitutionEnrollmentListItem, ReviewEnrollmentResponse } from './dto/responses';
 
 interface AuthenticatedRequest {
@@ -55,13 +55,13 @@ export class EnrollmentsDetailController {
 
   @UseGuards(InstitutionMembershipGuard)
   @InstitutionResource(ENROLLMENT_RESOURCE)
-  @Patch(':id/grade')
-  updateGrade(
+  @Patch(':id/group')
+  updateGroup(
     @Param('id') id: string,
-    @Body() dto: UpdateEnrollmentGradeDto,
+    @Body() dto: UpdateEnrollmentGroupDto,
     @Req() request: AuthenticatedRequest & InstitutionScopedRequest,
   ): Promise<InstitutionEnrollmentListItem> {
     assertAdmin(request);
-    return this.enrollmentsService.updateGrade(id, request.user.sub, dto.gradeOrGroup);
+    return this.enrollmentsService.updateGroup(id, request.user.sub, dto.groupId);
   }
 }

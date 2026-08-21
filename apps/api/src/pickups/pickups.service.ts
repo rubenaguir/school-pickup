@@ -286,7 +286,7 @@ export class PickupsService {
       // guardian: true feeds toQueueSummary's guardianFullName (enmienda a
       // ADR-073), same relation listByInstitutionMonitor already loads for
       // the analogous Carril field.
-      relations: { enrollment: { student: true }, guardian: true },
+      relations: { enrollment: { student: true, group: true }, guardian: true },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
@@ -342,7 +342,7 @@ export class PickupsService {
       // deliveryPointId is part of PickupRequestBoardSummary (mirrors
       // PickupRequestBoardPayload) — without this relation loaded it stays
       // unpopulated and every row would wrongly report deliveryPointId: null.
-      relations: { enrollment: { student: true }, deliveryPoint: true },
+      relations: { enrollment: { student: true, group: true }, deliveryPoint: true },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
@@ -384,7 +384,11 @@ export class PickupsService {
           query.status ? ACTIVE_STATUSES.filter((s) => s === query.status) : ACTIVE_STATUSES,
         ),
       },
-      relations: { enrollment: { student: true }, deliveryPoint: true, guardian: true },
+      relations: {
+        enrollment: { student: true, group: true },
+        deliveryPoint: true,
+        guardian: true,
+      },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
@@ -414,6 +418,7 @@ export class PickupsService {
     const deliveredPickups = await this.pickupRequestsRepository
       .createQueryBuilder('pickup')
       .innerJoinAndSelect('pickup.enrollment', 'enrollment')
+      .leftJoinAndSelect('enrollment.group', 'group')
       .where('pickup.institution = :institutionId', { institutionId })
       .andWhere('pickup.status = :status', { status: 'delivered' })
       .andWhere('pickup.completedAt BETWEEN :start AND :end', {
@@ -432,7 +437,7 @@ export class PickupsService {
   private groupDeliveredByGrade(pickups: readonly PickupRequest[]): DeliveredTodayGroupCount[] {
     const counts = new Map<string, number>();
     for (const pickup of pickups) {
-      const label = pickup.enrollment.gradeOrGroup ?? 'Sin grupo';
+      const label = pickup.enrollment.group?.name ?? 'Sin grupo';
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return [...counts.entries()]
@@ -580,7 +585,7 @@ export class PickupsService {
       relations: {
         guardian: true,
         institution: true,
-        enrollment: { student: true },
+        enrollment: { student: true, group: true },
         deliveryPoint: true,
       },
     });
@@ -734,7 +739,7 @@ export class PickupsService {
   private async findEnrollmentOrFail(enrollmentId: string): Promise<Enrollment> {
     const enrollment = await this.enrollmentsRepository.findOne({
       where: { id: enrollmentId },
-      relations: { student: true, institution: true },
+      relations: { student: true, institution: true, group: true },
     });
     if (!enrollment) {
       throw new NotFoundException(RESOURCE_NOT_FOUND);
@@ -790,25 +795,24 @@ export class PickupsService {
   private async resolveDeliveryPointId(enrollment: Enrollment): Promise<string | null> {
     const activePoints = await this.deliveryPointsRepository.find({
       where: { institution: { id: enrollment.institutionId }, status: 'active' },
+      relations: { deliveryPointGroups: true },
       order: { createdAt: 'ASC' },
     });
 
-    if (enrollment.gradeOrGroup) {
+    if (enrollment.groupId) {
       const exactMatch = activePoints.find((point) =>
-        (point.assignedGroups ?? []).includes(enrollment.gradeOrGroup as string),
+        point.deliveryPointGroups.some((dpg) => dpg.groupId === enrollment.groupId),
       );
       if (exactMatch) return exactMatch.id;
     }
 
-    // Atrapa-todo: cubre tanto al alumno sin grupo (gradeOrGroup === null)
-    // como al que tiene un grupo que no está configurado en ningún punto
-    // activo (typo, o reconfiguración que dejó huérfano al grupo). Único
-    // por construcción — DeliveryPointsService lo garantiza al crear/editar
+    // Atrapa-todo: cubre tanto al alumno sin grupo (groupId === null) como al
+    // que tiene un grupo que no está configurado en ningún punto activo
+    // (reconfiguración que dejó huérfano al grupo). Único por construcción —
+    // DeliveryPointsService lo garantiza al crear/editar
     // (assertNoGroupConflicts, ADR-083), así que no hay ambigüedad de cuál
-    // usar.
-    const catchAll = activePoints.find(
-      (point) => !point.assignedGroups || point.assignedGroups.length === 0,
-    );
+    // usar. Comparación por id, no por string (ADR-084).
+    const catchAll = activePoints.find((point) => point.deliveryPointGroups.length === 0);
     return catchAll?.id ?? null;
   }
 
@@ -880,7 +884,7 @@ export class PickupsService {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
       studentFullName: enrollment.student.fullName,
-      gradeOrGroup: enrollment.gradeOrGroup,
+      gradeOrGroup: enrollment.group?.name ?? null,
       deliveryPointId,
       estimatedArrivalAt: pickupRequest.estimatedArrivalAt
         ? pickupRequest.estimatedArrivalAt.toISOString()
@@ -987,7 +991,7 @@ export class PickupsService {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
       studentFullName: pickupRequest.enrollment.student.fullName,
-      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
       vehicleDescription: pickupRequest.vehicleDescription,
       vehiclePlate: pickupRequest.vehiclePlate,
       deliveryCode: pickupRequest.deliveryCode,
@@ -1011,7 +1015,7 @@ export class PickupsService {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
       studentFullName: pickupRequest.enrollment.student.fullName,
-      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
       deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
       estimatedArrivalAt: pickupRequest.estimatedArrivalAt
         ? pickupRequest.estimatedArrivalAt.toISOString()
@@ -1041,7 +1045,7 @@ export class PickupsService {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
       studentFullName: pickupRequest.enrollment.student.fullName,
-      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
       deliveryPointId: pickupRequest.deliveryPoint ? pickupRequest.deliveryPoint.id : null,
       estimatedArrivalAt: pickupRequest.estimatedArrivalAt
         ? pickupRequest.estimatedArrivalAt.toISOString()

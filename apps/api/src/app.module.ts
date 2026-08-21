@@ -4,6 +4,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { InstitutionsModule } from './institutions/institutions.module';
 import { DeliveryPointsModule } from './delivery-points/delivery-points.module';
+import { InstitutionGroupsModule } from './institution-groups/institution-groups.module';
 import { DismissalWindowsModule } from './dismissal-windows/dismissal-windows.module';
 import { DismissalExceptionsModule } from './dismissal-exceptions/dismissal-exceptions.module';
 import { StudentsModule } from './students/students.module';
@@ -23,9 +24,9 @@ import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions
 
 /**
  * Root module. Domain modules beyond auth/institutions/delivery-points/
- * dismissal-windows/dismissal-exceptions/students/student-guardians/
- * invitations/institution-members/vehicles/enrollments/pickups/
- * delivery-point-queue/pickup-request-tracking/board/admin/users/
+ * institution-groups/dismissal-windows/dismissal-exceptions/students/
+ * student-guardians/invitations/institution-members/vehicles/enrollments/
+ * pickups/delivery-point-queue/pickup-request-tracking/board/admin/users/
  * institution-reports/push-subscriptions are added in later phases.
  */
 @Module({
@@ -34,6 +35,7 @@ import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions
     AuthModule,
     InstitutionsModule,
     DeliveryPointsModule,
+    InstitutionGroupsModule,
     DismissalWindowsModule,
     DismissalExceptionsModule,
     StudentsModule,

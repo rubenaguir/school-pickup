@@ -58,7 +58,7 @@ export class LocationIngestionService {
       where: { id: pickupRequestId },
       relations: {
         institution: true,
-        enrollment: { student: true },
+        enrollment: { student: true, group: true },
         deliveryPoint: true,
         guardian: true,
       },
@@ -168,7 +168,7 @@ export class LocationIngestionService {
       pickupRequestId: pickupRequest.id,
       status: pickupRequest.status,
       studentFullName: pickupRequest.enrollment.student.fullName,
-      gradeOrGroup: pickupRequest.enrollment.gradeOrGroup,
+      gradeOrGroup: pickupRequest.enrollment.group?.name ?? null,
       deliveryPointId,
       estimatedArrivalAt: pickupRequest.estimatedArrivalAt
         ? pickupRequest.estimatedArrivalAt.toISOString()

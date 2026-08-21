@@ -6,6 +6,7 @@ import {
   AuditLog,
   Enrollment,
   Institution,
+  InstitutionGroup,
   InstitutionMember,
   StudentGuardian,
 } from '@casillego/shared/entities';
@@ -18,6 +19,7 @@ import { EnrollmentsService } from './enrollments.service';
     TypeOrmModule.forFeature([
       Enrollment,
       Institution,
+      InstitutionGroup,
       StudentGuardian,
       InstitutionMember,
       AuditLog,

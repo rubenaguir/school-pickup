@@ -3,7 +3,7 @@ import type { DismissalException, DismissalWindow } from '@casillego/shared/enti
 /**
  * ADR-060 point 4: resolves the expected end-of-dismissal time for one
  * `delivered` pickup, given its calendar date, weekday and the student's
- * level (`enrollment.gradeOrGroup`).
+ * level (`enrollment.group?.name`, ADR-084 — resolved by join, not a column).
  *
  * An exception for the exact date wins over the recurring window regardless
  * of level specificity — a punctual exception always overrides the regular

@@ -49,6 +49,7 @@ export class InstitutionReportsService {
       this.pickupRequestsRepository
         .createQueryBuilder('pickup')
         .innerJoinAndSelect('pickup.enrollment', 'enrollment')
+        .leftJoinAndSelect('enrollment.group', 'group')
         .where('pickup.institution = :institutionId', { institutionId })
         .andWhere('pickup.status = :status', { status: 'delivered' })
         .andWhere('pickup.completedAt BETWEEN :start AND :end', {
@@ -105,7 +106,7 @@ export class InstitutionReportsService {
       const completedAt = pickup.completedAt!;
       const date = toCalendarDate(completedAt);
       const weekday = completedAt.getDay();
-      const level = pickup.enrollment.gradeOrGroup;
+      const level = pickup.enrollment.group?.name ?? null;
 
       const windowEnd = resolveDismissalWindowEnd(
         date,
