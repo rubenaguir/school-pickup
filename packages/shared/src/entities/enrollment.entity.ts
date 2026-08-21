@@ -13,6 +13,7 @@ import { Student } from './student.entity';
 import { Institution } from './institution.entity';
 import { User } from './user.entity';
 import { PickupRequest } from './pickup-request.entity';
+import { InstitutionGroup } from './institution-group.entity';
 
 const ENROLLMENT_STATUS_VALUES: readonly EnrollmentStatus[] = ['pending', 'approved', 'rejected'];
 
@@ -53,8 +54,19 @@ export class Enrollment {
   @Column({ name: 'status', type: 'enum', enum: ENROLLMENT_STATUS_VALUES, default: 'pending' })
   status!: EnrollmentStatus;
 
-  @Column({ name: 'grade_or_group', type: 'varchar', length: 100, nullable: true })
-  gradeOrGroup!: string | null;
+  @Index()
+  @ManyToOne(() => InstitutionGroup, (group) => group.enrollments, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'group_id' })
+  group!: InstitutionGroup | null;
+
+  // Scalar view of the group_id FK — same @RelationId pattern as institutionId
+  // below (ADR-029/044) — so services can read/validate it without loading the
+  // InstitutionGroup relation. See ADR-084.
+  @RelationId((enrollment: Enrollment) => enrollment.group)
+  groupId!: string | null;
 
   @Column({ name: 'enrollment_code', type: 'varchar', length: 50, unique: true })
   enrollmentCode!: string;

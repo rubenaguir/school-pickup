@@ -2,6 +2,8 @@ export * from './user.entity';
 export * from './institution.entity';
 export * from './institution-member.entity';
 export * from './delivery-point.entity';
+export * from './delivery-point-group.entity';
+export * from './institution-group.entity';
 export * from './student.entity';
 export * from './student-guardian.entity';
 export * from './vehicle.entity';

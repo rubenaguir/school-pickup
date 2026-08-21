@@ -14,6 +14,7 @@ import { DeliveryPoint } from './delivery-point.entity';
 import { Enrollment } from './enrollment.entity';
 import { DismissalWindow } from './dismissal-window.entity';
 import { DismissalException } from './dismissal-exception.entity';
+import { InstitutionGroup } from './institution-group.entity';
 
 const INSTITUTION_TYPE_VALUES: readonly InstitutionType[] = ['school', 'extracurricular'];
 const INSTITUTION_STATUS_VALUES: readonly InstitutionStatus[] = [
@@ -94,4 +95,7 @@ export class Institution {
 
   @OneToMany(() => DismissalException, (dismissalException) => dismissalException.institution)
   dismissalExceptions!: DismissalException[];
+
+  @OneToMany(() => InstitutionGroup, (institutionGroup) => institutionGroup.institution)
+  groups!: InstitutionGroup[];
 }

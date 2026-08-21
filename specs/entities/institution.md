@@ -36,6 +36,7 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 - `hasMany Enrollment` (`enrollments`) — vía `enrollments.institution_id`. `ON DELETE CASCADE`.
 - `hasMany DismissalWindow` (`dismissalWindows`) — vía `dismissal_windows.institution_id`. `ON DELETE CASCADE`.
 - `hasMany DismissalException` (`dismissalExceptions`) — vía `dismissal_exceptions.institution_id`. `ON DELETE CASCADE`.
+- `hasMany InstitutionGroup` (`groups`) — vía `institution_groups.institution_id`. `ON DELETE CASCADE`. Ver ADR-084.
 
 ## Índices
 
@@ -65,3 +66,4 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
   transición a `arriving`).
 - ADR-025 (defaults de `geofence_radius_meters`, `activation_radius_meters`,
   `arrival_tolerance_minutes` y `advance_notice_minutes`).
+- ADR-084 (catálogo de grupos `institution_groups`, relación `groups`).
