@@ -79,6 +79,7 @@ export function VerifyEmail() {
       }}
     >
       <div
+        className="cll-auth-shell"
         style={{
           width: 1180,
           maxWidth: '100%',
@@ -92,6 +93,7 @@ export function VerifyEmail() {
         <BrandPanel />
 
         <div
+          className="cll-auth-content"
           style={{
             flex: 1,
             background: 'var(--surface)',

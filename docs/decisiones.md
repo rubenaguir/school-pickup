@@ -6722,3 +6722,47 @@ iguales entre sí. `Profile.tsx` e `InstitutionApproval.tsx` también usan
 `820` pero quedan fuera — no son parte del set de pantallas de
 institución comparado (`Profile` está fuera de `InstitutionShell`,
 `InstitutionApproval` es de `OpsShell`/super-admin).
+
+## ADR-086 — Login (`apps/parent` y `apps/portal`) no era usable en retrato: `BrandPanel` se apila arriba del formulario bajo 767px
+
+**Contexto.** Reportado en producción: en `app.casillego.com.mx` y
+`portal.casillego.com.mx`, el login no se podía completar en modo
+vertical/retrato. Ambos `Login.tsx` (heredados de ADR-081, mismo layout
+de 1180px + `BrandPanel` de 470px de ancho fijo) usan `display: flex`
+en fila sin ningún breakpoint. `BrandPanel`
+(`packages/ui/src/components/core/BrandPanel.tsx`) fija `width: 470,
+flexShrink: 0` — en un viewport angosto no cede espacio, y como el
+contenedor padre tiene `overflow: hidden`, el panel del formulario
+(`flex: 1, minWidth: 0`) queda comprimido a un ancho casi nulo y se
+recorta fuera de la vista. A diferencia de `TutorShell.tsx` (`apps/parent`),
+que sí tiene tratamiento responsivo real vía `@media (max-width: 767px)`
+inyectado, Login nunca lo recibió — es un desvío no detectado hasta
+ahora, no una regresión de un cambio reciente.
+
+Verificado además: `BrandPanel` no es exclusivo de Login.
+`VerifyEmail.tsx` y `AcceptInvitation.tsx`, en ambas apps (6 pantallas en
+total), usan el mismo contenedor de 1180px + panel fijo de 470px
+—heredado del mismo ADR-081— y por lo tanto el mismo bug en retrato.
+
+**Decisión.**
+
+1. **Breakpoint: 767px**, el mismo ya usado en `TutorShell.tsx` — no se
+   introduce un segundo valor de corte en el proyecto.
+2. **`BrandPanel` se apila arriba del formulario** bajo ese breakpoint,
+   en vez de ocultarse — se evaluaron ambas opciones (ocultar por
+   completo vs. apilar) y se confirmó apilar, conservando todo el
+   contenido actual del panel (logo, headline, tagline, gráfico
+   decorativo, los 3 bullets), solo con tipografía/padding reducidos.
+3. **Altura del panel apilado con tope fijo (~160–180px)**, no libre —
+   prioridad explícita a que el formulario quede visible sin scroll
+   adicional en el viewport típico de un teléfono en retrato.
+4. **Alcance: las 6 pantallas que consumen `BrandPanel`** — `Login.tsx`,
+   `VerifyEmail.tsx` y `AcceptInvitation.tsx`, en `apps/parent` y
+   `apps/portal`. El fix vive en `BrandPanel` y en el contenedor
+   compartido del layout de 1180px, no en Login específicamente, así
+   que corrige las 6 por igual sin trabajo adicional por pantalla.
+
+**Consecuencias.** Las 6 pantallas vuelven a ser usables en retrato en
+producción. `BrandPanel` gana su primera variante de tamaño (compacta/
+apilada) desde que se compartió en ADR-081 — cualquier futuro tercer
+consumidor del componente hereda ambos modos.

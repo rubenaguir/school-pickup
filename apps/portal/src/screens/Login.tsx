@@ -768,6 +768,7 @@ export function Login() {
       }}
     >
       <div
+        className="cll-auth-shell"
         style={{
           width: 1180,
           maxWidth: '100%',
@@ -781,6 +782,7 @@ export function Login() {
         <BrandPanel />
 
         <div
+          className="cll-auth-content"
           style={{
             flex: 1,
             background: 'var(--surface)',
