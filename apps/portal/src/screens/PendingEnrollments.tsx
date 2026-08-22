@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useOutletContext } from 'react-router';
 import { Alert } from '../components/Alert';
-import { Field, INPUT_STYLE } from '../components/Field';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -11,6 +10,11 @@ import type {
   PendingEnrollment,
   PendingEnrollmentsValue,
 } from '../enrollments/usePendingEnrollments';
+import { GroupCombobox } from '../institution-groups/GroupCombobox';
+import {
+  useInstitutionGroups,
+  type InstitutionGroup,
+} from '../institution-groups/useInstitutionGroups';
 
 /** es-MX, 24h clock (.claude/rules/design-system.md). */
 const REQUESTED_AT_FORMAT = new Intl.DateTimeFormat('es-MX', {
@@ -82,6 +86,9 @@ function EnrollmentRow({
   busy,
   rowErrorMessage,
   rowErrorCode,
+  groups,
+  groupsLoading,
+  createGroup,
   onReview,
 }: {
   enrollment: PendingEnrollment;
@@ -90,18 +97,22 @@ function EnrollmentRow({
   busy: boolean;
   rowErrorMessage?: string;
   rowErrorCode?: string;
-  onReview: (action: 'approve' | 'reject', gradeOrGroup?: string) => void;
+  groups: InstitutionGroup[];
+  groupsLoading: boolean;
+  createGroup: (name: string) => Promise<InstitutionGroup>;
+  onReview: (action: 'approve' | 'reject', groupId?: string | null) => void;
 }) {
   const fieldId = useId();
-  // ADR-083: pre-filled if the request already carries a group; editable so
-  // the institution can assign or correct it in the same step it approves —
-  // a plain text input, same criterion as DeliveryPoints' assignedGroups
-  // (ADR-012, no <select>).
-  const [gradeDraft, setGradeDraft] = useState(enrollment.gradeOrGroup ?? '');
+  // undefined = "no change from what the request already carries" (leaves
+  // group_id untouched); null = explicitly cleared; a string = explicitly
+  // picked/created. GroupCombobox reports only these explicit actions, each
+  // already carrying a real id — nothing here needs to resolve
+  // `enrollment.gradeOrGroup` (a name) back to an id just to display it
+  // (ADR-084).
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null | undefined>(undefined);
 
   function handleApprove() {
-    const trimmed = gradeDraft.trim();
-    onReview('approve', trimmed.length > 0 ? trimmed : undefined);
+    onReview('approve', selectedGroupId);
   }
 
   return (
@@ -178,21 +189,29 @@ function EnrollmentRow({
           {/* ADR-083: assigning the group here, at approval time, is the first
               of the two vías this feature adds — the second is the "Alumnos"
               screen, for matrículas ya approved. */}
-          <span style={{ minWidth: 160 }}>
-            <Field
-              label="Grupo"
-              htmlFor={`${fieldId}-grade`}
-              hint={canReview ? 'Opcional. Se guarda al aprobar.' : undefined}
+          <span style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <label
+              htmlFor={`${fieldId}-group`}
+              style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}
             >
-              <input
-                id={`${fieldId}-grade`}
-                value={gradeDraft}
-                disabled={!canReview || busy}
-                placeholder="Sin grupo"
-                onChange={(event) => setGradeDraft(event.target.value)}
-                style={INPUT_STYLE}
-              />
-            </Field>
+              Grupo
+            </label>
+            <GroupCombobox
+              mode="single"
+              id={`${fieldId}-group`}
+              groups={groups}
+              groupsLoading={groupsLoading}
+              createGroup={createGroup}
+              disabled={!canReview || busy}
+              initialName={enrollment.gradeOrGroup}
+              onSelect={(group) => setSelectedGroupId(group.id)}
+              onClear={() => setSelectedGroupId(null)}
+            />
+            {canReview && (
+              <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
+                Opcional. Se guarda al aprobar.
+              </span>
+            )}
           </span>
         </div>
 
@@ -211,6 +230,8 @@ export function PendingEnrollments() {
   // issuing a second GET.
   const { status, enrollments, error, banner, rowError, busyId, reload, review } =
     useOutletContext<PendingEnrollmentsValue>();
+  const institutionId = current?.institutionId ?? null;
+  const { groups, status: groupsStatus, createGroup } = useInstitutionGroups(institutionId);
 
   // Feature 006, preconditions: reading the inbox is open to any member, but
   // only `admin` may resolve a request (ADR-019 point 5).
@@ -338,7 +359,10 @@ export function PendingEnrollments() {
               rowError?.enrollmentId === enrollment.id ? rowError.message : undefined
             }
             rowErrorCode={rowError?.enrollmentId === enrollment.id ? rowError.code : undefined}
-            onReview={(action, gradeOrGroup) => review(enrollment.id, action, gradeOrGroup)}
+            groups={groups}
+            groupsLoading={groupsStatus === 'loading'}
+            createGroup={createGroup}
+            onReview={(action, groupId) => review(enrollment.id, action, groupId)}
           />
         ))}
     </div>

@@ -11,6 +11,7 @@ import {
   DASHBOARD_PATH,
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
+  GROUPS_PATH,
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
@@ -24,11 +25,12 @@ interface NavEntry {
   icon: IconName;
 }
 
-/** 8 items (ADR-072 point 2, ADR-083) — "Alumnos" es el octavo, para buscar y corregir el grupo de matrículas ya aprobadas. */
+/** 9 items (ADR-072 point 2, ADR-083, ADR-084) — "Grupos" es el noveno: el catálogo que alimenta el selector de "Alumnos" y "Puntos de entrega". */
 const NAV: readonly NavEntry[] = [
   { path: DASHBOARD_PATH, label: 'Dashboard', icon: 'grid' },
   { path: PENDING_ENROLLMENTS_PATH, label: 'Aprobaciones', icon: 'inbox' },
   { path: ALUMNOS_PATH, label: 'Alumnos', icon: 'student' },
+  { path: GROUPS_PATH, label: 'Grupos', icon: 'tag' },
   { path: INSTITUTION_PROFILE_PATH, label: 'Institución', icon: 'school' },
   { path: DELIVERY_POINTS_PATH, label: 'Puntos de entrega', icon: 'pin' },
   { path: DISMISSAL_SCHEDULE_PATH, label: 'Horarios', icon: 'clock' },

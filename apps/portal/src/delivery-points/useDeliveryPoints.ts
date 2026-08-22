@@ -25,12 +25,15 @@ export interface DeliveryPoint {
 /**
  * Body of POST /institutions/:id/delivery-points. `status` is absent on
  * purpose: a new point is always created `active` (feature 009).
+ * `groupIds` renamed from `assignedGroups` (free text) by ADR-084 — the
+ * response field keeps its name and shape (`assignedGroups: string[] | null`
+ * above), resolved by join now instead of column.
  */
 export interface DeliveryPointDraft {
   name: string;
   description: string | null;
   operatorUserId: string | null;
-  assignedGroups: string[];
+  groupIds: string[];
 }
 
 /** Body of PATCH /delivery-points/:id — partial edit, `status` included. */

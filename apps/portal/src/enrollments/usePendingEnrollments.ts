@@ -52,12 +52,14 @@ export interface PendingEnrollmentsValue {
   busyId: string | null;
   reload: () => void;
   /**
-   * `gradeOrGroup` only applies to `action === 'approve'` (ADR-083) — sent as
-   * the PATCH body so an institution can assign or correct the student's
-   * group in the same step it approves the request, instead of depending
-   * only on the catch-all delivery point. Ignored for `'reject'`.
+   * `groupId` only applies to `action === 'approve'` (ADR-083) — sent as the
+   * PATCH body so an institution can assign or correct the student's group in
+   * the same step it approves the request, instead of depending only on the
+   * catch-all delivery point. Ignored for `'reject'`. Renamed from
+   * `gradeOrGroup` (free text) by ADR-084 — the response field keeps its name
+   * (`gradeOrGroup: string | null` above), resolved by join now.
    */
-  review: (enrollmentId: string, action: ReviewAction, gradeOrGroup?: string) => void;
+  review: (enrollmentId: string, action: ReviewAction, groupId?: string | null) => void;
 }
 
 interface PendingEnrollmentsResponse {
@@ -143,7 +145,7 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
   }, [institutionId, attempt]);
 
   const review = useCallback(
-    (enrollmentId: string, action: ReviewAction, gradeOrGroup?: string) => {
+    (enrollmentId: string, action: ReviewAction, groupId?: string | null) => {
       if (!institutionId) return;
       setBusyId(enrollmentId);
       setBanner(null);
@@ -152,7 +154,7 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
       void apiClient
         .patch(
           `/enrollments/${enrollmentId}/${action}`,
-          action === 'approve' ? { gradeOrGroup } : undefined,
+          action === 'approve' ? { groupId } : undefined,
         )
         .then(() => {
           // Drop just the resolved row: the rest of the inbox is untouched, so

@@ -11,6 +11,7 @@ import {
   DELIVERY_POINTS_PATH,
   DISMISSAL_SCHEDULE_PATH,
   GATE_CONSOLE_PATH,
+  GROUPS_PATH,
   HOME_PATH,
   INSTITUTION_PROFILE_PATH,
   LOGIN_PATH,
@@ -26,6 +27,7 @@ import { DeliveryPoints } from './screens/DeliveryPoints';
 import { DismissalSchedule } from './screens/DismissalSchedule';
 import { GateConsole } from './screens/GateConsole';
 import { GlobalMetrics } from './screens/GlobalMetrics';
+import { Groups } from './screens/Groups';
 import { InstitutionApproval } from './screens/InstitutionApproval';
 import { InstitutionProfile } from './screens/InstitutionProfile';
 import { InstitutionShell } from './institution/InstitutionShell';
@@ -59,6 +61,7 @@ export function App() {
                 <Route path={DASHBOARD_PATH} element={<Dashboard />} />
                 <Route path={PENDING_ENROLLMENTS_PATH} element={<PendingEnrollments />} />
                 <Route path={ALUMNOS_PATH} element={<Students />} />
+                <Route path={GROUPS_PATH} element={<Groups />} />
                 <Route path={INSTITUTION_PROFILE_PATH} element={<InstitutionProfile />} />
                 <Route path={DELIVERY_POINTS_PATH} element={<DeliveryPoints />} />
                 <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />

@@ -2,19 +2,23 @@ import { useId, useMemo, useState } from 'react';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import { Alert } from '../components/Alert';
-import { Field, INPUT_STYLE } from '../components/Field';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
 import { apiClient } from '../api/client';
 import {
   enrollmentListErrorMessage,
-  enrollmentGradeErrorMessage,
+  enrollmentGroupErrorMessage,
 } from '../enrollments/enrollment-error-messages';
 import {
   useApprovedEnrollments,
   type ApprovedEnrollment,
 } from '../enrollments/useApprovedEnrollments';
+import { GroupCombobox } from '../institution-groups/GroupCombobox';
+import {
+  useInstitutionGroups,
+  type InstitutionGroup,
+} from '../institution-groups/useInstitutionGroups';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -57,6 +61,9 @@ function StudentRow({
   canEdit,
   busy,
   rowError,
+  groups,
+  groupsLoading,
+  createGroup,
   onSave,
 }: {
   enrollment: ApprovedEnrollment;
@@ -64,14 +71,18 @@ function StudentRow({
   canEdit: boolean;
   busy: boolean;
   rowError: RowError | null;
-  onSave: (gradeOrGroup: string | null) => void;
+  groups: InstitutionGroup[];
+  groupsLoading: boolean;
+  createGroup: (name: string) => Promise<InstitutionGroup>;
+  onSave: (groupId: string | null) => void;
 }) {
   const fieldId = useId();
-  const [draft, setDraft] = useState(enrollment.gradeOrGroup ?? '');
-
-  const trimmed = draft.trim();
-  const currentValue = enrollment.gradeOrGroup ?? '';
-  const dirty = trimmed !== currentValue;
+  // undefined = untouched (Guardar stays disabled); null = explicitly
+  // cleared; a string = explicitly picked/created. Same "report only
+  // explicit deltas" contract as PendingEnrollments' EnrollmentRow — see
+  // GroupCombobox's module doc (ADR-084).
+  const [changedGroupId, setChangedGroupId] = useState<string | null | undefined>(undefined);
+  const dirty = changedGroupId !== undefined;
 
   return (
     <Card>
@@ -104,23 +115,33 @@ function StudentRow({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ minWidth: 160 }} title={canEdit ? undefined : NOT_ADMIN_REASON}>
-              <Field label="Grupo" htmlFor={`${fieldId}-grade`}>
-                <input
-                  id={`${fieldId}-grade`}
-                  value={draft}
-                  disabled={!canEdit || busy}
-                  placeholder="Sin grupo"
-                  onChange={(event) => setDraft(event.target.value)}
-                  style={INPUT_STYLE}
-                />
-              </Field>
+            <span
+              style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 7 }}
+              title={canEdit ? undefined : NOT_ADMIN_REASON}
+            >
+              <label
+                htmlFor={`${fieldId}-group`}
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}
+              >
+                Grupo
+              </label>
+              <GroupCombobox
+                mode="single"
+                id={`${fieldId}-group`}
+                groups={groups}
+                groupsLoading={groupsLoading}
+                createGroup={createGroup}
+                disabled={!canEdit || busy}
+                initialName={enrollment.gradeOrGroup}
+                onSelect={(group) => setChangedGroupId(group.id)}
+                onClear={() => setChangedGroupId(null)}
+              />
             </span>
             <Button
               variant="outline"
               size="sm"
               disabled={!canEdit || busy || !dirty}
-              onClick={() => onSave(trimmed.length > 0 ? trimmed : null)}
+              onClick={() => onSave(changedGroupId ?? null)}
             >
               {busy ? 'Guardando…' : 'Guardar'}
             </Button>
@@ -139,6 +160,7 @@ export function Students() {
   const institutionId = current?.institutionId ?? null;
 
   const { status, enrollments, error, reload } = useApprovedEnrollments(institutionId);
+  const { groups, status: groupsStatus, createGroup } = useInstitutionGroups(institutionId);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, RowError>>({});
@@ -165,7 +187,7 @@ export function Students() {
     [rows, search],
   );
 
-  function handleSave(enrollmentId: string, gradeOrGroup: string | null) {
+  function handleSave(enrollmentId: string, groupId: string | null) {
     setBusyId(enrollmentId);
     setRowErrors((current) => {
       if (!(enrollmentId in current)) return current;
@@ -175,7 +197,7 @@ export function Students() {
     });
 
     apiClient
-      .patch<ApprovedEnrollment>(`/enrollments/${enrollmentId}/grade`, { gradeOrGroup })
+      .patch<ApprovedEnrollment>(`/enrollments/${enrollmentId}/group`, { groupId })
       .then((updated) => {
         setRows((current) => current.map((row) => (row.id === enrollmentId ? updated : row)));
       })
@@ -187,7 +209,7 @@ export function Students() {
         setRowErrors((current) => ({
           ...current,
           [enrollmentId]: {
-            message: enrollmentGradeErrorMessage(apiError.code),
+            message: enrollmentGroupErrorMessage(apiError.code),
             code: apiError.code,
           },
         }));
@@ -340,7 +362,10 @@ export function Students() {
             canEdit={canEdit}
             busy={busyId === enrollment.id}
             rowError={rowErrors[enrollment.id] ?? null}
-            onSave={(gradeOrGroup) => handleSave(enrollment.id, gradeOrGroup)}
+            groups={groups}
+            groupsLoading={groupsStatus === 'loading'}
+            createGroup={createGroup}
+            onSave={(groupId) => handleSave(enrollment.id, groupId)}
           />
         ))}
     </div>

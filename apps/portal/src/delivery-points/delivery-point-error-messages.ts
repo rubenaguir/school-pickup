@@ -35,6 +35,11 @@ const SAVE_MESSAGES: Record<string, string> = {
     'Ya existe otro punto activo sin grupos asignados. Solo puede haber uno: es el que recibe a los alumnos sin grupo.',
   DUPLICATE_ASSIGNED_GROUP:
     'Uno o más de estos grupos ya están asignados a otro punto activo. Quítalos de ahí primero.',
+  // ADR-084: el selector solo ofrece grupos reales de la institución, así que
+  // este código solo puede llegar si un grupo fue borrado entre que se cargó
+  // el selector y se guardó el formulario.
+  GROUP_NOT_IN_INSTITUTION:
+    'Uno de los grupos que elegiste ya no existe en esta institución. Vuelve a cargar la lista y elige de nuevo.',
 };
 
 // Los códigos de GET /institutions/:id/members —la fuente del selector de

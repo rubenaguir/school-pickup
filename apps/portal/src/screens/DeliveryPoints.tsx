@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Badge,
@@ -31,6 +31,11 @@ import {
   useInstitutionMembers,
   type InstitutionMemberRow,
 } from '../institution-personnel/useInstitutionMembers';
+import { GroupCombobox } from '../institution-groups/GroupCombobox';
+import {
+  useInstitutionGroups,
+  type InstitutionGroup,
+} from '../institution-groups/useInstitutionGroups';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
 import { GATE_CONSOLE_PATH } from '../routes/paths';
@@ -86,123 +91,6 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Grupos asignados — entrada de etiquetas                             */
-/* ------------------------------------------------------------------ */
-
-/**
- * `assignedGroups` is a free-text `varchar[]` (ADR-012), so a single `<input>`
- * would hide the array behind a string the user has to punctuate correctly.
- * This is a tag box: Enter or a comma commits a chip, Backspace on an empty box
- * removes the last one, and every chip can be dropped on its own.
- *
- * Deliberately local to this screen and not part of `@casillego/ui`: that
- * package holds the ten components of the design system (ADR-036) and gaining
- * an eleventh is a design-system decision. Same criterion as `Field` and
- * `Alert`, which live in the portal for the same reason. See ADR-049 point 2.
- */
-function GroupsInput({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState('');
-
-  function commitDraft(raw: string) {
-    const groups = raw
-      .split(',')
-      .map((group) => group.trim())
-      .filter((group) => group.length > 0 && !value.includes(group));
-    if (groups.length > 0) onChange([...value, ...groups]);
-    setDraft('');
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter' || event.key === ',') {
-      // Enter inside a form would submit it; here it only closes a chip.
-      event.preventDefault();
-      commitDraft(draft);
-      return;
-    }
-    if (event.key === 'Backspace' && draft === '' && value.length > 0) {
-      onChange(value.slice(0, -1));
-    }
-  }
-
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
-      <label htmlFor={id} style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}>
-        Grupos asignados
-      </label>
-      <span
-        style={{
-          minHeight: 46,
-          border: '1px solid var(--border-strong)',
-          borderRadius: 10,
-          padding: '7px 10px',
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 7,
-        }}
-      >
-        {value.map((group) => (
-          <span
-            key={group}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 6px 4px 11px',
-              borderRadius: 'var(--radius-pill)',
-              background: 'var(--surface-muted)',
-              color: 'var(--ink-600)',
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            {group}
-            <button
-              type="button"
-              aria-label={`Quitar ${group}`}
-              onClick={() => onChange(value.filter((item) => item !== group))}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                color: 'var(--ink-300)',
-                fontSize: 15,
-                lineHeight: 1,
-                padding: '0 3px',
-              }}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          id={id}
-          value={draft}
-          placeholder={value.length === 0 ? '1° A, 2° B…' : undefined}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          // Lo escrito sin confirmar no se pierde al salir del campo.
-          onBlur={() => commitDraft(draft)}
-          style={{ ...INPUT_STYLE, minWidth: 120, fontSize: 14 }}
-        />
-      </span>
-      <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
-        Texto libre. Escribe un grupo y presiona Enter. Las recogidas de esos grupos se asignan
-        automáticamente a este punto.
-      </span>
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Formulario de alta / edición                                        */
 /* ------------------------------------------------------------------ */
 
@@ -210,7 +98,6 @@ interface FormValues {
   name: string;
   description: string;
   operatorUserId: string;
-  assignedGroups: string[];
 }
 
 function toFormValues(deliveryPoint: DeliveryPoint | null): FormValues {
@@ -218,7 +105,6 @@ function toFormValues(deliveryPoint: DeliveryPoint | null): FormValues {
     name: deliveryPoint?.name ?? '',
     description: deliveryPoint?.description ?? '',
     operatorUserId: deliveryPoint?.operatorUserId ?? '',
-    assignedGroups: deliveryPoint?.assignedGroups ?? [],
   };
 }
 
@@ -228,35 +114,46 @@ function emptyToNull(text: string): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-function sameStringList(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+function sameIdList(a: string[], b: string[]): boolean {
+  return (
+    a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index])
+  );
 }
 
 /**
  * What actually travels. Creating sends only what was filled in — the server
  * defaults the rest (`status = active`, nullable columns). Editing is a partial
  * PATCH, so it sends only what changed, same criterion as the institution
- * profile.
+ * profile. `originalGroupIds` is the delivery point's current groups resolved
+ * to ids once the catalog loaded (ADR-084) — comparing against it, not
+ * against `deliveryPoint.assignedGroups` (names), is what lets a no-op edit
+ * of the group selector stay a no-op.
  */
-function buildChanges(deliveryPoint: DeliveryPoint | null, form: FormValues): DeliveryPointChanges {
+function buildChanges(
+  deliveryPoint: DeliveryPoint | null,
+  form: FormValues,
+  groups: InstitutionGroup[],
+  originalGroupIds: string[],
+): DeliveryPointChanges {
   const changes: DeliveryPointChanges = {};
   const name = form.name.trim();
   const description = emptyToNull(form.description);
   const operatorUserId = form.operatorUserId === '' ? null : form.operatorUserId;
+  const groupIds = groups.map((group) => group.id);
 
   if (!deliveryPoint) {
     changes.name = name;
     if (description !== null) changes.description = description;
     if (operatorUserId !== null) changes.operatorUserId = operatorUserId;
-    if (form.assignedGroups.length > 0) changes.assignedGroups = form.assignedGroups;
+    if (groupIds.length > 0) changes.groupIds = groupIds;
     return changes;
   }
 
   if (name !== deliveryPoint.name) changes.name = name;
   if (description !== deliveryPoint.description) changes.description = description;
   if (operatorUserId !== deliveryPoint.operatorUserId) changes.operatorUserId = operatorUserId;
-  if (!sameStringList(form.assignedGroups, deliveryPoint.assignedGroups ?? [])) {
-    changes.assignedGroups = form.assignedGroups;
+  if (!sameIdList(groupIds, originalGroupIds)) {
+    changes.groupIds = groupIds;
   }
 
   return changes;
@@ -270,6 +167,9 @@ interface DeliveryPointFormProps {
   membersErrorMessage: string | null;
   membersErrorCode: string | null;
   onRetryMembers: () => void;
+  groups: InstitutionGroup[];
+  groupsLoading: boolean;
+  createGroup: (name: string) => Promise<InstitutionGroup>;
   submitting: boolean;
   submitErrorMessage: string | null;
   submitErrorCode: string | null;
@@ -280,6 +180,12 @@ interface DeliveryPointFormProps {
 /**
  * Mounted with a `key` tied to what it edits, so its state is seeded from that
  * row and never has to be copied in by an effect — same shape as `ProfileForm`.
+ * The one exception is the group selector: `deliveryPoint.assignedGroups` only
+ * carries names (ADR-084 keeps the read shape unchanged), so resolving them to
+ * the ids the form actually submits needs the catalog loaded first — the
+ * render-time check below (React's documented "adjusting state when a prop
+ * changes" pattern, not a `useEffect`) seeds it once that happens, guarded by
+ * a ref so the user's own edits after that are never clobbered.
  */
 function DeliveryPointForm({
   deliveryPoint,
@@ -288,6 +194,9 @@ function DeliveryPointForm({
   membersErrorMessage,
   membersErrorCode,
   onRetryMembers,
+  groups: catalogGroups,
+  groupsLoading,
+  createGroup,
   submitting,
   submitErrorMessage,
   submitErrorCode,
@@ -297,9 +206,31 @@ function DeliveryPointForm({
   const fieldId = useId();
   const [form, setForm] = useState<FormValues>(() => toFormValues(deliveryPoint));
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [selectedGroups, setSelectedGroups] = useState<InstitutionGroup[]>([]);
+  const [originalGroupIds, setOriginalGroupIds] = useState<string[]>([]);
+  // Plain state, not a ref: refs cannot be read during render. Same pattern
+  // Students.tsx uses for `seededFrom`
+  // (https://react.dev/learn/you-might-not-need-an-effect) — runs during
+  // render the first time groupsLoading is false, re-rendering immediately
+  // with the resolved groups before anything commits.
+  const [groupsSeeded, setGroupsSeeded] = useState(false);
+
+  if (!groupsSeeded && !groupsLoading) {
+    setGroupsSeeded(true);
+    const names = deliveryPoint?.assignedGroups ?? [];
+    if (names.length > 0) {
+      const resolved = names
+        .map((name) =>
+          catalogGroups.find((group) => group.name.toLowerCase() === name.toLowerCase()),
+        )
+        .filter((group): group is InstitutionGroup => group !== undefined);
+      setSelectedGroups(resolved);
+      setOriginalGroupIds(resolved.map((group) => group.id));
+    }
+  }
 
   const creating = deliveryPoint === null;
-  const changes = buildChanges(deliveryPoint, form);
+  const changes = buildChanges(deliveryPoint, form, selectedGroups, originalGroupIds);
   const dirty = Object.keys(changes).length > 0;
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
@@ -315,7 +246,7 @@ function DeliveryPointForm({
       return;
     }
 
-    const payload = buildChanges(deliveryPoint, form);
+    const payload = buildChanges(deliveryPoint, form, selectedGroups, originalGroupIds);
     if (Object.keys(payload).length === 0) return;
     onSubmit(payload);
   }
@@ -400,11 +331,27 @@ function DeliveryPointForm({
         {/* Sin estado deshabilitado: el formulario solo se abre desde botones
             que ya exigen `role = admin`, así que nunca se renderiza en modo
             lectura. */}
-        <GroupsInput
-          id={`${fieldId}-groups`}
-          value={form.assignedGroups}
-          onChange={(next) => update('assignedGroups', next)}
-        />
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
+          <label
+            htmlFor={`${fieldId}-groups`}
+            style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' }}
+          >
+            Grupos asignados
+          </label>
+          <GroupCombobox
+            mode="multi"
+            id={`${fieldId}-groups`}
+            groups={catalogGroups}
+            groupsLoading={groupsLoading}
+            createGroup={createGroup}
+            value={selectedGroups}
+            onChange={setSelectedGroups}
+          />
+          <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
+            Busca un grupo del catálogo o escribe uno nuevo para crearlo. Las recogidas de esos
+            grupos se asignan automáticamente a este punto.
+          </span>
+        </span>
 
         {membersErrorMessage && membersErrorCode && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -677,6 +624,7 @@ export function DeliveryPoints() {
     rowError,
   } = useDeliveryPoints(institutionId);
   const members = useInstitutionMembers(institutionId);
+  const { groups, status: groupsStatus, createGroup } = useInstitutionGroups(institutionId);
 
   const [filter, setFilter] = useState(ALL_FILTER);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -823,6 +771,9 @@ export function DeliveryPoints() {
           }
           membersErrorCode={members.error?.code ?? null}
           onRetryMembers={members.reload}
+          groups={groups}
+          groupsLoading={groupsStatus === 'loading'}
+          createGroup={createGroup}
           submitting={submitting}
           submitErrorMessage={submitError ? deliveryPointSaveErrorMessage(submitError.code) : null}
           submitErrorCode={submitError?.code ?? null}

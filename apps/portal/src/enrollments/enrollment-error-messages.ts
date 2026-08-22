@@ -16,6 +16,10 @@ const LIST_MESSAGES: Record<string, string> = {
  * Codes reachable from PATCH /enrollments/:id/approve and /reject
  * (specs/api-contracts/enrollments.md). `INSTITUTION_NOT_APPROVED` solo llega
  * desde `approve`: `reject` no valida el estado de la institución (ADR-018).
+ * `GROUP_NOT_IN_INSTITUTION` solo llega desde `approve`, cuando se envía un
+ * `groupId` (ADR-084) — el selector solo ofrece grupos reales de la
+ * institución, así que solo llega si uno fue borrado entre que se cargó y se
+ * aprobó.
  */
 const REVIEW_MESSAGES: Record<string, string> = {
   ENROLLMENT_NOT_PENDING: 'Otra persona ya resolvió esta solicitud.',
@@ -24,20 +28,25 @@ const REVIEW_MESSAGES: Record<string, string> = {
   ADMIN_ROLE_REQUIRED: 'Solo un administrador puede aprobar o rechazar solicitudes.',
   NOT_INSTITUTION_MEMBER: 'No perteneces a esta institución.',
   RESOURCE_NOT_FOUND: 'Esta solicitud ya no existe.',
+  GROUP_NOT_IN_INSTITUTION:
+    'Ese grupo ya no existe en esta institución. Vuelve a cargar la lista y elige de nuevo.',
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
 };
 
 /**
- * Codes reachable from PATCH /enrollments/:id/grade
- * (specs/api-contracts/enrollments.md, ADR-083). `ENROLLMENT_NOT_APPROVED`
- * only reaches this endpoint — approve/reject answer `ENROLLMENT_NOT_PENDING`
- * instead, a different code for a different transition.
+ * Codes reachable from PATCH /enrollments/:id/group (renombrado desde
+ * `.../grade` por ADR-084; specs/api-contracts/enrollments.md, ADR-083).
+ * `ENROLLMENT_NOT_APPROVED` only reaches this endpoint — approve/reject
+ * answer `ENROLLMENT_NOT_PENDING` instead, a different code for a different
+ * transition.
  */
-const GRADE_MESSAGES: Record<string, string> = {
+const GROUP_MESSAGES: Record<string, string> = {
   ENROLLMENT_NOT_APPROVED: 'Esta matrícula ya no está aprobada; alguien más la cambió.',
   ADMIN_ROLE_REQUIRED: 'Solo un administrador puede editar el grupo de un alumno.',
   NOT_INSTITUTION_MEMBER: 'No perteneces a esta institución.',
   RESOURCE_NOT_FOUND: 'Este alumno ya no existe.',
+  GROUP_NOT_IN_INSTITUTION:
+    'Ese grupo ya no existe en esta institución. Vuelve a cargar la lista y elige de nuevo.',
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
 };
 
@@ -51,6 +60,6 @@ export function enrollmentReviewErrorMessage(code: string): string {
   return REVIEW_MESSAGES[code] ?? FALLBACK;
 }
 
-export function enrollmentGradeErrorMessage(code: string): string {
-  return GRADE_MESSAGES[code] ?? FALLBACK;
+export function enrollmentGroupErrorMessage(code: string): string {
+  return GROUP_MESSAGES[code] ?? FALLBACK;
 }

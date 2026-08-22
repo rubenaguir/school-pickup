@@ -12,7 +12,16 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
-  'inbox' | 'users' | 'grid' | 'school' | 'clock' | 'chart' | 'pin' | 'building' | 'student';
+  | 'inbox'
+  | 'users'
+  | 'grid'
+  | 'school'
+  | 'clock'
+  | 'chart'
+  | 'pin'
+  | 'building'
+  | 'student'
+  | 'tag';
 
 interface IconProps {
   name: IconName;
@@ -101,6 +110,18 @@ export function Icon({ name, size = 20 }: IconProps) {
         <path d="M2 9 12 4l10 5-10 5-10-5z" />
         <path d="M6 11.5V16c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5" />
         <path d="M22 9v6" />
+      </svg>
+    );
+  }
+
+  // 'tag': not in the design kit's Icon() set (ADR-084 adds the "Grupos"
+  // nav item after the kit was transcribed) — a plain price-tag glyph, same
+  // criterion as 'pin' above.
+  if (name === 'tag') {
+    return (
+      <svg {...props}>
+        <path d="M12.59 2.59 20 10a2 2 0 0 1 0 2.83l-7.17 7.17a2 2 0 0 1-2.83 0L3 13V4a1 1 0 0 1 1-1z" />
+        <circle cx={7.5} cy={7.5} r={1.3} fill="currentColor" stroke="none" />
       </svg>
     );
   }

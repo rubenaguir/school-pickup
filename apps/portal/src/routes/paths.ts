@@ -56,6 +56,14 @@ export const DELIVERY_POINTS_PATH = '/delivery-points';
 export const ALUMNOS_PATH = '/students';
 
 /**
+ * Catálogo de grupos/niveles de la institución
+ * (specs/api-contracts/institution-groups.md, ADR-084). Protegida como las
+ * demás pantallas de configuración: cualquier miembro puede leer, solo
+ * `admin` puede crear, renombrar o borrar.
+ */
+export const GROUPS_PATH = '/groups';
+
+/**
  * Recurring dismissal windows and special days
  * (specs/features/010-gestionar-horarios-recurrentes.md and
  * 011-gestionar-dias-especiales.md). One route for the two entities: they are
