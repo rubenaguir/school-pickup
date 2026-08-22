@@ -6705,3 +6705,20 @@ así que bajar el contenedor a 820 no rompe la tabla — solo hace que ese
 scroll lateral ya previsto se active un poco antes en ventanas angostas,
 comportamiento ya construido para esto. Se estandariza `Personnel.tsx` a
 `maxWidth: 820`, igual que las demás.
+
+**7. Reversión del punto 6 — se estandariza a `940`, no a `820`.**
+Verificado en vivo por el humano tras aplicar el punto 6: `maxWidth: 940`
+evita el scroll lateral en la tabla de `Personnel.tsx` (el que el punto 6
+asumía como comportamiento aceptable ya construido), y además es la
+preferencia visual explícita del humano para las 7 pantallas restantes,
+no solo para evitar el scroll. Evaluado contra el layout interno de las
+7 — `PendingEnrollments`, `Students`, `Groups`, `InstitutionProfile`,
+`DeliveryPoints`, `DismissalSchedule`, `Reports` —, ninguna tiene una
+tabla de columnas fijas como la de `Personnel`; todas usan
+`repeat(auto-fit, minmax(Npx, 1fr))` o filas en flex, el patrón
+responsivo pensado exactamente para reflowear sin romperse ante un
+contenedor más ancho. Se estandarizan las 7 a `940`, quedando las 8
+iguales entre sí. `Profile.tsx` e `InstitutionApproval.tsx` también usan
+`820` pero quedan fuera — no son parte del set de pantallas de
+institución comparado (`Profile` está fuera de `InstitutionShell`,
+`InstitutionApproval` es de `OpsShell`/super-admin).

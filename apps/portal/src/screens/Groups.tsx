@@ -400,7 +400,7 @@ export function Groups() {
   return (
     <div
       style={{
-        maxWidth: 820,
+        maxWidth: 940,
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
