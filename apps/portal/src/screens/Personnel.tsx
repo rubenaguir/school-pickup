@@ -409,7 +409,7 @@ export function Personnel() {
   return (
     <div
       style={{
-        maxWidth: 940,
+        maxWidth: 820,
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',

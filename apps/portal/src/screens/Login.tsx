@@ -301,7 +301,7 @@ function ChooseAccountType({
         {/* No tutor form lives in this app — apps/portal is exclusive to the
             institución role since ADR-078. This card only points at
             apps/parent (ADR-080 point 2), same disabled-with-title pattern
-            as the Dashboard's "Abrir tablero" (ADR-072 point 6). */}
+            as any cross-app link with no runtime config (ADR-034/035). */}
         <span
           title={parentUrl ? undefined : 'Configura VITE_PARENT_URL para habilitar este enlace.'}
           style={{ flex: 1 }}

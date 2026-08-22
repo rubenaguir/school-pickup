@@ -6680,3 +6680,28 @@ elimina por completo: el botón en `Dashboard.tsx`, la variable
 "ADR-072 punto 6" que quedarían huérfanas. No se toca `VITE_PARENT_URL`
 (tarjeta "Crear cuenta" → tutor) — es una pregunta aparte, no evaluada
 aquí.
+
+**5. Comentario huérfano en `Login.tsx`.** Detectado al verificar el
+punto 4: la tarjeta "Tutor o familia" (`VITE_PARENT_URL`) tenía un
+comentario que comparaba su patrón "visible pero deshabilitado" con *"the
+Dashboard's 'Abrir tablero' (ADR-072 point 6)"* — la misma cita falsa,
+apuntando además a una feature que ya no existe tras el punto 4. No
+afecta comportamiento (`VITE_PARENT_URL` sigue intacto), solo el
+comentario. Se corrige para citar el precedente real (ADR-034/035) en vez
+de repetir la cita inventada.
+
+**6. Ancho de contenido inconsistente en `Personnel.tsx`.** Las 8
+pantallas de institución (excepto `Dashboard`, que no tiene `maxWidth`
+por diseño) usan `maxWidth: 820` en su contenedor raíz —
+`PendingEnrollments`, `Students`, `Groups`, `InstitutionProfile`,
+`DeliveryPoints`, `DismissalSchedule`, `Reports`. Solo `Personnel.tsx`
+usa `940`, sin ningún comentario ni ADR que lo justifique (confirmado:
+cero menciones de "940" en `docs/decisiones.md`; el commit que lo
+introdujo tampoco explica el valor). La tabla de personal (grid de 5
+columnas, `minmax(210px, 2fr) 200px 120px 120px 130px`) ya tiene su
+propio manejo de espacio angosto documentado en el código ("The list
+scrolls sideways rather than squeezing the columns on a narrow window"),
+así que bajar el contenedor a 820 no rompe la tabla — solo hace que ese
+scroll lateral ya previsto se active un poco antes en ventanas angostas,
+comportamiento ya construido para esto. Se estandariza `Personnel.tsx` a
+`maxWidth: 820`, igual que las demás.
