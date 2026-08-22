@@ -35,20 +35,27 @@ const CHECK = (
  * `width: 100%` — `!important` is required there since a class alone can't
  * outrank an inline style, same trick `TutorShell` already uses for its own
  * breakpoint. `BrandPanel`'s own size-affecting properties (width, padding,
- * font sizes, gaps) live only in this stylesheet, never inline, so the
- * override needs no `!important`.
+ * font sizes, gaps, justify-content) live only in this stylesheet, never
+ * inline, so the override needs no `!important`.
+ *
+ * Compact content: an earlier pass kept the tagline and the 3 bullets at a
+ * reduced size, but against the real render that was too dense for ~170px
+ * of height (ADR-086 point 2, revised). The tagline and bullets are hidden
+ * below the breakpoint instead — only the logo and headline stay, at a
+ * larger size now that they're the only content.
  */
 const RESPONSIVE_STYLE = `
 .cll-brand-panel {
   width: 470px;
   flex-shrink: 0;
   padding: 38px 40px;
+  justify-content: space-between;
 }
 .cll-brand-panel-logo-mark { width: 29px; height: 34px; }
 .cll-brand-panel-logo-text { font-size: 22px; }
 .cll-brand-panel-headline { font-size: 38px; line-height: 1.08; }
 .cll-brand-panel-tagline { font-size: 16px; margin-top: 16px; }
-.cll-brand-panel-bullets { gap: 13px; }
+.cll-brand-panel-bullets { display: flex; flex-direction: column; gap: 13px; }
 .cll-brand-panel-bullet { font-size: 14px; gap: 11px; }
 .cll-brand-panel-bullet-icon { width: 22px; height: 22px; }
 
@@ -63,24 +70,17 @@ const RESPONSIVE_STYLE = `
 
   .cll-brand-panel {
     width: 100%;
-    height: 176px;
-    padding: 16px 20px;
+    height: 148px;
+    padding: 18px 22px;
     box-sizing: border-box;
+    justify-content: center;
+    gap: 14px;
   }
   .cll-brand-panel-logo-mark { width: 20px; height: 23px; }
   .cll-brand-panel-logo-text { font-size: 15px; }
-  .cll-brand-panel-headline { font-size: 17px; line-height: 1.15; }
-  .cll-brand-panel-tagline {
-    font-size: 11px;
-    margin-top: 4px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .cll-brand-panel-bullets { gap: 3px; }
-  .cll-brand-panel-bullet { font-size: 10px; gap: 6px; }
-  .cll-brand-panel-bullet-icon { width: 14px; height: 14px; }
+  .cll-brand-panel-headline { font-size: 22px; line-height: 1.15; }
+  .cll-brand-panel-tagline { display: none; }
+  .cll-brand-panel-bullets { display: none; }
 }
 `;
 
@@ -96,7 +96,6 @@ export function BrandPanel() {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
       }}
     >
       <style>{RESPONSIVE_STYLE}</style>
@@ -185,11 +184,7 @@ export function BrandPanel() {
         </div>
       </div>
 
-      <div
-        className="cll-brand-panel-bullets"
-        style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}
-        aria-hidden="true"
-      >
+      <div className="cll-brand-panel-bullets" style={{ position: 'relative' }} aria-hidden="true">
         {BULLETS.map((bullet) => (
           <span
             key={bullet}

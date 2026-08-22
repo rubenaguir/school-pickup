@@ -6750,9 +6750,14 @@ total), usan el mismo contenedor de 1180px + panel fijo de 470px
    introduce un segundo valor de corte en el proyecto.
 2. **`BrandPanel` se apila arriba del formulario** bajo ese breakpoint,
    en vez de ocultarse — se evaluaron ambas opciones (ocultar por
-   completo vs. apilar) y se confirmó apilar, conservando todo el
-   contenido actual del panel (logo, headline, tagline, gráfico
-   decorativo, los 3 bullets), solo con tipografía/padding reducidos.
+   completo vs. apilar) y se confirmó apilar. **Revisión tras ver el
+   render real:** la primera decisión (conservar todo el contenido —
+   logo, headline, tagline y los 3 bullets — solo reducido de tamaño)
+   se probó en producción y se vio saturada; demasiada densidad de
+   texto para ~170px de alto. Contenido final apilado: **solo logo +
+   headline** ("Menos fila. Más calma a la salida."). Tagline y los 3
+   bullets se ocultan bajo el breakpoint y quedan exclusivos del
+   layout de escritorio, donde sí hay espacio.
 3. **Altura del panel apilado con tope fijo (~160–180px)**, no libre —
    prioridad explícita a que el formulario quede visible sin scroll
    adicional en el viewport típico de un teléfono en retrato.
