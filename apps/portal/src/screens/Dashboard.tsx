@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { Badge, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import type { BadgeProps } from '@casillego/ui';
 import type { PickupRequestStatus } from '@casillego/shared';
 import { relationshipLabel } from '@casillego/shared';
@@ -148,8 +148,6 @@ export function Dashboard() {
   const monitor = useInstitutionBoardMonitor(institutionId);
   const [filter, setFilter] = useState<Filter>('Todos');
 
-  const boardUrl = import.meta.env.VITE_BOARD_URL || null;
-
   const enCaminoCount = monitor.rows.filter(
     (row) => row.status === 'en_route' || row.status === 'arriving',
   ).length;
@@ -169,41 +167,19 @@ export function Dashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <span style={EYEBROW_STYLE}>Dashboard</span>
-          <h1
-            style={{
-              margin: '4px 0 0',
-              fontSize: 'var(--text-display-sm)',
-              fontWeight: 800,
-              color: 'var(--ink-900)',
-              letterSpacing: '-.02em',
-            }}
-          >
-            {title}
-          </h1>
-        </div>
-        <span title={boardUrl ? undefined : 'No hay una URL de tablero configurada.'}>
-          <Button
-            variant="outline"
-            size="md"
-            disabled={!boardUrl}
-            onClick={() => {
-              if (boardUrl) window.open(boardUrl, '_blank', 'noopener');
-            }}
-          >
-            Abrir tablero
-          </Button>
-        </span>
+      <div>
+        <span style={EYEBROW_STYLE}>Dashboard</span>
+        <h1
+          style={{
+            margin: '4px 0 0',
+            fontSize: 'var(--text-display-sm)',
+            fontWeight: 800,
+            color: 'var(--ink-900)',
+            letterSpacing: '-.02em',
+          }}
+        >
+          {title}
+        </h1>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>

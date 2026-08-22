@@ -13,12 +13,6 @@ interface ImportMetaEnv {
    */
   readonly VITE_MAPBOX_TOKEN?: string;
   /**
-   * URL of `apps/board`, for the Dashboard's "Abrir tablero" button
-   * (ADR-072 point 6). No other screen in the portal resolves a link to
-   * `apps/board`; without this value the button stays disabled.
-   */
-  readonly VITE_BOARD_URL?: string;
-  /**
    * URL of `apps/parent`, for the "Tutor o familia" card of "Crear cuenta"
    * (ADR-080 point 2). `apps/portal` is exclusive to the institución role
    * since ADR-078 — this is a link out, not a form. Without this value the

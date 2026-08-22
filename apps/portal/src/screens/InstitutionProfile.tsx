@@ -559,7 +559,7 @@ function DismissalCoordinationCard({ coordinators }: { coordinators: Institution
 }
 
 export function InstitutionProfile() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const { current } = useInstitution();
   const { status, profile, error, reload, save, saving, saveError, savedCount } =
     useInstitutionProfile(current?.institutionId ?? null);
@@ -592,38 +592,20 @@ export function InstitutionProfile() {
       }}
     >
       <Card>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-            <span style={EYEBROW_STYLE}>Configuración</span>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 'var(--text-display-sm)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              {profile?.name ?? current?.institutionName ?? 'Perfil de la institución'}
-            </h1>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-              Sesión de {session?.email}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
-                  to every other institution screen — only sign-out stays here. */}
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <span style={EYEBROW_STYLE}>Configuración</span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'var(--text-display-sm)',
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.02em',
+            }}
+          >
+            {profile?.name ?? current?.institutionName ?? 'Perfil de la institución'}
+          </h1>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>Sesión de {session?.email}</span>
         </div>
 
         <div

@@ -602,7 +602,7 @@ function matchesFilter(deliveryPoint: DeliveryPoint, filter: string): boolean {
 }
 
 export function DeliveryPoints() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const navigate = useNavigate();
   const { current } = useInstitution();
   const institutionId = current?.institutionId ?? null;
@@ -692,9 +692,6 @@ export function DeliveryPoints() {
                   here since GateConsole is deliberately outside the shell. */}
             <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
               Consola de puerta
-            </Button>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
             </Button>
           </div>
         </div>

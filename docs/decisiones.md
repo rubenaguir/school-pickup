@@ -6613,3 +6613,70 @@ editándolo en paralelo, o un `reload()` de la lista) mientras la fila
 sigue montada, el campo no se resincroniza solo hasta que se toca — mismo
 criterio ya documentado en `DeliveryPointForm`/`Students.tsx` ("mounted
 once, never re-seeded by effect"). No se corrige aquí.
+
+## Corrección post ADR-072 — headers de pantalla: botones residuales copiados sin ajustar por pantalla
+
+No es una decisión de diseño nueva, son tres bugs de limpieza mecánica
+encontrados por el humano al navegar el portal en vivo. Se registran
+juntos, sin ADR propio (mismo criterio que la corrección de
+`GroupCombobox`), porque comparten la misma causa raíz: un bloque de
+header boilerplate copiado de pantalla en pantalla a medida que se
+construían (`Alumnos`, `Grupos`, `Reportes`, etc.) sin re-evaluar cada vez
+qué botón residual le correspondía a esa pantalla en particular.
+
+**1. "Cerrar sesión" duplicado en 8 pantallas.** `InstitutionShell.tsx`
+(ADR-072) ya tiene el botón canónico en el pie de la barra lateral.
+`PendingEnrollments.tsx`, `Students.tsx`, `Groups.tsx`,
+`InstitutionProfile.tsx`, `DeliveryPoints.tsx`, `DismissalSchedule.tsx`,
+`Personnel.tsx` y `Reports.tsx` además tienen su propia copia en el
+header de la pantalla — comentario explícito en el código explicando por
+qué se dejó ahí en su momento ("only sign-out stays here"), pero en la
+práctica es la duplicación que se corrige. Se elimina de las 8; se
+conserva el patrón intacto en `Dashboard.tsx` (nunca lo tuvo — es el
+correcto) y no se toca `Profile.tsx` ni `GateConsole.tsx`, que están
+deliberadamente fuera de `InstitutionShell` en `App.tsx` (comentarios
+explícitos ahí mismo) y por tanto sí necesitan su propio botón.
+
+**2. "Consola de puerta" en pantallas sin relación con puntos de
+entrega.** Aparece en `DeliveryPoints.tsx` (correcto — es de donde nace
+el flujo real), y también, por el mismo copy-paste, en
+`DismissalSchedule.tsx`, `Reports.tsx` y `Personnel.tsx`. Se elimina de
+estas tres.
+
+**3. "Volver al portal" en `GateConsole.tsx` regresaba siempre a
+`DASHBOARD_PATH`.** Con la corrección del punto 2, `DeliveryPoints.tsx`
+queda como el único punto de entrada real a `GATE_CONSOLE_PATH`
+(confirmado por búsqueda exhaustiva de `navigate(GATE_CONSOLE_PATH)` en
+el repo). `onBack` pasa a `DELIVERY_POINTS_PATH` — mismo estilo ya
+establecido en el resto del proyecto (constantes de ruta explícitas, no
+`navigate(-1)`, sin precedente de ese patrón en ningún otro lugar del
+código).
+
+**4. El botón "Abrir tablero" del Dashboard se elimina — no tenía
+respaldo de ninguna spec.** Primera respuesta a este punto: se descartó
+como configuración local incorrecta (`VITE_BOARD_URL` apuntando al
+puerto de `apps/parent` por error, dado que 5173/5174/5175 — portal/
+parent/board — son consecutivos), citando "ADR-072 punto 6" como el
+origen documentado de la decisión, tomado directamente de un comentario
+ya existente en el código (`.env.example`, `vite-env.d.ts`).
+
+Verificado después, a pedido del humano: **esa cita es falsa.** ADR-072
+tiene 5 puntos, ninguno menciona este botón; búsqueda exhaustiva de
+"Abrir tablero"/`VITE_BOARD_URL`/`boardUrl` en `docs/decisiones.md`: cero
+resultados. No existe ninguna decisión documentada detrás de esta
+feature — se construyó sin pasar por "spec antes que código", y el
+comentario que la acompañaba citaba un ADR real (evitando así verse como
+inventado) que en realidad no dice lo que el comentario afirma. El
+criterio general que sí cita correctamente (mostrar deshabilitado en vez
+de adivinar una URL) es real — ADR-034/035 lo establecen, para otras dos
+features — pero eso no respalda que *este* enlace en particular deba
+existir.
+
+Sin una decisión real detrás, y sin que el humano le encuentre sentido de
+producto (las apps son independientes; no hay flujo real que justifique
+saltar del dashboard de institución a otra app en la misma sesión), se
+elimina por completo: el botón en `Dashboard.tsx`, la variable
+`VITE_BOARD_URL` (código, `.env.example`, `vite-env.d.ts`), y las citas a
+"ADR-072 punto 6" que quedarían huérfanas. No se toca `VITE_PARENT_URL`
+(tarjeta "Crear cuenta" → tutor) — es una pregunta aparte, no evaluada
+aquí.

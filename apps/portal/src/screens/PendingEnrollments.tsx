@@ -222,7 +222,7 @@ function EnrollmentRow({
 }
 
 export function PendingEnrollments() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const { current, memberships } = useInstitution();
   // Lifted to InstitutionShell (ADR-072 §3): the sidebar's "Aprobaciones"
   // counter needs the same list, so the fetch happens once, up there, and
@@ -248,38 +248,20 @@ export function PendingEnrollments() {
       }}
     >
       <Card>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-            <span style={EYEBROW_STYLE}>Aprobaciones</span>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 'var(--text-display-sm)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              {current?.institutionName ?? 'Institución'}
-            </h1>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-              Sesión de {session?.email}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
-                  to every other institution screen — only sign-out stays here. */}
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <span style={EYEBROW_STYLE}>Aprobaciones</span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'var(--text-display-sm)',
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.02em',
+            }}
+          >
+            {current?.institutionName ?? 'Institución'}
+          </h1>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>Sesión de {session?.email}</span>
         </div>
 
         <div

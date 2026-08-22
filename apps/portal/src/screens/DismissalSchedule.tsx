@@ -1,5 +1,4 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
 import {
   Badge,
   Button,
@@ -44,7 +43,6 @@ import {
 } from '../dismissal-schedule/useDismissalExceptions';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -859,8 +857,7 @@ function matchesWindowFilter(dismissalWindow: DismissalWindow, filter: string): 
 }
 
 export function DismissalSchedule() {
-  const { session, logout } = useAuth();
-  const navigate = useNavigate();
+  const { session } = useAuth();
   const { current } = useInstitution();
   const institutionId = current?.institutionId ?? null;
 
@@ -897,46 +894,22 @@ export function DismissalSchedule() {
       }}
     >
       <Card>
-        {/* Cinco destinos no caben junto al título en 820px: el encabezado
-              envuelve y el bloque de navegación baja entero a la línea de
-              abajo en vez de encimarse sobre el h1. */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
-            <span style={EYEBROW_STYLE}>Configuración</span>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 'var(--text-display-sm)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              Horarios de salida
-            </h1>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
-                  to every other institution screen — Consola de puerta stays
-                  here since GateConsole is deliberately outside the shell. */}
-            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-              Consola de puerta
-            </Button>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <span style={EYEBROW_STYLE}>Configuración</span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'var(--text-display-sm)',
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.02em',
+            }}
+          >
+            Horarios de salida
+          </h1>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+            {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+          </span>
         </div>
 
         <div

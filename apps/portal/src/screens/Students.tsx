@@ -155,7 +155,7 @@ function StudentRow({
 }
 
 export function Students() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const { current, memberships } = useInstitution();
   const institutionId = current?.institutionId ?? null;
 
@@ -230,37 +230,20 @@ export function Students() {
       }}
     >
       <Card>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-            <span style={EYEBROW_STYLE}>Alumnos</span>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 'var(--text-display-sm)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              {current?.institutionName ?? 'Institución'}
-            </h1>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-              Sesión de {session?.email}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <span style={EYEBROW_STYLE}>Alumnos</span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'var(--text-display-sm)',
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.02em',
+            }}
+          >
+            {current?.institutionName ?? 'Institución'}
+          </h1>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>Sesión de {session?.email}</span>
         </div>
 
         <div

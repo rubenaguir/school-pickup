@@ -17,7 +17,7 @@ import type { QueueRow } from '../gate-console/queue-rows';
 import { useDeliveryPointQueue, type ConnectionState } from '../gate-console/useDeliveryPointQueue';
 import { useClock } from '../gate-console/useClock';
 import { Alert } from '../components/Alert';
-import { DASHBOARD_PATH } from '../routes/paths';
+import { DELIVERY_POINTS_PATH } from '../routes/paths';
 
 const DELIVERY_CODE_LENGTH = 4;
 
@@ -710,7 +710,7 @@ export function GateConsole() {
         clock={clock}
         connection={selected ? queue.connection : null}
         displayName={profile?.fullName ?? session?.email ?? ''}
-        onBack={() => void navigate(DASHBOARD_PATH)}
+        onBack={() => void navigate(DELIVERY_POINTS_PATH)}
         onLogout={logout}
       />
 

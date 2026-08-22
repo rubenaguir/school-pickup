@@ -1,13 +1,4 @@
-import { useNavigate } from 'react-router';
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  SegmentedTabs,
-  SkeletonRow,
-} from '@casillego/ui';
+import { Badge, Card, EmptyState, ErrorState, SegmentedTabs, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { institutionStatusLabel, roleLabel } from '../institution/institution-labels';
@@ -19,7 +10,6 @@ import {
   type DeliveriesByDayEntry,
   type InstitutionReport,
 } from '../reports/useInstitutionReports';
-import { GATE_CONSOLE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -205,8 +195,7 @@ function ReportSections({ report }: { report: InstitutionReport }) {
 }
 
 export function Reports() {
-  const { session, logout } = useAuth();
-  const navigate = useNavigate();
+  const { session } = useAuth();
   const { current } = useInstitution();
   const institutionId = current?.institutionId ?? null;
 
@@ -230,43 +219,22 @@ export function Reports() {
       }}
     >
       <Card>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 16,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
-            <span style={EYEBROW_STYLE}>Operación</span>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 'var(--text-display-sm)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                letterSpacing: '-.02em',
-              }}
-            >
-              Reportes
-            </h1>
-            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-              {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* The sidebar (InstitutionShell, ADR-072) now covers navigation
-                  to every other institution screen — Consola de puerta stays
-                  here since GateConsole is deliberately outside the shell. */}
-            <Button variant="outline" size="sm" onClick={() => void navigate(GATE_CONSOLE_PATH)}>
-              Consola de puerta
-            </Button>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Cerrar sesión
-            </Button>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <span style={EYEBROW_STYLE}>Operación</span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'var(--text-display-sm)',
+              fontWeight: 800,
+              color: 'var(--ink-900)',
+              letterSpacing: '-.02em',
+            }}
+          >
+            Reportes
+          </h1>
+          <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+            {current?.institutionName ?? 'Institución'} · sesión de {session?.email}
+          </span>
         </div>
 
         <div
