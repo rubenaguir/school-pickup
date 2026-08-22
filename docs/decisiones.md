@@ -6557,3 +6557,59 @@ la única red de seguridad para detectarlo antes de que nadie lo note.
   entidad nueva).
 - `specs/features/029-editar-grupo-alumno.md` (se actualiza: el endpoint
   y el campo cambian de nombre).
+
+## Corrección post ADR-084 — `GroupCombobox`: el blur revertía la selección antes de que `PATCH .../group` resolviera
+
+No es una decisión de diseño nueva, es un bug encontrado al verificar
+visualmente la pantalla "Alumnos" tras el cierre de ADR-084 — se registra
+aquí sin número de ADR propio a petición del humano, dado que es un bug
+contenido a un solo archivo, sin alcance de producto.
+
+**Síntoma reportado:** en "Alumnos", seleccionar un grupo y dar clic en
+"Guardar" hacía que el campo se viera vacío inmediatamente después —
+volvía a mostrar el valor correcto solo si se tocaba el campo una segunda
+vez.
+
+**Causa raíz confirmada:** `apps/portal/src/institution-groups/GroupCombobox.tsx`,
+`handleBlur()` (modo `single`, usado por `PendingEnrollments.tsx` y
+`Students.tsx`) revertía incondicionalmente el texto mostrado a
+`props.initialName` en cada blur:
+
+```ts
+function handleBlur() {
+  window.setTimeout(() => {
+    setOpen(false);
+    if (props.mode === 'single') {
+      setQuery(props.initialName ?? '');
+    }
+  }, 120);
+}
+```
+
+Clic en "Guardar" mueve el foco fuera del `<input>`, disparando este
+`blur` antes de que el `PATCH /enrollments/:id/group` en vuelo resuelva.
+En ese momento `props.initialName` todavía es el valor viejo (el padre
+recién actualiza su estado cuando la respuesta llega), así que el timeout
+pisaba la selección recién hecha con el valor anterior. El campo no se
+resincronizaba solo después porque `query` es estado local de un
+componente que nunca se desmonta entre renders (mismo `key` antes y
+después de guardar) — necesitaba una interacción nueva (tocar el campo,
+volver a hacer blur) para que `handleBlur` corriera otra vez, esta vez ya
+con `initialName` actualizado.
+
+**Corrección:** un estado local nuevo, `confirmedName`, que se actualiza
+de forma síncrona en `selectGroup()`/`handleClear()` — en el mismo
+instante en que el usuario confirma una elección, sin esperar el
+round-trip del `PATCH`. `handleBlur()` revierte a `confirmedName`, no a
+`props.initialName`, eliminando la carrera por completo. Cambio contenido
+a `GroupCombobox.tsx`; corrige ambos consumidores (`Students.tsx` y
+`PendingEnrollments.tsx`) sin tocarlos. El modo `multi`
+(`DeliveryPoints.tsx`) no tenía este bug — sus chips se renderizan desde
+`props.value`, controlado por el padre, no desde `query`.
+
+**Limitación preexistente, no introducida por este fix:** si el nombre
+del grupo cambia por una vía externa a este componente (otro admin
+editándolo en paralelo, o un `reload()` de la lista) mientras la fila
+sigue montada, el campo no se resincroniza solo hasta que se toca — mismo
+criterio ya documentado en `DeliveryPointForm`/`Students.tsx` ("mounted
+once, never re-seeded by effect"). No se corrige aquí.

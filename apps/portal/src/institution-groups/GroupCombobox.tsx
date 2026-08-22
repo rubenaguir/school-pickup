@@ -88,6 +88,9 @@ type GroupComboboxProps = GroupComboboxSingleProps | GroupComboboxMultiProps;
 export function GroupCombobox(props: GroupComboboxProps) {
   const { id, groups, groupsLoading, createGroup, disabled } = props;
   const [query, setQuery] = useState(props.mode === 'single' ? (props.initialName ?? '') : '');
+  const [confirmedName, setConfirmedName] = useState(
+    props.mode === 'single' ? (props.initialName ?? '') : '',
+  );
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<ApiError | null>(null);
@@ -117,6 +120,7 @@ export function GroupCombobox(props: GroupComboboxProps) {
     } else {
       props.onSelect(group);
       setQuery(group.name);
+      setConfirmedName(group.name);
     }
     setOpen(false);
     setCreateError(null);
@@ -169,7 +173,7 @@ export function GroupCombobox(props: GroupComboboxProps) {
     window.setTimeout(() => {
       setOpen(false);
       if (props.mode === 'single') {
-        setQuery(props.initialName ?? '');
+        setQuery(confirmedName);
       }
     }, 120);
   }
@@ -177,6 +181,7 @@ export function GroupCombobox(props: GroupComboboxProps) {
   function handleClear() {
     if (props.mode !== 'single') return;
     setQuery('');
+    setConfirmedName('');
     props.onClear();
   }
 

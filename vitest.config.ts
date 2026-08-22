@@ -1,8 +1,10 @@
 import { defineConfig } from 'vitest/config';
 
 // Config raiz para tests de dominio (funciones puras de packages/shared, servicios
-// de api). Los frontends pueden anadir su propio vitest.config.ts con environment
-// jsdom cuando tengan componentes que probar. Ver docs/decisiones.md ADR-021.
+// de api). Los frontends anaden su propio vitest.config.ts con environment jsdom
+// cuando tienen componentes que probar (ver apps/portal/vitest.config.ts) — esos
+// corren aparte, invocados por el "test" de la raiz via `--workspaces`, no por
+// esta config. Ver docs/decisiones.md ADR-021.
 export default defineConfig({
   test: {
     environment: 'node',
