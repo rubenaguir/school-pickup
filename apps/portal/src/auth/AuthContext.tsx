@@ -6,6 +6,7 @@ import {
   readAccessToken,
   type AccessTokenClaims,
 } from '@casillego/shared';
+import { useProactiveTokenRefresh } from '@casillego/ui';
 import { apiClient, tokenStorage } from '../api/client';
 
 export interface AuthContextValue {
@@ -35,6 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // deliberately still treated as a session: the 401 interceptor renews it on
   // the first call, and only a failed refresh signs the user out.
   const [session, setSession] = useState<AccessTokenClaims | null>(readSession);
+
+  // Proactive layer of ADR-091: keeps the access token from ever actually
+  // expiring while the Dashboard/gate-console screens sit open with mostly
+  // WebSocket traffic between REST calls.
+  useProactiveTokenRefresh({ apiClient, hasSession: session !== null });
 
   const login = useCallback(async (email: string, password: string) => {
     await requestLogin(apiClient, tokenStorage, { email, password });

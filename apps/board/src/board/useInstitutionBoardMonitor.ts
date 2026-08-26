@@ -77,6 +77,7 @@ export function useInstitutionBoardMonitor(
     mergeDelta: mergeAndSortBoardMonitorRows,
     parseDelta: parseBoardMonitorDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   return { status, rows: state ?? [], error, connection, connectionErrorReason, reload };

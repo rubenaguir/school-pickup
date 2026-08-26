@@ -141,6 +141,7 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
     mergeDelta: mergePendingEnrollmentDelta,
     parseDelta: parsePendingEnrollmentDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   const enrollments = state ?? [];

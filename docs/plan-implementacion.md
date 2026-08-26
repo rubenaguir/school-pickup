@@ -611,6 +611,29 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
       pantalla completa). Solo el mecanismo responsivo, no la lógica
       de negocio de `TutorShell` — cada shell conserva su propio
       contenido de nav/footer/badges
+- [x] **Refresh de token confiable para WebSocket, reactivo + proactivo
+      (ADR-091)** — detectado en pruebas E2E: el tablero y el tracking
+      del tutor pierden la sesión tras ~15 min porque su tráfico es
+      puramente WS y nunca dispara el refresh silencioso REST:
+  - [x] `ApiClient.refreshToken()` público en
+        `packages/shared/api-client/api-client.ts` (reutiliza
+        `refreshOnce()`)
+  - [x] Helper compartido: red → reintenta como caída de transporte;
+        rechazo explícito del refresh token → fatal de verdad
+  - [x] `useRealtimeChannel.ts`: intenta refresh una sola vez antes de
+        rendirse, solo para el motivo `UNAUTHENTICATED`. Aplicado a los
+        6 consumidores del hook genérico, más replicado a mano en
+        `useInstitutionBoard.ts` (`apps/board`) — el tablero público es
+        el propio caso que ADR-091 documenta, pero quedó fuera de la
+        extracción de ADR-075 Fase 10 Paso 3 (multiplexa `kind:
+        'row'`/`kind: 'announce'`), así que no pasa por el hook
+        genérico. `useInstitutionBoardMonitor.ts` del Dashboard
+        (`apps/portal/src/institution`, también sin migrar por la misma
+        razón de Fase 10) se dejó fuera a propósito: es una pantalla
+        atendida, no el caso crítico del ADR, y ya queda cubierta por
+        la capa proactiva de todos modos
+  - [x] `useProactiveTokenRefresh` en `packages/ui`, montado en el
+        `AuthProvider` de las 3 apps, cada 5 min mientras haya sesión
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

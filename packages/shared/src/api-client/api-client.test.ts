@@ -273,4 +273,58 @@ describe('createApiClient', () => {
 
     await expect(client.del('/institution-members/abc')).resolves.toBeUndefined();
   });
+
+  it('refreshToken() renews and stores the access token without touching onSessionExpired', async () => {
+    // ADR-091: a WebSocket channel calls this directly, never through a 401.
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(
+        respond(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
+      );
+    const client = build(fetchImpl);
+
+    await expect(client.refreshToken()).resolves.toBe('fresh-access');
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toBe(`${BASE_URL}/auth/refresh`);
+    expect(storage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-access');
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('refreshToken() shares its in-flight promise with a concurrent 401 refresh', async () => {
+    // Single-flight (ADR-042 point 4) must hold across the two call sites,
+    // not just within `request()`'s own retries.
+    const fetchImpl = vi.fn<FetchLike>().mockImplementation((url) => {
+      if (url === `${BASE_URL}/auth/refresh`) {
+        return Promise.resolve(
+          respond(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
+        );
+      }
+      const token = storage.getItem(ACCESS_TOKEN_KEY);
+      return Promise.resolve(
+        token === 'fresh-access' ? respond(200, { ok: true }) : respond(401, {}),
+      );
+    });
+    const client = build(fetchImpl);
+
+    await Promise.all([client.refreshToken(), client.get('/a')]);
+
+    const refreshCalls = fetchImpl.mock.calls.filter(([url]) => url === `${BASE_URL}/auth/refresh`);
+    expect(refreshCalls).toHaveLength(1);
+  });
+
+  it('refreshToken() rejects with the ApiError and leaves onSessionExpired to the REST interceptor', async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(
+        respond(401, { code: 'INVALID_REFRESH_TOKEN', message: 'Invalid or expired.' }),
+      );
+    const client = build(fetchImpl);
+
+    await expect(client.refreshToken()).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+    // Unlike the 401 interceptor, a direct refreshToken() call never signs the
+    // app out or clears storage on its own — the caller (a WS channel) decides.
+    expect(onSessionExpired).not.toHaveBeenCalled();
+    expect(storage.entries.size).toBe(2);
+  });
 });

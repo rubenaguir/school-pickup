@@ -126,6 +126,7 @@ export function useDeliveryPointQueue(deliveryPointId: string | null): DeliveryP
     mergeDelta: mergeAndSortQueueRows,
     parseDelta: parseQueueDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   const rows = state ?? [];

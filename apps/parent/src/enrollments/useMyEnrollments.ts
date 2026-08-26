@@ -100,6 +100,7 @@ export function useMyEnrollments(): MyEnrollmentsValue {
     mergeDelta: mergeMyEnrollmentDelta,
     parseDelta: parseMyEnrollmentDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   const enrollments = state ?? [];

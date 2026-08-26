@@ -184,6 +184,7 @@ export function useTrackingPickupRequest(pickupRequestId: string): TrackingValue
     mergeDelta: applyDelta,
     parseDelta: parseBoardDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   const markArrived = useCallback(() => {

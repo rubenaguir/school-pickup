@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, readAccessToken, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import {
+  ApiError,
+  classifyRefreshFailure,
+  readAccessToken,
+  UNKNOWN_ERROR_CODE,
+} from '@casillego/shared';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import {
   mergeBoardDelta,
@@ -92,6 +97,15 @@ export interface ManualAnnouncePayload {
  * message that reaches this channel is voiced. The announced row is also
  * flagged in `recentlyChangedIds` for the pulse animation, same treatment
  * as a real status change, even though its `status` did not change.
+ *
+ * An `UNAUTHENTICATED` close gets one `apiClient.refreshToken()` attempt
+ * before it is treated as fatal (ADR-091) — this hook backs the one screen
+ * that ADR-091 exists for: a kiosk with no REST traffic of its own to ever
+ * trigger the ordinary 401 interceptor. Implemented inline rather than
+ * through `useRealtimeChannel` because this hook predates that extraction
+ * and was deliberately left un-migrated (ADR-075 Fase 10, Paso 3 — it
+ * multiplexes `kind: 'row'`/`kind: 'announce'` over one socket, a shape the
+ * generic hook does not model).
  */
 export function useInstitutionBoard(
   institutionId: string | null,
@@ -149,6 +163,14 @@ export function useInstitutionBoard(
     let retries = 0;
     /** Non-null only while a snapshot request is in flight. */
     let buffered: BoardRow[] | null = null;
+    /**
+     * One `refreshToken()` attempt per connection cycle before giving up on an
+     * `UNAUTHENTICATED` close (ADR-091) — reset on every successful `onopen`.
+     * This is the screen ADR-091 was written for: a kiosk meant to sit open
+     * for hours with no REST traffic of its own to trigger the ordinary 401
+     * interceptor, so nothing else in the app would ever renew its token.
+     */
+    let refreshAttempted = false;
     // Mirrors the `rows` state so merges can be computed synchronously here
     // instead of inside a `setRows` updater — an updater can run twice under
     // React StrictMode in development, and `onAnnounceRef.current?.(delta)`
@@ -237,6 +259,7 @@ export function useInstitutionBoard(
       opened.onopen = () => {
         if (cancelled) return;
         retries = 0;
+        refreshAttempted = false;
         setConnection('live');
         loadSnapshot(id);
       };
@@ -275,6 +298,34 @@ export function useInstitutionBoard(
 
         const fatal = fatalCloseReason(event.code, event.reason);
         if (fatal) {
+          if (fatal === 'UNAUTHENTICATED' && !refreshAttempted) {
+            refreshAttempted = true;
+            setConnection('reconnecting');
+            apiClient
+              .refreshToken()
+              .then(() => {
+                if (cancelled) return;
+                // Success: reconnect right away — `readAccessToken` above is
+                // re-read fresh on every attempt, never captured once.
+                connect(id);
+              })
+              .catch((caught: unknown) => {
+                if (cancelled) return;
+                if (classifyRefreshFailure(caught) === 'network') {
+                  // The refresh itself never got a verdict — same as any
+                  // other transport drop, not a reason to give up.
+                  retryTimer = setTimeout(() => connect(id), reconnectDelayMs(retries));
+                  retries += 1;
+                  return;
+                }
+                // The refresh token was explicitly rejected — the session
+                // really is over, same outcome as today.
+                setConnection('closed');
+                setConnectionErrorReason(fatal);
+              });
+            return;
+          }
+
           setConnection('closed');
           setConnectionErrorReason(fatal);
           return;

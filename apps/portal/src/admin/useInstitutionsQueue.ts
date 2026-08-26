@@ -132,6 +132,7 @@ export function useInstitutionsQueue(): InstitutionsQueueValue {
     mergeDelta,
     parseDelta: parseAdminInstitutionDelta,
     fatalCloseReason,
+    refreshToken: () => apiClient.refreshToken(),
   });
 
   const institutions = state ?? [];

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, asApiError, reconnectDelayMs } from '@casillego/shared';
+import { ApiError, asApiError, classifyRefreshFailure, reconnectDelayMs } from '@casillego/shared';
 
 export type RealtimeChannelStatus = 'loading' | 'ready' | 'error';
 export type RealtimeConnectionState = 'connecting' | 'live' | 'reconnecting' | 'closed';
@@ -28,6 +28,19 @@ export interface UseRealtimeChannelOptions<TState, TDelta> {
   /** The consumer's own close-code map (ADR-075 point 1) — this hook does not
    * need to know it. */
   fatalCloseReason: (code: number, reason: string) => string | null;
+  /**
+   * Renews the access token once, before giving up on a close whose reason is
+   * exactly `'UNAUTHENTICATED'` (ADR-091) — never for the channel's other
+   * fatal reasons, which stay immediately fatal, not token problems. One
+   * attempt per connection cycle, reset on every successful `onopen`, so a
+   * token that gets refreshed and is still rejected for some other reason
+   * does not loop. A network failure during the attempt is treated as an
+   * ordinary transport drop (normal backoff, not fatal); an explicit
+   * rejection is the real end of the session, same as today. Omit to keep
+   * today's behavior (immediate fatal close) — e.g. an attended screen where
+   * a human is already there to sign back in.
+   */
+  refreshToken?: () => Promise<string>;
 }
 
 export interface UseRealtimeChannelValue<TState> {
@@ -54,8 +67,15 @@ export interface UseRealtimeChannelValue<TState> {
 export function useRealtimeChannel<TState, TDelta>(
   options: UseRealtimeChannelOptions<TState, TDelta>,
 ): UseRealtimeChannelValue<TState> {
-  const { channelKey, getSocketUrl, fetchSnapshot, mergeDelta, parseDelta, fatalCloseReason } =
-    options;
+  const {
+    channelKey,
+    getSocketUrl,
+    fetchSnapshot,
+    mergeDelta,
+    parseDelta,
+    fatalCloseReason,
+    refreshToken,
+  } = options;
 
   const [state, setState] = useState<TState | null>(null);
   const [connection, setConnection] = useState<RealtimeConnectionState>('connecting');
@@ -97,6 +117,13 @@ export function useRealtimeChannel<TState, TDelta>(
     let retries = 0;
     /** Non-null only while a snapshot request is in flight. */
     let buffered: TDelta[] | null = null;
+    /**
+     * One refresh attempt per connection cycle (ADR-091) — reset to `false` on
+     * every successful `onopen`, so a fresh connection that later dies of
+     * `UNAUTHENTICATED` again gets its own attempt, but a token that was just
+     * refreshed and immediately rejected again does not loop refreshing.
+     */
+    let refreshAttempted = false;
 
     function applyLiveDelta(delta: TDelta) {
       if (buffered) {
@@ -140,6 +167,7 @@ export function useRealtimeChannel<TState, TDelta>(
       opened.onopen = () => {
         if (cancelled) return;
         retries = 0;
+        refreshAttempted = false;
         setConnection('live');
         loadSnapshot(key);
       };
@@ -165,6 +193,33 @@ export function useRealtimeChannel<TState, TDelta>(
 
         const fatal = fatalCloseReason(event.code, event.reason);
         if (fatal) {
+          if (fatal === 'UNAUTHENTICATED' && refreshToken && !refreshAttempted) {
+            refreshAttempted = true;
+            setConnection('reconnecting');
+            refreshToken()
+              .then(() => {
+                if (cancelled) return;
+                // Success: reconnect right away with the renewed token —
+                // `getSocketUrl()` re-reads storage, never captures once.
+                connect(key);
+              })
+              .catch((caught: unknown) => {
+                if (cancelled) return;
+                if (classifyRefreshFailure(caught) === 'network') {
+                  // The refresh itself never got a verdict — same as any
+                  // other transport drop, not a reason to give up.
+                  retryTimer = setTimeout(() => connect(key), reconnectDelayMs(retries));
+                  retries += 1;
+                  return;
+                }
+                // The refresh token was explicitly rejected — the session
+                // really is over, same outcome as today.
+                setConnection('closed');
+                setConnectionErrorReason(fatal);
+              });
+            return;
+          }
+
           setConnection('closed');
           setConnectionErrorReason(fatal);
           return;
@@ -193,10 +248,10 @@ export function useRealtimeChannel<TState, TDelta>(
         socket.close();
       }
     };
-    // `getSocketUrl`/`fetchSnapshot`/`mergeDelta`/`parseDelta`/`fatalCloseReason`
-    // are stable by the consumer's own convention (useCallback, or declared
-    // outside render) — same assumption the original per-screen effects made
-    // before this extraction.
+    // `getSocketUrl`/`fetchSnapshot`/`mergeDelta`/`parseDelta`/`fatalCloseReason`/
+    // `refreshToken` are stable by the consumer's own convention (useCallback,
+    // or declared outside render) — same assumption the original per-screen
+    // effects made before this extraction.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelKey, attempt]);
 

@@ -1,3 +1,5 @@
+import { ApiError, NETWORK_ERROR_CODE } from './api-client/api-error';
+
 /**
  * Backoff between reconnection attempts, in milliseconds — identical across
  * the 5 screens that open a WS channel with REST snapshot + deltas
@@ -55,4 +57,20 @@ export function buildRealtimeSocketUrl(
     base.searchParams.set(key, value);
   }
   return base.toString();
+}
+
+export type RefreshTokenFailure = 'network' | 'rejected';
+
+/**
+ * Classifies a rejection of `ApiClient.refreshToken()` attempted by a live
+ * channel before giving up on an `UNAUTHENTICATED` close (ADR-091). A
+ * network failure (offline, DNS, the API mid-restart) never got a verdict on
+ * the refresh token itself — treated like any other transport drop, retried
+ * with the channel's normal backoff, not as fatal. Anything else — most
+ * commonly `401 INVALID_REFRESH_TOKEN` from `POST /auth/refresh` because the
+ * refresh token itself expired or was already rotated by another tab — is an
+ * explicit rejection: the session really is over, and no retry fixes that.
+ */
+export function classifyRefreshFailure(error: unknown): RefreshTokenFailure {
+  return error instanceof ApiError && error.code === NETWORK_ERROR_CODE ? 'network' : 'rejected';
 }

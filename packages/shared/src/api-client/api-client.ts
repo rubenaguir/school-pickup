@@ -74,6 +74,18 @@ export interface ApiClient {
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   /** `body` is optional: `DELETE /vehicles/:id` is the one endpoint that reads one (`newPrimaryVehicleId`). */
   del<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
+  /**
+   * Renews the access token right now, independent of any REST 401 (ADR-091).
+   * A WebSocket close is not a `fetch` call, so it never goes through
+   * `request()`'s own interceptor — a live channel that wants to recover from
+   * an `UNAUTHENTICATED` close calls this directly instead. Reuses the same
+   * `refreshOnce()` as the REST interceptor: a refresh triggered by a socket
+   * and one triggered by a REST 401 in the same tab share the one in-flight
+   * promise, never a second rotation. Throws the same `ApiError` `runRefresh`
+   * would — a `NETWORK_ERROR_CODE` for a transport failure, anything else for
+   * an explicit rejection — for the caller to classify.
+   */
+  refreshToken(): Promise<string>;
 }
 
 const MISSING_REFRESH_TOKEN = {
@@ -202,5 +214,6 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     post: (path, body, requestOptions) => request('POST', path, body, requestOptions),
     patch: (path, body, requestOptions) => request('PATCH', path, body, requestOptions),
     del: (path, body, requestOptions) => request('DELETE', path, body, requestOptions),
+    refreshToken: () => refreshOnce(),
   };
 }

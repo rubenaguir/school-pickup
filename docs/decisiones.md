@@ -7076,3 +7076,91 @@ construido y probado en `TutorShell.tsx`:
 tratamiento responsive — deja de ser "la primera pieza responsive del
 proyecto" un caso aislado. `apps/board` (tablero público, sin sidebar)
 queda fuera por no aplicar.
+
+## ADR-091 — Las conexiones WebSocket no renovaban el access token: refresh reactivo (antes de rendirse) + proactivo (por temporizador)
+
+**Contexto.** Reportado en pruebas manuales de punta a punta en
+producción: en la segunda recogida de la sesión de prueba, tanto la
+pantalla de tracking del tutor (`apps/parent`) como el tablero
+(`apps/board`) dejaron de actualizarse en vivo, mostrando "El
+seguimiento en vivo se detuvo. Tu sesión expiró." — con la sesión de
+verdad todavía válida.
+
+Investigado en el código real: el `accessToken` dura 15 minutos
+(`JWT_ACCESS_TTL`, default 900s). El refresh silencioso ya existe
+(`createApiClient` en `packages/shared/api-client/api-client.ts`,
+`runRefresh`/`refreshOnce`) pero es **enteramente reactivo a un 401 en
+una llamada REST** — nunca se dispara desde una conexión WebSocket.
+`useRealtimeChannel.ts` (ADR-075) sí relee el token vigente en cada
+intento de conexión (`getSocketUrl()`, nunca capturado una sola vez),
+pero si ese token ya expiró y ninguna llamada REST lo renovó mientras
+tanto, la reconexión del WS falla con `4401 UNAUTHENTICATED` —
+clasificado como **fatal, sin reintento**, por diseño
+(`fatalCloseReason` en `packages/shared/realtime-channel.ts`).
+
+El problema real: hay pantallas cuyo tráfico es puramente WebSocket,
+sin ninguna llamada REST que dispare el refresh — la de tracking del
+tutor, y sobre todo **el tablero**, pensado para quedarse abierto sin
+interacción durante horas. Esto contradice directamente lo que
+**ADR-067 ya prometía**: *"mientras el cliente siga generando tráfico
+que dispare refreshes con regularidad, la sesión se extiende
+indefinidamente"* — el tráfico del tablero nunca fue del tipo que
+dispara un refresh, así que esa promesa nunca se cumplió en la
+práctica para el caso que ADR-067 dice resolver.
+
+**Decisión — dos capas, no una.**
+
+1. **Reactivo (cierra el hueco inmediato).**
+   `ApiClient` (interfaz en `packages/shared/api-client/api-client.ts`)
+   gana un método público `refreshToken(): Promise<string>`, que
+   reutiliza el `refreshOnce()` ya existente (mismo deduplicado: un
+   refresh disparado por el WS y uno disparado en paralelo por una
+   llamada REST en la misma pestaña comparten la misma promesa en
+   vuelo, sin doble rotación). `useRealtimeChannel.ts` gana una opción
+   nueva, invocada solo cuando el cierre es específicamente
+   `UNAUTHENTICATED` (nunca para los otros motivos fatales — esos
+   siguen siendo fatales de inmediato, no son problemas de token): un
+   intento de refresh antes de rendirse, una sola vez por ciclo de
+   conexión (se resetea en cada `onopen`, para no entrar en loop si el
+   token recién refrescado también es rechazado por otra razón).
+   - Refresh exitoso → reconecta de inmediato con el token nuevo.
+   - Refresh falla por error de red → se trata como una caída de
+     transporte normal (mismo backoff ya existente), **no** como fatal.
+   - Refresh rechazado explícitamente (el refresh token también venció
+     o fue revocado) → ahí sí es fatal de verdad, se muestra "sesión
+     expirada" como hoy — es el límite real del sistema, no hay forma
+     de evitarlo.
+   - Esta política (red vs. rechazo explícito) vive en un helper
+     compartido en `packages/shared`, reutilizado por los 3 apps —
+     mismo criterio de "una implementación, wrappers delgados por app"
+     que ya sigue `fatalCloseReason`.
+2. **Proactivo (cierra el hueco de fondo, crítico para el tablero).**
+   Hook nuevo en `packages/ui` (ej. `useProactiveTokenRefresh`),
+   montado una vez dentro del `AuthProvider` de cada app (los 3 ya
+   tienen uno propio, ADR-063 punto 6 — no se unifican, solo cada uno
+   monta el mismo hook compartido). Mientras haya sesión, refresca el
+   `accessToken` por temporizador cada 5 minutos — bastante por debajo
+   del TTL de 15 minutos como para que, en operación normal, el token
+   casi nunca llegue a expirar de verdad, sin depender de que el WS se
+   desconecte para disparar el refresh. Un fallo de un tick proactivo
+   se registra y ya —nunca fuerza un cierre de sesión por sí mismo—;
+   si de verdad hay un problema, la capa reactiva o el interceptor REST
+   lo van a encontrar cuando algo necesite un token válido de verdad.
+
+**Consecuencias.** Ninguna capa por sí sola es 100% infalible — un
+tablero verdaderamente abandonado más de 30 días sin ningún tick
+proactivo exitoso (ej. el proceso estuvo caído) sí terminaría
+desloguéandose, y es el límite correcto del sistema, no un bug. Con
+ambas capas juntas, el escenario real que se dio en esta prueba (unos
+minutos de diferencia) queda cubierto con altísima fiabilidad, y el
+tablero deja de depender de que su WS se caiga por accidente para
+mantenerse autenticado.
+
+## Referencias
+
+- ADR-067 (rotación de refresh token — la promesa que este ADR
+  finalmente cumple para tráfico puramente WS).
+- ADR-075 (`useRealtimeChannel`, `fatalCloseReason`).
+- ADR-063 punto 6 (`AuthContext` propio por app, no compartido).
+- `packages/shared/api-client/api-client.ts` (`refreshOnce`, el
+  deduplicado que el nuevo `refreshToken()` público reutiliza).

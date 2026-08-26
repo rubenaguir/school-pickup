@@ -6,6 +6,7 @@ import {
   readAccessToken,
   type AccessTokenClaims,
 } from '@casillego/shared';
+import { useProactiveTokenRefresh } from '@casillego/ui';
 import { apiClient, tokenStorage } from '../api/client';
 
 export interface AuthContextValue {
@@ -36,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // deliberately still treated as a session: the 401 interceptor renews it on
   // the first call, and only a failed refresh signs the kiosk out.
   const [session, setSession] = useState<AccessTokenClaims | null>(readSession);
+
+  // Proactive layer of ADR-091: this is the screen the ADR was written for —
+  // a kiosk meant to sit open for hours with no REST traffic of its own to
+  // ever trigger the ordinary 401 interceptor.
+  useProactiveTokenRefresh({ apiClient, hasSession: session !== null });
 
   const login = useCallback(async (email: string, password: string) => {
     await requestLogin(apiClient, tokenStorage, { email, password });
