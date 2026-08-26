@@ -11,6 +11,7 @@ import {
 import {
   mergePendingEnrollmentDelta,
   parsePendingEnrollmentDelta,
+  type PendingEnrollmentDelta,
 } from './pending-enrollment-rows';
 
 /**
@@ -31,6 +32,8 @@ export interface PendingEnrollment {
   requestedAt: string;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  withdrawnByUserId: string | null;
+  withdrawnAt: string | null;
 }
 
 export type ReviewAction = 'approve' | 'reject';
@@ -130,7 +133,7 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
 
   const { status, state, error, reload } = useRealtimeChannel<
     PendingEnrollment[],
-    PendingEnrollment
+    PendingEnrollmentDelta
   >({
     channelKey: institutionId,
     getSocketUrl,

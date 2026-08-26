@@ -1,11 +1,16 @@
-import { useCallback } from 'react';
-import { ApiError, readAccessToken } from '@casillego/shared';
+import { useCallback, useState } from 'react';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
 import type { EnrollmentStatus, InstitutionType } from '@casillego/shared';
 import { useRealtimeChannel } from '@casillego/ui';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { buildEnrollmentsGuardianSocketUrl, fatalCloseReason } from './enrollments-guardian-socket';
-import { mergeMyEnrollmentDelta, parseMyEnrollmentDelta } from './my-enrollment-rows';
+import {
+  mergeMyEnrollmentDelta,
+  parseMyEnrollmentDelta,
+  type MyEnrollmentDelta,
+} from './my-enrollment-rows';
+import { myEnrollmentActionErrorMessage } from './my-enrollment-action-messages';
 
 /** One row of GET /enrollments/mine (specs/api-contracts/enrollments.md, ADR-057). */
 export interface MyEnrollment {
@@ -21,15 +26,30 @@ export interface MyEnrollment {
   enrollmentCode: string;
   requestedAt: string;
   reviewedAt: string | null;
+  withdrawnAt: string | null;
 }
 
 export type MyEnrollmentsStatus = 'loading' | 'ready' | 'empty' | 'error';
+
+/** Row-level failure of `cancel`/`withdraw` — the request is still there, the row stays put. */
+export interface MyEnrollmentRowError {
+  enrollmentId: string;
+  message: string;
+  code: string;
+}
 
 export interface MyEnrollmentsValue {
   status: MyEnrollmentsStatus;
   enrollments: MyEnrollment[];
   error: ApiError | null;
   retry: () => void;
+  /** Id of the row whose cancel/withdraw call is in flight, if any. */
+  busyId: string | null;
+  rowError: MyEnrollmentRowError | null;
+  /** `pending` only — deletes the request for real (ADR-088). */
+  cancel: (enrollmentId: string) => void;
+  /** `approved` only — terminal, keeps the row as history (ADR-088). */
+  withdraw: (enrollmentId: string) => void;
 }
 
 interface MyEnrollmentsResponse {
@@ -60,6 +80,8 @@ function fetchMine(): Promise<MyEnrollment[]> {
  */
 export function useMyEnrollments(): MyEnrollmentsValue {
   const { session } = useAuth();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<MyEnrollmentRowError | null>(null);
 
   const getSocketUrl = useCallback(() => {
     const accessToken = readAccessToken(tokenStorage) ?? '';
@@ -71,7 +93,7 @@ export function useMyEnrollments(): MyEnrollmentsValue {
     state,
     error,
     reload,
-  } = useRealtimeChannel<MyEnrollment[], MyEnrollment>({
+  } = useRealtimeChannel<MyEnrollment[], MyEnrollmentDelta>({
     channelKey: session?.sub ?? null,
     getSocketUrl,
     fetchSnapshot: fetchMine,
@@ -84,5 +106,40 @@ export function useMyEnrollments(): MyEnrollmentsValue {
   const status: MyEnrollmentsStatus =
     channelStatus === 'ready' ? (enrollments.length === 0 ? 'empty' : 'ready') : channelStatus;
 
-  return { status, enrollments, error, retry: reload };
+  // Neither action removes/updates the row here — same policy as
+  // `usePendingEnrollments.review()`: the realtime delta this same mutation
+  // publishes (ADR-088) is what does it, the WebSocket stays the single
+  // source of truth for this list.
+  const runAction = useCallback((enrollmentId: string, request: () => Promise<unknown>) => {
+    setBusyId(enrollmentId);
+    setRowError(null);
+    void request()
+      .catch((caught: unknown) => {
+        const apiError = asApiError(caught);
+        setRowError({
+          enrollmentId,
+          message: myEnrollmentActionErrorMessage(apiError.code),
+          code: apiError.code,
+        });
+      })
+      .finally(() => {
+        setBusyId((current) => (current === enrollmentId ? null : current));
+      });
+  }, []);
+
+  const cancel = useCallback(
+    (enrollmentId: string) => {
+      runAction(enrollmentId, () => apiClient.del(`/enrollments/${enrollmentId}`));
+    },
+    [runAction],
+  );
+
+  const withdraw = useCallback(
+    (enrollmentId: string) => {
+      runAction(enrollmentId, () => apiClient.patch(`/enrollments/${enrollmentId}/withdraw`));
+    },
+    [runAction],
+  );
+
+  return { status, enrollments, error, retry: reload, busyId, rowError, cancel, withdraw };
 }

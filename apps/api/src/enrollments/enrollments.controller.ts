@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
@@ -8,6 +21,7 @@ import type {
   EnrollmentResponse,
   ListInstitutionEnrollmentsResponse,
   ListMyEnrollmentsResponse,
+  WithdrawEnrollmentResponse,
 } from './dto/responses';
 
 interface AuthenticatedRequest {
@@ -41,5 +55,22 @@ export class EnrollmentsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<ListInstitutionEnrollmentsResponse> {
     return this.enrollmentsService.listForInstitution(request.user.sub, query);
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id')
+  cancel(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<void> {
+    return this.enrollmentsService.cancel(id, request.user.sub);
+  }
+
+  // ADR-088: single endpoint for both actors (tutor or institution admin) —
+  // no InstitutionMembershipGuard here, EnrollmentsService.withdraw()
+  // resolves which of the two branches applies.
+  @Patch(':id/withdraw')
+  withdraw(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<WithdrawEnrollmentResponse> {
+    return this.enrollmentsService.withdraw(id, request.user.sub);
   }
 }

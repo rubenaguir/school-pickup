@@ -1,5 +1,6 @@
 import type {
   EnrollmentGuardianPayload,
+  EnrollmentRemovedPayload,
   EnrollmentStatus,
   InstitutionType,
 } from '@casillego/shared';
@@ -10,12 +11,16 @@ import type { MyEnrollment } from './useMyEnrollments';
  * than redeclared: the REST snapshot (`GET /enrollments/mine`) and the
  * WebSocket deltas carry the very same fields, on purpose, so this screen
  * merges both without transforming either (same criterion as `QueueRow` in
- * `apps/portal/src/gate-console/queue-rows.ts`, ADR-051 pt.3).
+ * `apps/portal/src/gate-console/queue-rows.ts`, ADR-051 pt.3). `cancel`
+ * (ADR-088) does not fit this shape — the row is gone, no new `status` to
+ * report — so it travels as `EnrollmentRemovedPayload` instead.
  */
-export type MyEnrollmentDelta = EnrollmentGuardianPayload;
+export type MyEnrollmentDelta = EnrollmentGuardianPayload | EnrollmentRemovedPayload;
 
 function isEnrollmentStatus(value: unknown): value is EnrollmentStatus {
-  return value === 'pending' || value === 'approved' || value === 'rejected';
+  return (
+    value === 'pending' || value === 'approved' || value === 'rejected' || value === 'withdrawn'
+  );
 }
 
 function isInstitutionType(value: unknown): value is InstitutionType {
@@ -36,6 +41,10 @@ export function parseMyEnrollmentDelta(raw: unknown): MyEnrollmentDelta | null {
 
   const payload = raw as Record<string, unknown>;
 
+  if (payload.event === 'removed') {
+    return typeof payload.id === 'string' ? { event: 'removed', id: payload.id } : null;
+  }
+
   if (typeof payload.id !== 'string') return null;
   if (typeof payload.studentId !== 'string') return null;
   if (typeof payload.studentFullName !== 'string') return null;
@@ -48,6 +57,7 @@ export function parseMyEnrollmentDelta(raw: unknown): MyEnrollmentDelta | null {
   if (typeof payload.enrollmentCode !== 'string') return null;
   if (typeof payload.requestedAt !== 'string') return null;
   if (!isNullableString(payload.reviewedAt)) return null;
+  if (!isNullableString(payload.withdrawnAt)) return null;
 
   return {
     id: payload.id,
@@ -62,23 +72,31 @@ export function parseMyEnrollmentDelta(raw: unknown): MyEnrollmentDelta | null {
     enrollmentCode: payload.enrollmentCode,
     requestedAt: payload.requestedAt,
     reviewedAt: payload.reviewedAt,
+    withdrawnAt: payload.withdrawnAt,
   };
 }
 
 /**
  * Folds one delta into the tutor's full enrollment list, by `id`.
  *
- * Unlike `mergePendingEnrollmentDelta` (`apps/portal`), nothing is ever
- * removed: this screen shows every status (pending/approved/rejected), so a
- * delta always either updates an existing request or appends a brand-new
- * one — the tutor's own `create()` call already knows about its own request
- * from the REST response, but this covers a second tab, or a request created
- * from another device on the same account.
+ * Unlike `mergePendingEnrollmentDelta` (`apps/portal`), a status delta is
+ * never removed: this screen shows every status
+ * (pending/approved/rejected/withdrawn), so it always either updates an
+ * existing request or appends a brand-new one — the tutor's own `create()`
+ * call already knows about its own request from the REST response, but this
+ * covers a second tab, or a request created from another device on the same
+ * account. A `removed` event (ADR-088, `cancel`) is the one case that does
+ * take a row out — cancelling deletes it for real, there is no status left
+ * to show.
  */
 export function mergeMyEnrollmentDelta(
   enrollments: readonly MyEnrollment[],
   delta: MyEnrollmentDelta,
 ): MyEnrollment[] {
+  if ('event' in delta) {
+    return enrollments.filter((enrollment) => enrollment.id !== delta.id);
+  }
+
   const exists = enrollments.some((enrollment) => enrollment.id === delta.id);
   if (!exists) {
     return [delta, ...enrollments];

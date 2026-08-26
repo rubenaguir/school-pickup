@@ -9,6 +9,7 @@ import { apiClient } from '../api/client';
 import {
   enrollmentListErrorMessage,
   enrollmentGroupErrorMessage,
+  enrollmentWithdrawErrorMessage,
 } from '../enrollments/enrollment-error-messages';
 import {
   useApprovedEnrollments,
@@ -65,6 +66,7 @@ function StudentRow({
   groupsLoading,
   createGroup,
   onSave,
+  onWithdraw,
 }: {
   enrollment: ApprovedEnrollment;
   index: number;
@@ -75,6 +77,7 @@ function StudentRow({
   groupsLoading: boolean;
   createGroup: (name: string) => Promise<InstitutionGroup>;
   onSave: (groupId: string | null) => void;
+  onWithdraw: () => void;
 }) {
   const fieldId = useId();
   // undefined = untouched (Guardar stays disabled); null = explicitly
@@ -145,6 +148,11 @@ function StudentRow({
             >
               {busy ? 'Guardando…' : 'Guardar'}
             </Button>
+            <span title={canEdit ? undefined : NOT_ADMIN_REASON}>
+              <Button variant="ghost" size="sm" disabled={!canEdit || busy} onClick={onWithdraw}>
+                Dar de baja
+              </Button>
+            </span>
           </div>
         </div>
 
@@ -210,6 +218,43 @@ export function Students() {
           ...current,
           [enrollmentId]: {
             message: enrollmentGroupErrorMessage(apiError.code),
+            code: apiError.code,
+          },
+        }));
+      })
+      .finally(() => {
+        setBusyId((current) => (current === enrollmentId ? null : current));
+      });
+  }
+
+  // ADR-088: unlike handleSave, a successful withdraw removes the row —
+  // `Students.tsx`/`useApprovedEnrollments` predate ADR-087's realtime
+  // channel (deliberately not migrated onto it here, see the ADR) and only
+  // ever list `status = 'approved'`, so a row that just became `withdrawn`
+  // no longer belongs in `rows`.
+  function handleWithdraw(enrollmentId: string) {
+    setBusyId(enrollmentId);
+    setRowErrors((current) => {
+      if (!(enrollmentId in current)) return current;
+      const next = { ...current };
+      delete next[enrollmentId];
+      return next;
+    });
+
+    apiClient
+      .patch(`/enrollments/${enrollmentId}/withdraw`)
+      .then(() => {
+        setRows((current) => current.filter((row) => row.id !== enrollmentId));
+      })
+      .catch((caught: unknown) => {
+        const apiError =
+          caught instanceof ApiError
+            ? caught
+            : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
+        setRowErrors((current) => ({
+          ...current,
+          [enrollmentId]: {
+            message: enrollmentWithdrawErrorMessage(apiError.code),
             code: apiError.code,
           },
         }));
@@ -349,6 +394,7 @@ export function Students() {
             groupsLoading={groupsStatus === 'loading'}
             createGroup={createGroup}
             onSave={(groupId) => handleSave(enrollment.id, groupId)}
+            onWithdraw={() => handleWithdraw(enrollment.id)}
           />
         ))}
     </div>

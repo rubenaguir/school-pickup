@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEnrollmentGuardianPayload,
   buildEnrollmentInstitutionPayload,
+  buildEnrollmentRemovedPayload,
   type EnrollmentRealtimeSnapshot,
 } from './enrollment-realtime-payloads';
 
@@ -20,6 +21,8 @@ const snapshot: EnrollmentRealtimeSnapshot = {
   requestedAt: '2026-07-16T08:00:00.000Z',
   reviewedByUserId: null,
   reviewedAt: null,
+  withdrawnByUserId: null,
+  withdrawnAt: null,
 };
 
 describe('buildEnrollmentInstitutionPayload', () => {
@@ -35,6 +38,8 @@ describe('buildEnrollmentInstitutionPayload', () => {
       requestedAt: '2026-07-16T08:00:00.000Z',
       reviewedByUserId: null,
       reviewedAt: null,
+      withdrawnByUserId: null,
+      withdrawnAt: null,
     });
   });
 
@@ -50,6 +55,21 @@ describe('buildEnrollmentInstitutionPayload', () => {
 
     expect(payload.reviewedByUserId).toBe('admin-1');
     expect(payload.reviewedAt).toBe('2026-07-16T09:00:00.000Z');
+  });
+
+  it('carries the withdrawer fields through once the enrollment is withdrawn', () => {
+    const withdrawn: EnrollmentRealtimeSnapshot = {
+      ...snapshot,
+      status: 'withdrawn',
+      withdrawnByUserId: 'admin-1',
+      withdrawnAt: '2026-07-16T09:00:00.000Z',
+    };
+
+    const payload = buildEnrollmentInstitutionPayload(withdrawn);
+
+    expect(payload.status).toBe('withdrawn');
+    expect(payload.withdrawnByUserId).toBe('admin-1');
+    expect(payload.withdrawnAt).toBe('2026-07-16T09:00:00.000Z');
   });
 
   it('does not leak the institution fields — the channel is already scoped to one', () => {
@@ -76,12 +96,23 @@ describe('buildEnrollmentGuardianPayload', () => {
       enrollmentCode: 'ENR-ABCD1234',
       requestedAt: '2026-07-16T08:00:00.000Z',
       reviewedAt: null,
+      withdrawnAt: null,
     });
   });
 
-  it('does not leak requestedByUserId/reviewedByUserId — the tutor is the requester', () => {
+  it('does not leak requestedByUserId/reviewedByUserId/withdrawnByUserId — the tutor is the requester', () => {
     const payload = buildEnrollmentGuardianPayload(snapshot);
     expect(payload).not.toHaveProperty('requestedByUserId');
     expect(payload).not.toHaveProperty('reviewedByUserId');
+    expect(payload).not.toHaveProperty('withdrawnByUserId');
+  });
+});
+
+describe('buildEnrollmentRemovedPayload', () => {
+  it('produces the removed-event discriminant', () => {
+    expect(buildEnrollmentRemovedPayload('enr-1')).toEqual({
+      event: 'removed',
+      id: 'enr-1',
+    });
   });
 });

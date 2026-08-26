@@ -50,6 +50,19 @@ const GROUP_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
 };
 
+/**
+ * Codes reachable from PATCH /enrollments/:id/withdraw, institution side
+ * (ADR-088). `ENROLLMENT_WITHDRAW_FORBIDDEN` only reaches this endpoint —
+ * it is not gated by `InstitutionMembershipGuard`/`assertAdmin` like
+ * approve/reject/group, so the role check happens in the service instead.
+ */
+const WITHDRAW_MESSAGES: Record<string, string> = {
+  ENROLLMENT_NOT_APPROVED: 'Esta matrícula ya no está aprobada; alguien más la cambió.',
+  ENROLLMENT_WITHDRAW_FORBIDDEN: 'Solo un administrador puede dar de baja a un alumno.',
+  RESOURCE_NOT_FOUND: 'Este alumno ya no existe.',
+  NETWORK_ERROR: 'No pudimos conectar con el servidor. Revisa tu conexión.',
+};
+
 const FALLBACK = 'Error desconocido';
 
 export function enrollmentListErrorMessage(code: string): string {
@@ -62,4 +75,8 @@ export function enrollmentReviewErrorMessage(code: string): string {
 
 export function enrollmentGroupErrorMessage(code: string): string {
   return GROUP_MESSAGES[code] ?? FALLBACK;
+}
+
+export function enrollmentWithdrawErrorMessage(code: string): string {
+  return WITHDRAW_MESSAGES[code] ?? FALLBACK;
 }

@@ -1,4 +1,4 @@
-export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
+export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
 export interface Enrollment {
   id: string;
@@ -11,4 +11,6 @@ export interface Enrollment {
   reviewedByUserId?: string;
   requestedAt: string;
   reviewedAt?: string;
+  withdrawnByUserId?: string;
+  withdrawnAt?: string;
 }

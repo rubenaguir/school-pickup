@@ -12,6 +12,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import {
   buildEnrollmentGuardianPayload,
   buildEnrollmentInstitutionPayload,
+  buildEnrollmentRemovedPayload,
   EMAIL_PROVIDER,
   enrollmentGuardianTopic,
   enrollmentInstitutionTopic,
@@ -43,6 +44,7 @@ import type {
   ListMyEnrollmentsResponse,
   MyEnrollmentResponse,
   ReviewEnrollmentResponse,
+  WithdrawEnrollmentResponse,
 } from './dto/responses';
 
 const ENROLLMENT_NOT_APPROVED = {
@@ -88,6 +90,16 @@ const INSTITUTION_NOT_APPROVED = {
 const GROUP_NOT_IN_INSTITUTION = {
   code: 'GROUP_NOT_IN_INSTITUTION',
   message: 'groupId does not belong to this institution.',
+} as const;
+
+const ENROLLMENT_NOT_OWNED = {
+  code: 'ENROLLMENT_NOT_OWNED',
+  message: 'The authenticated user is not the requester of this enrollment.',
+} as const;
+
+const ENROLLMENT_WITHDRAW_FORBIDDEN = {
+  code: 'ENROLLMENT_WITHDRAW_FORBIDDEN',
+  message: 'The authenticated user may not withdraw this enrollment.',
 } as const;
 
 @Injectable()
@@ -155,6 +167,8 @@ export class EnrollmentsService {
           requestedAt: saved.requestedAt.toISOString(),
           reviewedByUserId: null,
           reviewedAt: null,
+          withdrawnByUserId: null,
+          withdrawnAt: null,
         },
         // Only the institution learns of a brand-new request — the tutor who
         // just submitted it already knows (ADR-087 pt.2).
@@ -218,7 +232,13 @@ export class EnrollmentsService {
         institution: { id: query.institutionId },
         ...(query.status ? { status: query.status } : {}),
       },
-      relations: { student: true, requestedBy: true, reviewedBy: true, group: true },
+      relations: {
+        student: true,
+        requestedBy: true,
+        reviewedBy: true,
+        withdrawnBy: true,
+        group: true,
+      },
       order: { requestedAt: 'DESC' },
     });
 
@@ -330,6 +350,73 @@ export class EnrollmentsService {
     return this.toReviewResponse(saved, actorUserId);
   }
 
+  // ADR-088: a hard DELETE, not a status transition — a pending enrollment
+  // never generated a pickup_request (pickups.service.ts requires
+  // status = 'approved'), so removing the row for real can never collide
+  // with pickup_requests.enrollment_id's ON DELETE RESTRICT.
+  async cancel(id: string, actorUserId: string): Promise<void> {
+    const enrollment = await this.findPendingOrFail(id);
+    if (enrollment.requestedBy.id !== actorUserId) {
+      throw new ForbiddenException(ENROLLMENT_NOT_OWNED);
+    }
+
+    const institutionId = enrollment.institutionId;
+    await this.enrollmentsRepository.remove(enrollment);
+
+    await this.publishEnrollmentRemoved(institutionId, actorUserId, id);
+  }
+
+  // ADR-088: single endpoint for both actors (tutor or institution admin) —
+  // see the ADR's implementation-time correction. Cannot go through
+  // InstitutionMembershipGuard like approve/reject/group: a tutor withdrawing
+  // their own enrollment is not an institution_member, so the "same
+  // institutionMembership.role === admin" check the guard would enforce has
+  // to be evaluated here, alongside the ownership branch, instead.
+  async withdraw(id: string, actorUserId: string): Promise<WithdrawEnrollmentResponse> {
+    const enrollment = await this.findApprovedOrFail(id);
+    const isOwner = enrollment.requestedBy.id === actorUserId;
+    const isInstitutionAdmin =
+      !isOwner &&
+      (await this.institutionMembersRepository.exists({
+        where: {
+          institution: { id: enrollment.institutionId },
+          user: { id: actorUserId },
+          role: 'admin',
+        },
+      }));
+    if (!isOwner && !isInstitutionAdmin) {
+      throw new ForbiddenException(ENROLLMENT_WITHDRAW_FORBIDDEN);
+    }
+
+    const institution = await this.getInstitutionOrFail(enrollment.institutionId);
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const enrollmentsRepo = manager.getRepository(Enrollment);
+      const auditRepo = manager.getRepository(AuditLog);
+
+      enrollment.status = 'withdrawn';
+      enrollment.withdrawnBy = { id: actorUserId } as User;
+      enrollment.withdrawnAt = new Date();
+      const saved = await enrollmentsRepo.save(enrollment);
+
+      await auditRepo.save(
+        auditRepo.create({
+          actor: { id: actorUserId } as User,
+          action: 'enrollment.withdrawn',
+          entityType: 'enrollment',
+          entityId: saved.id,
+          metadata: null,
+        }),
+      );
+
+      return saved;
+    });
+
+    await this.publishEnrollmentRealtimeUpdate(this.toRealtimeSnapshot(saved, institution), true);
+
+    return this.toWithdrawResponse(saved, actorUserId);
+  }
+
   // ADR-083: dedicated to correcting an already-approved enrollment, kept
   // separate from approve() on purpose — approve() requires status = pending
   // and re-sends the approval email on every call, so reusing it here to fix
@@ -424,6 +511,7 @@ export class EnrollmentsService {
       enrollmentCode: enrollment.enrollmentCode,
       requestedAt: enrollment.requestedAt.toISOString(),
       reviewedAt: enrollment.reviewedAt ? enrollment.reviewedAt.toISOString() : null,
+      withdrawnAt: enrollment.withdrawnAt ? enrollment.withdrawnAt.toISOString() : null,
     };
   }
 
@@ -469,6 +557,8 @@ export class EnrollmentsService {
       requestedAt: enrollment.requestedAt.toISOString(),
       reviewedByUserId: enrollment.reviewedBy ? enrollment.reviewedBy.id : null,
       reviewedAt: enrollment.reviewedAt ? enrollment.reviewedAt.toISOString() : null,
+      withdrawnByUserId: enrollment.withdrawnBy ? enrollment.withdrawnBy.id : null,
+      withdrawnAt: enrollment.withdrawnAt ? enrollment.withdrawnAt.toISOString() : null,
     };
   }
 
@@ -478,6 +568,18 @@ export class EnrollmentsService {
       status: enrollment.status,
       reviewedByUserId: actorUserId,
       reviewedAt: (enrollment.reviewedAt as Date).toISOString(),
+    };
+  }
+
+  private toWithdrawResponse(
+    enrollment: Enrollment,
+    actorUserId: string,
+  ): WithdrawEnrollmentResponse {
+    return {
+      id: enrollment.id,
+      status: enrollment.status,
+      withdrawnByUserId: actorUserId,
+      withdrawnAt: (enrollment.withdrawnAt as Date).toISOString(),
     };
   }
 
@@ -507,6 +609,8 @@ export class EnrollmentsService {
       requestedAt: enrollment.requestedAt.toISOString(),
       reviewedByUserId: enrollment.reviewedBy ? enrollment.reviewedBy.id : null,
       reviewedAt: enrollment.reviewedAt ? enrollment.reviewedAt.toISOString() : null,
+      withdrawnByUserId: enrollment.withdrawnBy ? enrollment.withdrawnBy.id : null,
+      withdrawnAt: enrollment.withdrawnAt ? enrollment.withdrawnAt.toISOString() : null,
     };
   }
 
@@ -539,6 +643,32 @@ export class EnrollmentsService {
     } catch (error) {
       this.logger.error(
         `Failed to publish enrollment ${snapshot.id} realtime update to MQTT`,
+        error as Error,
+      );
+    }
+  }
+
+  /**
+   * ADR-088: `cancel` deletes the row for real, so there is no `status` to
+   * report — `EnrollmentInstitutionPayload`/`EnrollmentGuardianPayload` stay
+   * field-for-field mirrors of their REST responses and are not reused here.
+   * Same try/catch-log policy as `publishEnrollmentRealtimeUpdate`, and
+   * always notifies both topics (unlike `create`'s conditional
+   * `notifyGuardian`): the guardian who just cancelled their own request
+   * still needs their other open tabs/devices to drop the row too.
+   */
+  private async publishEnrollmentRemoved(
+    institutionId: string,
+    guardianUserId: string,
+    enrollmentId: string,
+  ): Promise<void> {
+    const payload = buildEnrollmentRemovedPayload(enrollmentId);
+    try {
+      await this.mqttClient.publish(enrollmentInstitutionTopic(institutionId), payload, 1);
+      await this.mqttClient.publish(enrollmentGuardianTopic(guardianUserId), payload, 1);
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish enrollment ${enrollmentId} removal to MQTT`,
         error as Error,
       );
     }

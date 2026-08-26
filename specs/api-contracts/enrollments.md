@@ -10,13 +10,22 @@ Ver `docs/arquitectura.md`. Dos perspectivas distintas sobre el mismo
 recurso:
 - **Tutor**: solo puede crear/ver `enrollments` donde él sea
   `requested_by_user_id` (o, para ver, donde sea guardián activo del
-  `students` asociado).
+  `students` asociado). Para **cancelar** (`DELETE /enrollments/:id`) o
+  **dar de baja** (`PATCH /enrollments/:id/withdraw`) su propia
+  solicitud, la condición es más estricta: debe ser el propio
+  `requested_by_user_id`, ser guardián activo no basta (ADR-088).
 - **Miembro de institución**: solo puede **ver** `enrollments` cuya
   `institution_id` coincida con alguna de sus filas de `institution_members`
   (`GET`, cualquier `role`). Para **aprobar/rechazar** aplica además una
   restricción de rol (ADR-019, punto 5): solo `role = admin` puede ejecutar
   `PATCH /enrollments/:id/approve` o `/reject`; `coordinator`, `teacher` y
-  `gate_operator` pueden ver la bandeja pero no resolverla. Como el access
+  `gate_operator` pueden ver la bandeja pero no resolverla. La misma
+  restricción de rol aplica al lado institución de
+  `PATCH /enrollments/:id/withdraw` (ADR-088) — a diferencia de
+  approve/reject/group, este endpoint no pasa por
+  `InstitutionMembershipGuard` (el otro actor posible, el tutor, no es
+  `institution_members`), así que la verificación de rol vive en el
+  servicio, no en un guard. Como el access
   token no fija `institutionId` (ver `specs/features/003-login.md`), cada
   endpoint institucional recibe el `institutionId` explícitamente (o lo
   deriva del `enrollments` en los `PATCH`) y lo valida contra las membresías
@@ -81,7 +90,7 @@ autorización" arriba.
 **Query params**
 | Param | Requerido | Notas |
 |---|---|---|
-| `status` | no | filtra por `pending`/`approved`/`rejected`; sin filtro, devuelve todos |
+| `status` | no | filtra por `pending`/`approved`/`rejected`/`withdrawn`; sin filtro, devuelve todos |
 
 **Response 200**
 ```json
@@ -95,15 +104,20 @@ autorización" arriba.
       "institutionName": "string",
       "institutionType": "school | extracurricular",
       "institutionCategory": "string | null",
-      "status": "pending | approved | rejected",
+      "status": "pending | approved | rejected | withdrawn",
       "gradeOrGroup": "string | null",
       "enrollmentCode": "string",
       "requestedAt": "string (timestamptz)",
-      "reviewedAt": "string (timestamptz) | null"
+      "reviewedAt": "string (timestamptz) | null",
+      "withdrawnAt": "string (timestamptz) | null"
     }
   ]
 }
 ```
+
+`withdrawnAt` agregado por ADR-088 — sin `withdrawnByUserId`: mismo
+criterio que la ausencia de `reviewedByUserId` aquí (la identidad del
+staffer que resolvió o dio de baja no es asunto de esta pantalla).
 
 `institutionName`, `institutionType`, `institutionCategory` vienen de un
 `JOIN` contra `institutions` (ADR-057) — sin restricción de `institutions.status`,
@@ -125,7 +139,7 @@ feature 006.
 | Param | Requerido | Notas |
 |---|---|---|
 | `institutionId` | sí | debe corresponder a una `institution_members` del usuario autenticado |
-| `status` | no | filtra por `pending`/`approved`/`rejected`; sin filtro, devuelve todos |
+| `status` | no | filtra por `pending`/`approved`/`rejected`/`withdrawn`; sin filtro, devuelve todos |
 
 **Response 200**
 ```json
@@ -135,17 +149,22 @@ feature 006.
       "id": "uuid",
       "studentId": "uuid",
       "studentFullName": "string",
-      "status": "pending | approved | rejected",
+      "status": "pending | approved | rejected | withdrawn",
       "gradeOrGroup": "string | null",
       "enrollmentCode": "string",
       "requestedByUserId": "uuid",
       "requestedAt": "string (timestamptz)",
       "reviewedByUserId": "uuid | null",
-      "reviewedAt": "string (timestamptz) | null"
+      "reviewedAt": "string (timestamptz) | null",
+      "withdrawnByUserId": "uuid | null",
+      "withdrawnAt": "string (timestamptz) | null"
     }
   ]
 }
 ```
+
+`withdrawnByUserId`/`withdrawnAt` agregados por ADR-088, mismo criterio
+que `reviewedByUserId`/`reviewedAt`.
 
 **Errores**
 | Código | Caso |
@@ -235,7 +254,9 @@ ver más abajo). `gradeOrGroup` sin cambio de nombre en la respuesta.
   "requestedByUserId": "uuid",
   "requestedAt": "string (timestamptz)",
   "reviewedByUserId": "uuid | null",
-  "reviewedAt": "string (timestamptz) | null"
+  "reviewedAt": "string (timestamptz) | null",
+  "withdrawnByUserId": "uuid | null",
+  "withdrawnAt": "string (timestamptz) | null"
 }
 ```
 
@@ -282,6 +303,77 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 **Auditoría.** El rechazo registra una fila en `audit_log` con
 `action = enrollment.rejected` (ADR-018 punto 9; ADR-025 punto 6).
 
+## `DELETE /enrollments/:id`
+
+Cancela una solicitud propia todavía `pending` (perspectiva del tutor).
+Ver ADR-088. A diferencia de `reject`, esto es un `DELETE` real — la
+fila desaparece, sin valor de enum ni columna de auditoría: nunca pudo
+generar un `pickup_requests` (esa FK solo referencia enrollments
+`approved`), así que no hay nada que preservar como historial.
+
+**Autorización:** el usuario autenticado debe ser el propio
+`requested_by_user_id` del enrollment — ser guardián activo del alumno
+no basta (a diferencia de `GET /enrollments/mine`).
+
+**Request:** sin body.
+
+**Response:** `204 No Content`.
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 403 | el usuario autenticado no es el `requested_by_user_id` del enrollment; `code: ENROLLMENT_NOT_OWNED` |
+| 404 | `enrollments` no existe |
+| 409 | `enrollments.status != pending`; `code: ENROLLMENT_NOT_PENDING` |
+
+**Tiempo real.** Publica un evento `EnrollmentRemovedPayload`
+(`{ event: 'removed', id }`) a los dos topics de enrollments (ADR-087):
+institución y tutor. Ver `specs/api-contracts/enrollments-ws.md`.
+
+Sin auditoría: es una acción de auto-servicio sobre el propio recurso,
+no una decisión de control de acceso como aprobar/rechazar/dar de baja.
+
+## `PATCH /enrollments/:id/withdraw`
+
+Da de baja una asociación ya `approved` (perspectiva de tutor **o**
+institución — el mismo endpoint sirve a ambos actores, ver ADR-088). A
+diferencia de cancelar, la fila se conserva como historial: `status`
+pasa a `withdrawn` y queda terminal, igual que `rejected`.
+
+**Autorización:** permitido si el usuario autenticado es el propio
+`requested_by_user_id` del enrollment (tutor dueño), **o** si es
+`institution_members` con `role = admin` de la institución del
+enrollment (mismo nivel de privilegio que `approve`/`reject`/`group`).
+No pasa por `InstitutionMembershipGuard` — el tutor no es
+`institution_members`, así que ambas ramas se verifican en el servicio.
+
+**Request:** sin body.
+
+**Response 200**
+```json
+{
+  "id": "uuid",
+  "status": "withdrawn",
+  "withdrawnByUserId": "uuid",
+  "withdrawnAt": "string (timestamptz)"
+}
+```
+
+**Errores**
+| Código | Caso |
+|---|---|
+| 403 | el usuario autenticado no es el `requested_by_user_id` del enrollment ni un `institution_members` con `role = admin` de su institución; `code: ENROLLMENT_WITHDRAW_FORBIDDEN` |
+| 404 | `enrollments` no existe |
+| 409 | `enrollments.status != approved`; `code: ENROLLMENT_NOT_APPROVED` |
+
+**Tiempo real.** Publica a ambos topics de enrollments (ADR-087), mismo
+`EnrollmentInstitutionPayload`/`EnrollmentGuardianPayload` que
+`approve`/`reject`, ahora con `status: "withdrawn"`.
+
+**Auditoría.** Registra una fila en `audit_log` con
+`action = enrollment.withdrawn` — `actor_user_id` es quien ejecutó la
+acción, tutor o miembro de institución según el caso.
+
 ## Referencias
 
 - `specs/features/005-asociar-institucion.md`,
@@ -313,6 +405,9 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
 - ADR-087 (`specs/api-contracts/enrollments-ws.md`): canal WebSocket que
   extiende este snapshot REST con deltas en vivo — `create` publica al
   topic de institución, `approve`/`reject` a ambos (institución + tutor).
+- ADR-088 (`DELETE /enrollments/:id` para cancelar un `pending`;
+  `PATCH /enrollments/:id/withdraw`, endpoint único para tutor e
+  institución, para dar de baja un `approved`).
 
 ## Preguntas abiertas
 

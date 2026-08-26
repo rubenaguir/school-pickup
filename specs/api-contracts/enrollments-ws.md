@@ -86,21 +86,43 @@ scope de la conexión:
 
 - **Modo institución**: recibe únicamente los mensajes de
   `school-pickup/institution/{institutionId}/enrollments` para su propio
-  `institutionId`. El cuerpo es exactamente `EnrollmentInstitutionPayload`
-  (`packages/shared`, `buildEnrollmentInstitutionPayload()`) — mismo campo
-  a campo que `InstitutionEnrollmentListItem`
-  (`GET /enrollments?institutionId=`), sin envoltura ni campos añadidos.
+  `institutionId`. El cuerpo es, para toda acción salvo `cancel`,
+  exactamente `EnrollmentInstitutionPayload` (`packages/shared`,
+  `buildEnrollmentInstitutionPayload()`) — mismo campo a campo que
+  `InstitutionEnrollmentListItem` (`GET /enrollments?institutionId=`),
+  sin envoltura ni campos añadidos.
 - **Modo tutor**: recibe únicamente los mensajes de
   `school-pickup/guardian/{userId}/enrollments` para su propio `userId` —
   **un canal por tutor que cubre todas sus solicitudes a la vez**, no uno
-  por `enrollment` individual. El cuerpo es exactamente
-  `EnrollmentGuardianPayload` (`buildEnrollmentGuardianPayload()`), mismo
-  campo a campo que `MyEnrollmentResponse` (`GET /enrollments/mine`).
+  por `enrollment` individual. El cuerpo es, para toda acción salvo
+  `cancel`, exactamente `EnrollmentGuardianPayload`
+  (`buildEnrollmentGuardianPayload()`), mismo campo a campo que
+  `MyEnrollmentResponse` (`GET /enrollments/mine`).
 
 `EnrollmentsService` publica en `create` (solo al topic de institución —
-el tutor que acaba de enviar la solicitud ya lo sabe) y en
-`approve`/`reject` (a ambos topics — el tutor necesita enterarse del
-cambio de estado).
+el tutor que acaba de enviar la solicitud ya lo sabe), en
+`approve`/`reject`/`withdraw` (a ambos topics — el tutor necesita
+enterarse del cambio de estado; `status` viaja como `"withdrawn"` en el
+caso de `withdraw`, ADR-088) y en `cancel` (a ambos topics, ver el
+mensaje `removed` abajo).
+
+### Mensaje `removed` (`cancel`, ADR-088)
+
+`cancel` (`DELETE /enrollments/:id`) borra la fila de verdad — no hay
+un "nuevo estado" que quepa en `EnrollmentInstitutionPayload`/
+`EnrollmentGuardianPayload` sin inventar un valor de `status` falso. En
+su lugar publica, a ambos topics, un mensaje más chico:
+
+```json
+{ "event": "removed", "id": "uuid" }
+```
+
+Cada hook (`parsePendingEnrollmentDelta`/`parseMyEnrollmentDelta`)
+distingue este mensaje por la presencia de `event: "removed"` antes de
+intentar el parseo del shape completo, y lo resuelve quitando la fila
+por `id` (`mergePendingEnrollmentDelta`/`mergeMyEnrollmentDelta`). Del
+lado tutor esto es la primera vez que una fila desaparece de la lista —
+antes, todo estado (incluido `rejected`) se conservaba como historial.
 
 ## Mensajes cliente → servidor
 
@@ -118,6 +140,7 @@ propio snapshot REST antes de reanudar el consumo de deltas.
 - ADR-050 (patrón original del puente WebSocket).
 - ADR-087 (decisión completa de este canal: doble scope, publish en
   create/approve/reject, alcance de las pantallas cubiertas).
+- ADR-088 (publish en `withdraw`; mensaje `removed` dedicado en `cancel`).
 - ADR-011 (sin restricción de `role` dentro del tenant, modo institución).
 - `specs/api-contracts/enrollments.md` (snapshot REST que precede a este
   canal, en ambos modos).

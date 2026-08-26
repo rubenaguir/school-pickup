@@ -15,7 +15,12 @@ import { User } from './user.entity';
 import { PickupRequest } from './pickup-request.entity';
 import { InstitutionGroup } from './institution-group.entity';
 
-const ENROLLMENT_STATUS_VALUES: readonly EnrollmentStatus[] = ['pending', 'approved', 'rejected'];
+const ENROLLMENT_STATUS_VALUES: readonly EnrollmentStatus[] = [
+  'pending',
+  'approved',
+  'rejected',
+  'withdrawn',
+];
 
 // Espejo declarativo del índice ya aplicado en la migración
 // 1783697356401-PartialUniqueAndGinIndexes.ts — el SQL crudo de esa
@@ -87,6 +92,16 @@ export class Enrollment {
 
   @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
   reviewedAt!: Date | null;
+
+  @ManyToOne(() => User, (user) => user.enrollmentsWithdrawn, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'withdrawn_by_user_id' })
+  withdrawnBy!: User | null;
+
+  @Column({ name: 'withdrawn_at', type: 'timestamptz', nullable: true })
+  withdrawnAt!: Date | null;
 
   @OneToMany(() => PickupRequest, (pickupRequest) => pickupRequest.enrollment)
   pickupRequests!: PickupRequest[];

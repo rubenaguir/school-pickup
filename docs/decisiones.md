@@ -6846,3 +6846,111 @@ abstracción ya validada por 5 consumidores desde ADR-075.
 - ADR-038/ADR-040 (`SuperAdminGuard`, namespace `/admin/`).
 - `apps/api/src/pickups/pickups.service.ts` (patrón de publish
   try/catch-log a reutilizar).
+
+## ADR-088 — Cancelar (`pending`) y dar de baja (`approved`) una asociación alumno-institución
+
+**Contexto.** Surgió al probar ADR-087 manualmente: no existía forma
+de deshacer una asociación alumno-institución desde ninguna de las dos
+apps, solo `DELETE` directo en la base de datos. Se confirma que es
+una funcionalidad real, faltante tanto en `apps/portal` (institución)
+como en `apps/parent` (tutor).
+
+Investigado en el código real antes de diseñar: `pickups.service.ts`
+(línea 178) exige `enrollment.status === 'approved'` para crear
+cualquier `pickup_request`. Esto es la pieza clave del diseño — un
+enrollment en `pending` **nunca** puede tener una `pickup_request`
+apuntándole vía la FK `pickup_requests.enrollment_id → enrollments.id`
+(`ON DELETE RESTRICT`), así que cancelar un `pending` jamás puede
+chocar con esa restricción. Un enrollment `approved`, en cambio, sí
+pudo haber generado pickups reales — borrarlo de verdad sería
+inseguro.
+
+Sobre el caso de "reutilizar el registro" al reintentar la asociación:
+no hace falta ningún mecanismo nuevo. El índice único parcial
+`(student_id, institution_id) WHERE status IN ('pending', 'approved')`
+ya resuelve esto exactamente igual que hoy resuelve el reintento tras
+un `rejected` — en cuanto el estado sale de ese rango, una solicitud
+nueva simplemente inserta una fila nueva; la vieja queda como
+historial, sin conflicto.
+
+**Decisión.**
+
+1. **Cancelar** (`pending` → fila eliminada de verdad): **solo el
+   tutor**, sobre su propia solicitud. Endpoint nuevo en
+   `EnrollmentsController` (`DELETE`, mismo controlador de `create`/
+   `listMine`, sin `InstitutionMembershipGuard` — el criterio de
+   autorización es "soy quien la solicitó", no membresía de
+   institución). Verificación en el servicio: `status === 'pending'`
+   y `requestedByUserId === actorUserId` antes de borrar. Sin nuevo
+   valor de enum — no hace falta, la fila desaparece.
+2. **Dar de baja** (`approved` → `status = 'withdrawn'`, nuevo valor
+   en `enrollments_status_enum`): **tutor o institución**, cada quien
+   sobre las suyas.
+   - Lado tutor: `PATCH :id/withdraw` en `EnrollmentsController`,
+     misma verificación de propiedad que cancelar.
+   - Lado institución: `PATCH :id/withdraw` en
+     `EnrollmentsDetailController`, reutilizando
+     `InstitutionMembershipGuard` ya existente ahí (mismo patrón que
+     `approve`/`reject`).
+   - Nuevas columnas `withdrawn_at`/`withdrawn_by_user_id`, mismo
+     patrón que `reviewed_at`/`reviewed_by_user_id`.
+3. **Tiempo real (ADR-087)**: ambas acciones publican a los mismos dos
+   topics de enrollments (institución + tutor) que ya existen — no se
+   crea infraestructura nueva de canal, solo dos publicadores más
+   sobre el gateway ya construido.
+
+**Consecuencias.** Migración nueva: valor `withdrawn` en
+`enrollments_status_enum` + 2 columnas nullable. Ningún cambio al
+índice único parcial (ya excluye cualquier estado fuera de
+`pending`/`approved` por construcción). Los tests de `pickups.service`
+que ya cubren "enrollment no aprobado" siguen validando el caso
+`withdrawn` sin cambios, ya que ese servicio solo verifica
+`=== 'approved'`.
+
+**Corrección durante la implementación (endpoint único para `withdraw`).**
+El punto 2 de la decisión original proponía `PATCH :id/withdraw` en dos
+controladores distintos — `EnrollmentsController` (tutor) y
+`EnrollmentsDetailController` (institución) — ambos montados sobre el
+mismo `@Controller('enrollments')`. Es una colisión de ruta real: Nest
+no resuelve dos rutas idénticas (mismo método + mismo path) declaradas
+en controladores distintos del mismo módulo; solo la que se registra
+primero en el array `controllers` de `EnrollmentsModule` (hoy
+`EnrollmentsController`, antes que `EnrollmentsDetailController`) llega
+a responder — la otra queda inalcanzable en silencio, sin error de
+arranque que lo delate. Detectado al escribir el controlador, antes de
+tocar ninguna ruta (ver CLAUDE.md, "Spec antes que código").
+
+**Decisión revisada:** un único endpoint, `PATCH /enrollments/:id/withdraw`,
+vive en `EnrollmentsController`, sin `InstitutionMembershipGuard`. La
+regla "tutor o institución, cada quien sobre las suyas" se resuelve
+dentro de `EnrollmentsService.withdraw()`, no en un guard: permitido si
+`actorUserId === enrollment.requestedByUserId` (tutor dueño), o si
+`actorUserId` es `institution_member` con `role = admin` de la
+institución del enrollment (mismo nivel de privilegio que
+`approve`/`reject`/`group`, verificado con una consulta directa a
+`institution_members` — mismo patrón que ya usan en este archivo
+`listForInstitution`/`assertActiveGuardian` para reglas de autorización
+que no encajan en el guard genérico). Ninguna ruta nueva se agrega a
+`EnrollmentsDetailController`. El contrato externo no cambia: sigue
+siendo un solo `PATCH /enrollments/:id/withdraw`, ahora documentado como
+tal en `specs/api-contracts/enrollments.md` en vez de como dos
+endpoints separados.
+
+**Corrección durante la implementación (evento `removed` de `cancel`).**
+El punto 3 ("ambas acciones publican a los mismos dos topics... ya
+existentes") no alcanza a `cancel`: `EnrollmentInstitutionPayload` y
+`EnrollmentGuardianPayload` son field-for-field el mismo shape que sus
+respuestas REST (invariante documentado en
+`enrollment-realtime-payloads.ts` y explotado por
+`pending-enrollment-rows.ts`/`my-enrollment-rows.ts` para fusionar
+snapshot y delta sin transformar ninguno) — no tienen forma de decir
+"esta fila ya no existe" sin inventar un valor de estado falso. Se
+agrega un tercer tipo de mensaje, `EnrollmentRemovedPayload`
+(`{ event: 'removed', id }`), que viaja por los mismos dos topics
+(institución + tutor) solo desde `cancel()`. `parseDelta` en ambos hooks
+distingue el mensaje por la presencia de `event: 'removed'` antes de
+intentar parsear el shape completo; `mergeDelta` lo resuelve filtrando
+la fila por `id`. `mergeMyEnrollmentDelta` (`apps/parent`), que hasta
+ahora nunca quitaba filas (todo estado se conserva como historial),
+gana su primer caso de remoción — coherente con que `cancel` borra la
+fila de verdad, sin dejar rastro que mostrar.

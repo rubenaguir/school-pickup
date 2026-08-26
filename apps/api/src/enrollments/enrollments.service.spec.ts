@@ -43,7 +43,9 @@ function buildEnrollment(overrides?: Partial<Enrollment>): Enrollment {
 }
 
 function buildService(overrides?: {
-  enrollments?: Partial<Record<'find' | 'create' | 'save' | 'exists' | 'findOne', unknown>>;
+  enrollments?: Partial<
+    Record<'find' | 'create' | 'save' | 'exists' | 'findOne' | 'remove', unknown>
+  >;
   institutions?: Partial<Record<'findOne' | 'findOneBy', unknown>>;
   studentGuardians?: Partial<Record<'find' | 'exists', unknown>>;
   institutionMembers?: Partial<Record<'exists', unknown>>;
@@ -59,6 +61,7 @@ function buildService(overrides?: {
     create: vi.fn((partial: Partial<Enrollment>) => partial),
     save: vi.fn((entity: Partial<Enrollment>) => Promise.resolve(buildEnrollment(entity))),
     exists: vi.fn().mockResolvedValue(false),
+    remove: vi.fn().mockResolvedValue(undefined),
     ...overrides?.enrollments,
   };
   const institutionsRepo = {
@@ -664,6 +667,167 @@ describe('EnrollmentsService', () => {
         status: 409,
         response: { code: 'ENROLLMENT_NOT_APPROVED' },
       });
+    });
+  });
+
+  // ADR-088: a hard DELETE, not a status transition.
+  describe('cancel', () => {
+    it("deletes a pending enrollment owned by the caller and publishes 'removed' to both topics", async () => {
+      const { service, enrollmentsRepo, mqttClient } = buildService();
+
+      await service.cancel('enr-1', 'user-1');
+
+      expect(enrollmentsRepo.remove).toHaveBeenCalledOnce();
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/institution/inst-1/enrollments',
+        { event: 'removed', id: 'enr-1' },
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/guardian/user-1/enrollments',
+        { event: 'removed', id: 'enr-1' },
+        1,
+      );
+    });
+
+    it('rejects with 403 ENROLLMENT_NOT_OWNED when the caller did not request it', async () => {
+      const { service, enrollmentsRepo } = buildService();
+
+      await expect(service.cancel('enr-1', 'someone-else')).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'ENROLLMENT_NOT_OWNED' },
+      });
+      expect(enrollmentsRepo.remove).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_PENDING when the enrollment is already resolved', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+      });
+
+      await expect(service.cancel('enr-1', 'user-1')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'ENROLLMENT_NOT_PENDING' },
+      });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND when the enrollment does not exist', async () => {
+      const { service } = buildService({
+        enrollments: { findOne: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.cancel('missing', 'user-1')).rejects.toMatchObject({
+        status: 404,
+        response: { code: 'RESOURCE_NOT_FOUND' },
+      });
+    });
+
+    it('does not fail the cancellation when the MQTT publish throws', async () => {
+      const { service, enrollmentsRepo } = buildService({
+        mqttClient: { publish: vi.fn().mockRejectedValue(new Error('broker down')) },
+      });
+
+      await expect(service.cancel('enr-1', 'user-1')).resolves.toBeUndefined();
+      expect(enrollmentsRepo.remove).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ADR-088: single endpoint for both actors — see the ADR's
+  // implementation-time correction (no InstitutionMembershipGuard here).
+  describe('withdraw', () => {
+    it('withdraws an approved enrollment when the caller is its own requester (tutor)', async () => {
+      const { service, enrollmentsRepo, auditRepo } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+      });
+
+      const result = await service.withdraw('enr-1', 'user-1');
+
+      expect(result).toMatchObject({
+        id: 'enr-1',
+        status: 'withdrawn',
+        withdrawnByUserId: 'user-1',
+      });
+      expect(enrollmentsRepo.save).toHaveBeenCalledOnce();
+      expect(auditRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'enrollment.withdrawn', entityType: 'enrollment' }),
+      );
+    });
+
+    it('withdraws an approved enrollment when the caller is an institution admin', async () => {
+      const { service, institutionMembersRepo } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(true) },
+      });
+
+      const result = await service.withdraw('enr-1', 'admin-1');
+
+      expect(result).toMatchObject({ status: 'withdrawn', withdrawnByUserId: 'admin-1' });
+      expect(institutionMembersRepo.exists).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            institution: { id: 'inst-1' },
+            user: { id: 'admin-1' },
+            role: 'admin',
+          },
+        }),
+      );
+    });
+
+    it('rejects with 403 ENROLLMENT_WITHDRAW_FORBIDDEN when the caller is neither the requester nor an institution admin', async () => {
+      const { service, enrollmentsRepo } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+        institutionMembers: { exists: vi.fn().mockResolvedValue(false) },
+      });
+
+      await expect(service.withdraw('enr-1', 'stranger-1')).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'ENROLLMENT_WITHDRAW_FORBIDDEN' },
+      });
+      expect(enrollmentsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_APPROVED when the enrollment is still pending', async () => {
+      const { service } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'pending' })),
+        },
+      });
+
+      await expect(service.withdraw('enr-1', 'user-1')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'ENROLLMENT_NOT_APPROVED' },
+      });
+    });
+
+    it('publishes to both the institution and the requesting guardian topics with status withdrawn', async () => {
+      const { service, mqttClient } = buildService({
+        enrollments: {
+          findOne: vi.fn().mockResolvedValue(buildEnrollment({ status: 'approved' })),
+        },
+      });
+
+      await service.withdraw('enr-1', 'user-1');
+
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/institution/inst-1/enrollments',
+        expect.objectContaining({ status: 'withdrawn' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/guardian/user-1/enrollments',
+        expect.objectContaining({ status: 'withdrawn' }),
+        1,
+      );
     });
   });
 });

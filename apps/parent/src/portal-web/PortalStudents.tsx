@@ -9,7 +9,11 @@ import {
   type StudentGuardianRelationship,
 } from '@casillego/shared';
 import { useMyStudents, type CreateStudentDraft, type MyStudent } from '../students/useMyStudents';
-import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
+import {
+  useMyEnrollments,
+  type MyEnrollment,
+  type MyEnrollmentRowError,
+} from '../enrollments/useMyEnrollments';
 import { StudentPhoto } from '../students/StudentPhoto';
 import { createStudentErrorMessage } from '../students/student-error-messages';
 import { TUTOR_PORTAL_ASSOCIATE_PATH, TUTOR_PORTAL_GUARDIANS_PATH } from '../routes/paths';
@@ -202,10 +206,11 @@ function AddStudentForm({
 /**
  * El kit (`ASOC_META`, línea ~468) solo define 3 etiquetas —
  * aprobada/revisión/enviada — todas de solicitudes en curso o exitosas;
- * nunca dibuja una rechazada. `EnrollmentStatus` sí tiene un tercer valor
- * real (`rejected`) que el kit no cubre — se extiende con los tokens de
- * `--danger` ya existentes en el proyecto en vez de ocultarle al tutor un
- * estado real.
+ * nunca dibuja una rechazada. `EnrollmentStatus` sí tiene valores reales
+ * (`rejected`, `withdrawn`) que el kit no cubre — se extienden con tokens
+ * ya existentes en el proyecto (`--danger` para rechazada,
+ * `--status-cancelled` para dada de baja — ambos estados terminales, "ya no
+ * cuenta") en vez de ocultarle al tutor un estado real. Ver ADR-088.
  */
 export const STATUS_META: Record<EnrollmentStatus, { label: string; bg: string; fg: string }> = {
   approved: {
@@ -219,6 +224,11 @@ export const STATUS_META: Record<EnrollmentStatus, { label: string; bg: string; 
     fg: 'var(--status-arriving-fg)',
   },
   rejected: { label: 'Rechazada', bg: 'var(--danger-bg)', fg: 'var(--danger)' },
+  withdrawn: {
+    label: 'Dada de baja',
+    bg: 'var(--status-cancelled-bg)',
+    fg: 'var(--status-cancelled-fg)',
+  },
 };
 
 /**
@@ -253,12 +263,20 @@ function StudentRow({
   enrollments,
   onAuthorized,
   onAssociate,
+  onCancelEnrollment,
+  onWithdrawEnrollment,
+  busyEnrollmentId,
+  enrollmentRowError,
 }: {
   student: MyStudent;
   index: number;
   enrollments: MyEnrollment[];
   onAuthorized: () => void;
   onAssociate: () => void;
+  onCancelEnrollment: (enrollmentId: string) => void;
+  onWithdrawEnrollment: (enrollmentId: string) => void;
+  busyEnrollmentId: string | null;
+  enrollmentRowError: MyEnrollmentRowError | null;
 }) {
   const primary = primaryEnrollmentFor(student.id, enrollments);
   const studentEnrollments = enrollments.filter(
@@ -339,60 +357,94 @@ function StudentRow({
         )}
         {studentEnrollments.map((enrollment) => {
           const meta = STATUS_META[enrollment.status];
+          const busy = busyEnrollmentId === enrollment.id;
           return (
-            <div
-              key={enrollment.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 13,
-                padding: '11px 14px',
-                background: 'var(--surface-muted)',
-                borderRadius: 11,
-              }}
-            >
-              <span
+            <div key={enrollment.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div
                 style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 9,
-                  background: '#fff',
-                  border: '1px solid var(--border)',
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--ink-300)',
-                  flexShrink: 0,
+                  gap: 13,
+                  padding: '11px 14px',
+                  background: 'var(--surface-muted)',
+                  borderRadius: 11,
                 }}
               >
-                <Icon name="building" size={17} />
-              </span>
-              <span
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}
-              >
-                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>
-                  {enrollment.institutionName}
+                <span
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 9,
+                    background: '#fff',
+                    border: '1px solid var(--border)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--ink-300)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon name="building" size={17} />
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
-                  {institutionTypeLabel(enrollment.institutionType, enrollment.institutionCategory)}
+                <span
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>
+                    {enrollment.institutionName}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--ink-200)' }}>
+                    {institutionTypeLabel(
+                      enrollment.institutionType,
+                      enrollment.institutionCategory,
+                    )}
+                  </span>
                 </span>
-              </span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  padding: '6px 12px',
-                  borderRadius: 999,
-                  background: meta.bg,
-                  color: meta.fg,
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.fg }} />
-                {meta.label}
-              </span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '6px 12px',
+                    borderRadius: 999,
+                    background: meta.bg,
+                    color: meta.fg,
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.fg }} />
+                  {meta.label}
+                </span>
+                {enrollment.status === 'pending' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => onCancelEnrollment(enrollment.id)}
+                  >
+                    Cancelar solicitud
+                  </Button>
+                )}
+                {enrollment.status === 'approved' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => onWithdrawEnrollment(enrollment.id)}
+                  >
+                    Dar de baja
+                  </Button>
+                )}
+              </div>
+              {enrollmentRowError?.enrollmentId === enrollment.id && (
+                <InlineError message={enrollmentRowError.message} code={enrollmentRowError.code} />
+              )}
             </div>
           );
         })}
@@ -525,6 +577,10 @@ export function PortalStudents() {
               enrollments={enrollmentList}
               onAuthorized={() => void navigate(TUTOR_PORTAL_GUARDIANS_PATH)}
               onAssociate={() => void navigate(TUTOR_PORTAL_ASSOCIATE_PATH)}
+              onCancelEnrollment={enrollments.cancel}
+              onWithdrawEnrollment={enrollments.withdraw}
+              busyEnrollmentId={enrollments.busyId}
+              enrollmentRowError={enrollments.rowError}
             />
           ))}
         </div>

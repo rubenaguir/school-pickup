@@ -25,7 +25,7 @@ import {
 } from '@casillego/shared/entities';
 
 type MemberRole = 'admin' | 'gate_operator' | 'coordinator' | 'teacher';
-type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
+type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type InstitutionStatus = 'pending' | 'approved' | 'suspended';
 
 interface InstitutionRecord {
@@ -62,6 +62,8 @@ interface EnrollmentRecord {
   reviewedByUserId: string | null;
   requestedAt: Date;
   reviewedAt: Date | null;
+  withdrawnByUserId: string | null;
+  withdrawnAt: Date | null;
 }
 
 interface InstitutionGroupRecord {
@@ -146,6 +148,8 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       reviewedBy: record.reviewedByUserId ? { id: record.reviewedByUserId } : null,
       requestedAt: record.requestedAt,
       reviewedAt: record.reviewedAt,
+      withdrawnBy: record.withdrawnByUserId ? { id: record.withdrawnByUserId } : null,
+      withdrawnAt: record.withdrawnAt,
     } as unknown as Enrollment;
   }
 
@@ -189,9 +193,17 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
             ? (entity.reviewedBy as { id: string }).id
             : existing.reviewedByUserId,
           reviewedAt: (entity.reviewedAt as Date | undefined) ?? existing.reviewedAt,
+          withdrawnByUserId: entity.withdrawnBy
+            ? (entity.withdrawnBy as { id: string }).id
+            : existing.withdrawnByUserId,
+          withdrawnAt: (entity.withdrawnAt as Date | undefined) ?? existing.withdrawnAt,
         };
         enrollments.set(id, updated);
         return Promise.resolve(toEnrollmentEntity(updated));
+      }),
+      remove: vi.fn((entity: { id: string }) => {
+        enrollments.delete(entity.id);
+        return Promise.resolve(entity);
       }),
     };
 
@@ -368,6 +380,8 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
       reviewedByUserId: null,
       requestedAt: new Date(),
       reviewedAt: null,
+      withdrawnByUserId: null,
+      withdrawnAt: null,
       ...overrides,
       id,
     });
@@ -625,6 +639,148 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
     });
   });
 
+  // ADR-088: a hard DELETE, tutor-only, no InstitutionMembershipGuard.
+  describe('DELETE /enrollments/:id', () => {
+    it('deletes a pending enrollment when the caller is its own requester', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, requestedByUserId: 'tutor-1' });
+
+      const res = await request(server)
+        .delete(`/enrollments/${id}`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(204);
+      expect(enrollments.has(id)).toBe(false);
+    });
+
+    it('rejects with 403 ENROLLMENT_NOT_OWNED when the caller did not request it', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, requestedByUserId: 'tutor-1' });
+
+      const res = await request(server)
+        .delete(`/enrollments/${id}`)
+        .set('x-test-user-id', 'tutor-2');
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_NOT_OWNED' });
+      expect(enrollments.has(id)).toBe(true);
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_PENDING when the enrollment is already resolved', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .delete(`/enrollments/${id}`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_NOT_PENDING' });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND for a non-existent enrollment id', async () => {
+      const res = await request(server)
+        .delete(`/enrollments/${randomUUID()}`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
+    });
+  });
+
+  // ADR-088: single endpoint for both actors — the implementation-time
+  // correction to the ADR's original two-controller design (a route
+  // collision on the same @Controller('enrollments') prefix). Wiring both
+  // EnrollmentsController and EnrollmentsDetailController in this same spec
+  // is exactly what would have caught that collision.
+  describe('PATCH /enrollments/:id/withdraw', () => {
+    it('withdraws an approved enrollment when the caller is its own requester (tutor)', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id, status: 'withdrawn', withdrawnByUserId: 'tutor-1' });
+      expect(enrollments.get(id)?.status).toBe('withdrawn');
+    });
+
+    it('withdraws an approved enrollment when the caller is an institution admin', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'admin-a');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id, status: 'withdrawn', withdrawnByUserId: 'admin-a' });
+    });
+
+    it('rejects with 403 ENROLLMENT_WITHDRAW_FORBIDDEN when the caller is a non-admin member of the institution', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'teacher-a');
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_WITHDRAW_FORBIDDEN' });
+    });
+
+    it('rejects with 403 ENROLLMENT_WITHDRAW_FORBIDDEN when the caller is neither the requester nor an institution member', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'tutor-2');
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_WITHDRAW_FORBIDDEN' });
+    });
+
+    it('rejects with 409 ENROLLMENT_NOT_APPROVED when the enrollment is still pending', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'pending',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'ENROLLMENT_NOT_APPROVED' });
+    });
+
+    it('rejects with 404 RESOURCE_NOT_FOUND for a non-existent enrollment id', async () => {
+      const res = await request(server)
+        .patch(`/enrollments/${randomUUID()}/withdraw`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
+    });
+  });
+
   describe('audit_log', () => {
     it('records an enrollment.approved entry with the acting admin as actor', async () => {
       const id = seedEnrollment({ institutionId: INST_A });
@@ -656,6 +812,37 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         entityType: 'enrollment',
         actor: { id: 'admin-a' },
       });
+    });
+
+    it('records an enrollment.withdrawn entry with the acting user as actor', async () => {
+      const id = seedEnrollment({
+        institutionId: INST_A,
+        requestedByUserId: 'tutor-1',
+        status: 'approved',
+      });
+
+      const res = await request(server)
+        .patch(`/enrollments/${id}/withdraw`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(200);
+      expect(auditCreateCalls).toHaveLength(1);
+      expect(auditCreateCalls[0]).toMatchObject({
+        action: 'enrollment.withdrawn',
+        entityType: 'enrollment',
+        actor: { id: 'tutor-1' },
+      });
+    });
+
+    it('does not write an audit_log entry for cancel', async () => {
+      const id = seedEnrollment({ institutionId: INST_A, requestedByUserId: 'tutor-1' });
+
+      const res = await request(server)
+        .delete(`/enrollments/${id}`)
+        .set('x-test-user-id', 'tutor-1');
+
+      expect(res.status).toBe(204);
+      expect(auditCreateCalls).toHaveLength(0);
     });
   });
 });

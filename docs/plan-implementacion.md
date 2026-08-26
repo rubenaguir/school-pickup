@@ -582,6 +582,28 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
   - [x] Dos gateways nuevos en `apps/api`, mismo patrón que
         `DeliveryPointQueueGateway` (bridge MQTT↔WS, suscripción
         wildcard única por proceso)
+- [ ] **Cancelar/dar de baja una asociación alumno-institución
+      (ADR-088)** — surgió al probar ADR-087 manualmente:
+  - [ ] Migración: valor `withdrawn` en `enrollments_status_enum` +
+        columnas `withdrawn_at`/`withdrawn_by_user_id`
+  - [x] `EnrollmentsController`: `DELETE :id` (cancelar `pending`,
+        solo el tutor propietario, borra la fila de verdad — nunca
+        choca con la FK de `pickup_requests` porque esa solo referencia
+        enrollments `approved`) y `PATCH :id/withdraw` (dar de baja su
+        propio `approved`)
+  - [x] `PATCH :id/withdraw` es **un solo endpoint** en
+        `EnrollmentsController` para tutor e institución — corrección
+        durante la implementación, ver el addendum de ADR-088. No se
+        agrega ninguna ruta a `EnrollmentsDetailController`.
+  - [x] Ambas acciones publican a los topics de enrollments ya
+        existentes (ADR-087), sin gateway ni topic nuevo — `cancel`
+        publica un evento `removed` dedicado (la fila desaparece, no
+        hay "nuevo estado" que publicar)
+  - [x] Botones correspondientes en `PortalStudents.tsx`/
+        `AssociateInstitutionPanel.tsx` (`apps/parent`) y en
+        `Students.tsx` (`apps/portal`, no `PendingEnrollments.tsx` —
+        esa pantalla solo lista `pending`; el roster de `approved`
+        vive en `Students.tsx` vía `useApprovedEnrollments`)
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

@@ -16,6 +16,7 @@ function enrollment(overrides?: Partial<MyEnrollment>): MyEnrollment {
     enrollmentCode: 'ABCD',
     requestedAt: '2026-08-01T00:00:00.000Z',
     reviewedAt: null,
+    withdrawnAt: null,
     ...overrides,
   };
 }
@@ -33,6 +34,11 @@ describe('blockingEnrollment', () => {
 
   it('does not block on a rejected enrollment — the partial unique index excludes it', () => {
     const enrollments = [enrollment({ status: 'rejected' })];
+    expect(blockingEnrollment(enrollments, 'institution-1')).toBeUndefined();
+  });
+
+  it('does not block on a withdrawn enrollment — same terminal exclusion (ADR-088)', () => {
+    const enrollments = [enrollment({ status: 'withdrawn' })];
     expect(blockingEnrollment(enrollments, 'institution-1')).toBeUndefined();
   });
 

@@ -22,6 +22,7 @@ export interface MyEnrollmentResponse {
   enrollmentCode: string;
   requestedAt: string;
   reviewedAt: string | null;
+  withdrawnAt: string | null;
 }
 
 export interface ListMyEnrollmentsResponse {
@@ -39,6 +40,8 @@ export interface InstitutionEnrollmentListItem {
   requestedAt: string;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  withdrawnByUserId: string | null;
+  withdrawnAt: string | null;
 }
 
 export interface ListInstitutionEnrollmentsResponse {
@@ -50,4 +53,11 @@ export interface ReviewEnrollmentResponse {
   status: EnrollmentStatus;
   reviewedByUserId: string;
   reviewedAt: string;
+}
+
+export interface WithdrawEnrollmentResponse {
+  id: string;
+  status: EnrollmentStatus;
+  withdrawnByUserId: string;
+  withdrawnAt: string;
 }

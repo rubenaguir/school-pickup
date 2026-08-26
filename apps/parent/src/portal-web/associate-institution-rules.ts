@@ -12,16 +12,18 @@ import type { MyEnrollment } from '../enrollments/useMyEnrollments';
  * only case the partial unique index
  * `("student_id", "institution_id") WHERE "status" IN ('pending', 'approved')`
  * (apps/api/src/database/migrations/1783697356401-PartialUniqueAndGinIndexes.ts)
- * enforces. A `rejected` row is terminal and does not block a retry — the
- * insert creates a new row rather than reactivating it
- * (specs/entities/enrollment.md, ADR-026 punto 1).
+ * enforces. `rejected` and `withdrawn` (ADR-088) are both terminal and do not
+ * block a retry — the insert creates a new row rather than reactivating
+ * either one (specs/entities/enrollment.md, ADR-026 punto 1).
  */
 export function blockingEnrollment(
   enrollments: readonly MyEnrollment[],
   institutionId: string,
 ): MyEnrollment | undefined {
   const existing = enrollments.find((enrollment) => enrollment.institutionId === institutionId);
-  return existing && existing.status !== 'rejected' ? existing : undefined;
+  return existing && existing.status !== 'rejected' && existing.status !== 'withdrawn'
+    ? existing
+    : undefined;
 }
 
 /**

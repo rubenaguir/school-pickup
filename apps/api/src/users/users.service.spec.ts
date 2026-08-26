@@ -24,6 +24,7 @@ function buildUser(overrides?: Partial<User>): User {
     studentsCreated: [],
     enrollmentsRequested: [],
     enrollmentsReviewed: [],
+    enrollmentsWithdrawn: [],
     pickupRequests: [],
     statusChangesMade: [],
     operatedDeliveryPoints: [],

@@ -24,6 +24,8 @@ export interface EnrollmentRealtimeSnapshot {
   requestedAt: string;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  withdrawnByUserId: string | null;
+  withdrawnAt: string | null;
 }
 
 /**
@@ -47,6 +49,8 @@ export interface EnrollmentInstitutionPayload {
   requestedAt: string;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  withdrawnByUserId: string | null;
+  withdrawnAt: string | null;
 }
 
 export function buildEnrollmentInstitutionPayload(
@@ -63,7 +67,27 @@ export function buildEnrollmentInstitutionPayload(
     requestedAt: snapshot.requestedAt,
     reviewedByUserId: snapshot.reviewedByUserId,
     reviewedAt: snapshot.reviewedAt,
+    withdrawnByUserId: snapshot.withdrawnByUserId,
+    withdrawnAt: snapshot.withdrawnAt,
   };
+}
+
+/**
+ * Shape of the `cancel` (`DELETE /enrollments/:id`) realtime event, on both
+ * the institution and guardian topics (ADR-088). Deliberately NOT a variant
+ * of `EnrollmentInstitutionPayload`/`EnrollmentGuardianPayload`: cancel
+ * deletes the row for real, so there is no new `status` to report without
+ * inventing a fake enum value. `event: 'removed'` is the discriminant the
+ * two hooks (`parsePendingEnrollmentDelta`/`parseMyEnrollmentDelta`) check
+ * before attempting the full-payload shape.
+ */
+export interface EnrollmentRemovedPayload {
+  event: 'removed';
+  id: string;
+}
+
+export function buildEnrollmentRemovedPayload(id: string): EnrollmentRemovedPayload {
+  return { event: 'removed', id };
 }
 
 /**
@@ -88,6 +112,7 @@ export interface EnrollmentGuardianPayload {
   enrollmentCode: string;
   requestedAt: string;
   reviewedAt: string | null;
+  withdrawnAt: string | null;
 }
 
 export function buildEnrollmentGuardianPayload(
@@ -106,5 +131,6 @@ export function buildEnrollmentGuardianPayload(
     enrollmentCode: snapshot.enrollmentCode,
     requestedAt: snapshot.requestedAt,
     reviewedAt: snapshot.reviewedAt,
+    withdrawnAt: snapshot.withdrawnAt,
   };
 }

@@ -82,6 +82,9 @@ export class User {
   @OneToMany(() => Enrollment, (enrollment) => enrollment.reviewedBy)
   enrollmentsReviewed!: Enrollment[];
 
+  @OneToMany(() => Enrollment, (enrollment) => enrollment.withdrawnBy)
+  enrollmentsWithdrawn!: Enrollment[];
+
   @OneToMany(() => PickupRequest, (pickupRequest) => pickupRequest.guardian)
   pickupRequests!: PickupRequest[];
 
