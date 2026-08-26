@@ -77,6 +77,17 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
   );
 }
 
+// Mismo breakpoint que TutorShell/BrandPanel (ADR-086) y el mismo patrón que
+// PortalStudents.tsx (apps/parent, ADR-088): en móvil angosto la fila de cada
+// solicitud pasa a dos líneas fijas (avatar+nombre arriba, acciones abajo a
+// los extremos) en vez de envolver donde alcance.
+const ENROLLMENT_ROW_STYLE = `
+@media (max-width: 767px) {
+  .enrollment-row { flex-wrap: wrap; }
+  .enrollment-row-actions { flex-basis: 100%; justify-content: space-between; }
+}
+`;
+
 const NOT_ADMIN_REASON = 'Solo un administrador puede aprobar o rechazar solicitudes.';
 
 function EnrollmentRow({
@@ -119,6 +130,7 @@ function EnrollmentRow({
     <Card>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div
+          className="enrollment-row"
           style={{
             display: 'flex',
             alignItems: 'flex-start',
@@ -143,7 +155,8 @@ function EnrollmentRow({
               cannot resolve still needs to see that resolving is what happens
               here (feature 006, preconditions). */}
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+            className="enrollment-row-actions"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}
             title={canReview ? undefined : NOT_ADMIN_REASON}
           >
             <Button
@@ -247,6 +260,7 @@ export function PendingEnrollments() {
         gap: 16,
       }}
     >
+      <style>{ENROLLMENT_ROW_STYLE}</style>
       <Card>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
           <span style={EYEBROW_STYLE}>Aprobaciones</span>

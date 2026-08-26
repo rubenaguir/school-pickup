@@ -6984,3 +6984,49 @@ con `flex-basis: 100%` bajo el media query, forzándolos a su propia
 línea dentro del contenedor `.enrollment-row` (que solo activa
 `flex-wrap: wrap` en ese mismo breakpoint). Arriba de 767px la fila
 sigue en una sola línea, sin cambios. Tampoco requiere ADR propio.
+
+**Tercera corrección post-implementación (mismo layout replicado en
+`apps/portal/src/screens/PendingEnrollments.tsx`).** Confirmado por el
+humano que se quería por consistencia entre `apps/parent` y
+`apps/portal` — misma fila con info a la izquierda (avatar + nombre del
+alumno) y acciones a la derecha (`Rechazar`/`Aprobar`) que se
+encimaban/envolvían sin estructura en móvil. Mismo mecanismo exacto:
+`ENROLLMENT_ROW_STYLE` (mismo contenido, `max-width: 767px`),
+`className="enrollment-row"` en el contenedor de la fila,
+`className="enrollment-row-actions"` en el `<div>` que agrupa los dos
+botones (con `flexShrink: 0` agregado, mismo criterio que
+`PortalStudents.tsx`). Verificado con Playwright: en ~375px de ancho
+total la fila apila en dos líneas sin encimarse; en desktop
+(1280px) queda idéntica a como estaba.
+
+De paso, al verificar en 375px se confirmó que `InstitutionShell` (a
+diferencia de `TutorShell`) **no colapsa su sidebar de 250px en
+móvil** — a ese ancho el área de contenido queda en ~125px y los
+propios botones `Rechazar`/`Aprobar` se desbordan horizontalmente. Es
+un problema preexistente del shell, no introducido por este fix (con
+o sin el layout de dos líneas, 125px no alcanza para dos botones), y
+no se tocó: replicar el patrón `TutorShell` de sidebar colapsable a
+`InstitutionShell` es un cambio de mayor alcance, no pedido en esta
+sesión. Verificado en cambio con el viewport ensanchado a 640px (fila
+igual de angosta apilada) para separar el defecto del shell del
+comportamiento de la fila en sí, que si funciona.
+
+## ADR-089 — Reset del margen de `<body>` en las 3 apps, vía `@casillego/ui/styles.css`
+
+**Contexto.** Detectado al revisar el layout móvil de `PortalStudents.tsx`:
+las 3 apps (`apps/parent`, `apps/portal`, `apps/board`) arrastraban los
+8px de margen por defecto del user-agent stylesheet en `<body>` —
+nunca se había reseteado. Restaba espacio real en cualquier pantalla,
+más notorio en mobile por ser proporcionalmente mayor.
+
+**Decisión.** `body { margin: 0; }` en `packages/ui/src/styles.css` —
+el único archivo de estilos que las 3 apps ya importan
+(`@casillego/ui/styles.css` desde cada `main.tsx`), así que una sola
+regla se propaga a las 3 sin duplicar nada por app. Alcance
+deliberadamente mínimo: solo el margen del body, no un reset general
+(`box-sizing: border-box`, etc.) — se evaluó y se descarta por ahora,
+fuera del problema puntual reportado.
+
+**Consecuencias.** Cambio puramente visual, sin lógica. Al vivir en el
+paquete compartido, cualquier app futura que importe
+`@casillego/ui/styles.css` lo hereda automáticamente.

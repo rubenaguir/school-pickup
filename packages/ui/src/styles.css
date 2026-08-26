@@ -1,9 +1,16 @@
 @import './tokens/colors.css';
 @import './tokens/typography.css';
 @import './tokens/spacing.css';
-
 /* Hoja propia de mapbox-gl: sin ella el canvas y los marcadores del
    `GeofenceMap` no se posicionan (ADR-048). Se importa aqui, junto a los
    tokens, para que una app solo tenga que importar `@casillego/ui/styles.css`
    una vez, igual que hoy. */
 @import 'mapbox-gl/dist/mapbox-gl.css';
+
+/* El user-agent stylesheet le pone 8px de margen a <body> por defecto;
+   nunca se reseteaba, restando espacio real sobre todo en mobile. Vive
+   aquí (no en cada app) para que las 3 (parent/portal/board), que ya
+   importan este único archivo, lo hereden sin duplicar la regla. */
+body {
+  margin: 0;
+}
