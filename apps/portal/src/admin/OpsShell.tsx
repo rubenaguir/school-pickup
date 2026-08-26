@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { NavItem, pinMarkUrl } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
@@ -17,6 +18,23 @@ const NAV: readonly NavEntry[] = [
   { path: ADMIN_METRICS_PATH, label: 'Resumen', icon: 'grid' },
   { path: ADMIN_INSTITUTIONS_PATH, label: 'Instituciones', icon: 'building' },
 ];
+
+const SHELL_STYLE = `
+.ops-shell-topbar { display: none; }
+@media (max-width: 767px) {
+  .ops-shell-sidebar { display: none !important; }
+  .ops-shell-sidebar.ops-shell-sidebar-open {
+    display: flex !important;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    width: 100% !important;
+    height: 100vh;
+    overflow: auto;
+  }
+  .ops-shell-topbar { display: flex !important; }
+}
+`;
 
 function initialsOf(name: string): string {
   const initials = name
@@ -40,6 +58,10 @@ function initialsOf(name: string): string {
  * hands the whole hook value down through `<Outlet context>` so
  * `GlobalMetrics` reads it instead of issuing a second GET — same treatment
  * as `usePendingEnrollments` in `InstitutionShell` (ADR-072 §3).
+ *
+ * Below 768px the sidebar collapses into a compact topbar with a menu
+ * button that opens the same nav as a full-screen panel — the responsive
+ * mechanism of `TutorShell` (ADR-078 point 3), replicated as-is (ADR-090).
  */
 export function OpsShell() {
   const navigate = useNavigate();
@@ -47,6 +69,7 @@ export function OpsShell() {
   const { session, logout } = useAuth();
   const { profile } = useProfile();
   const adminMetrics = useAdminMetrics();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const activeEntry = NAV.find((entry) => location.pathname.startsWith(entry.path)) ?? NAV[0];
   const pendingCount =
@@ -54,9 +77,17 @@ export function OpsShell() {
 
   const displayName = profile?.fullName ?? session?.email ?? '';
 
+  function goTo(path: string) {
+    setMenuOpen(false);
+    void navigate(path);
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-sans)' }}>
+      <style>{SHELL_STYLE}</style>
+
       <aside
+        className={`ops-shell-sidebar${menuOpen ? ' ops-shell-sidebar-open' : ''}`}
         style={{
           width: 250,
           flexShrink: 0,
@@ -66,6 +97,26 @@ export function OpsShell() {
           flexDirection: 'column',
         }}
       >
+        {menuOpen && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 14px 0' }}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              aria-label="Cerrar menú"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'inline-flex',
+              }}
+            >
+              <Icon name="close" size={20} />
+            </button>
+          </div>
+        )}
+
         <div style={{ padding: '24px 22px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
           <img src={pinMarkUrl} width={28} height={32} alt="" />
           <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>
@@ -120,7 +171,7 @@ export function OpsShell() {
                   ? pendingCount
                   : undefined
               }
-              onClick={() => void navigate(entry.path)}
+              onClick={() => goTo(entry.path)}
             />
           ))}
         </nav>
@@ -172,7 +223,7 @@ export function OpsShell() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <span
-              onClick={() => void navigate(PROFILE_PATH)}
+              onClick={() => goTo(PROFILE_PATH)}
               style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
             >
               Perfil
@@ -186,6 +237,38 @@ export function OpsShell() {
       </aside>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div
+          className="ops-shell-topbar"
+          style={{
+            height: 56,
+            flexShrink: 0,
+            background: 'var(--ink-900)',
+            color: '#fff',
+            alignItems: 'center',
+            padding: '0 16px',
+            gap: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              padding: 6,
+              cursor: 'pointer',
+              display: 'inline-flex',
+            }}
+          >
+            <Icon name={menuOpen ? 'close' : 'menu'} size={22} />
+          </button>
+          <span style={{ fontSize: 16, fontWeight: 800 }}>
+            Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
+          </span>
+        </div>
+
         <header
           style={{
             height: 68,

@@ -604,6 +604,13 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         `Students.tsx` (`apps/portal`, no `PendingEnrollments.tsx` —
         esa pantalla solo lista `pending`; el roster de `approved`
         vive en `Students.tsx` vía `useApprovedEnrollments`)
+- [x] **Sidebar colapsable en móvil para `InstitutionShell` y
+      `OpsShell` (ADR-090)** — replica el mecanismo ya construido en
+      `TutorShell.tsx` (ADR-078 punto 3: `@media (max-width: 767px)`,
+      topbar compacta con botón de menú, sidebar como panel de
+      pantalla completa). Solo el mecanismo responsivo, no la lógica
+      de negocio de `TutorShell` — cada shell conserva su propio
+      contenido de nav/footer/badges
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

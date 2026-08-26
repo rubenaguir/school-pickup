@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { NavItem, pinMarkUrl } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
@@ -38,6 +39,23 @@ const NAV: readonly NavEntry[] = [
   { path: REPORTS_PATH, label: 'Reportes', icon: 'chart' },
 ];
 
+const SHELL_STYLE = `
+.institution-shell-topbar { display: none; }
+@media (max-width: 767px) {
+  .institution-shell-sidebar { display: none !important; }
+  .institution-shell-sidebar.institution-shell-sidebar-open {
+    display: flex !important;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    width: 100% !important;
+    height: 100vh;
+    overflow: auto;
+  }
+  .institution-shell-topbar { display: flex !important; }
+}
+`;
+
 function initialsOf(name: string): string {
   const initials = name
     .split(' ')
@@ -59,6 +77,10 @@ function initialsOf(name: string): string {
  * hands the whole hook value down through `<Outlet context>` so
  * `PendingEnrollments` reads it instead of issuing a second GET
  * (ADR-072 prompt §3).
+ *
+ * Below 768px the sidebar collapses into a compact topbar with a menu
+ * button that opens the same nav as a full-screen panel — the responsive
+ * mechanism of `TutorShell` (ADR-078 point 3), replicated as-is (ADR-090).
  */
 export function InstitutionShell() {
   const navigate = useNavigate();
@@ -67,6 +89,7 @@ export function InstitutionShell() {
   const { session, logout } = useAuth();
   const { profile } = useProfile();
   const pendingEnrollments = usePendingEnrollments(institutionId);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const activeEntry = NAV.find((entry) => location.pathname.startsWith(entry.path)) ?? NAV[0];
   const pendingCount =
@@ -75,9 +98,17 @@ export function InstitutionShell() {
   const displayName = profile?.fullName ?? session?.email ?? '';
   const roleText = current ? roleLabel(current.role) : '';
 
+  function goTo(path: string) {
+    setMenuOpen(false);
+    void navigate(path);
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-sans)' }}>
+      <style>{SHELL_STYLE}</style>
+
       <aside
+        className={`institution-shell-sidebar${menuOpen ? ' institution-shell-sidebar-open' : ''}`}
         style={{
           width: 250,
           flexShrink: 0,
@@ -87,6 +118,26 @@ export function InstitutionShell() {
           flexDirection: 'column',
         }}
       >
+        {menuOpen && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 14px 0' }}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              aria-label="Cerrar menú"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'inline-flex',
+              }}
+            >
+              <Icon name="close" size={20} />
+            </button>
+          </div>
+        )}
+
         <div style={{ padding: '24px 22px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
           <img src={pinMarkUrl} width={28} height={32} alt="" />
           <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>
@@ -127,7 +178,7 @@ export function InstitutionShell() {
                   ? pendingCount
                   : undefined
               }
-              onClick={() => void navigate(entry.path)}
+              onClick={() => goTo(entry.path)}
             />
           ))}
         </nav>
@@ -177,7 +228,7 @@ export function InstitutionShell() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <span
-              onClick={() => void navigate(PROFILE_PATH)}
+              onClick={() => goTo(PROFILE_PATH)}
               style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
             >
               Perfil
@@ -191,6 +242,38 @@ export function InstitutionShell() {
       </aside>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div
+          className="institution-shell-topbar"
+          style={{
+            height: 56,
+            flexShrink: 0,
+            background: 'var(--ink-900)',
+            color: '#fff',
+            alignItems: 'center',
+            padding: '0 16px',
+            gap: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              padding: 6,
+              cursor: 'pointer',
+              display: 'inline-flex',
+            }}
+          >
+            <Icon name={menuOpen ? 'close' : 'menu'} size={22} />
+          </button>
+          <span style={{ fontSize: 16, fontWeight: 800 }}>
+            Casi<span style={{ color: 'var(--brand)' }}>Llego</span>
+          </span>
+        </div>
+
         <header
           style={{
             height: 68,

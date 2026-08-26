@@ -7030,3 +7030,49 @@ fuera del problema puntual reportado.
 **Consecuencias.** Cambio puramente visual, sin lógica. Al vivir en el
 paquete compartido, cualquier app futura que importe
 `@casillego/ui/styles.css` lo hereda automáticamente.
+
+## ADR-090 — `InstitutionShell` y `OpsShell` colapsan su sidebar en móvil, replicando el patrón de `TutorShell`
+
+**Contexto.** Hallazgo colateral al verificar ADR-088 en 375px reales:
+`InstitutionShell.tsx` (`apps/portal`, rol institución, 9 ítems de
+nav) tiene una sidebar de `width: 250` fija, sin ningún `@media` — a
+diferencia de `TutorShell.tsx` (`apps/parent`), que desde ADR-078
+punto 3 ya resuelve exactamente este problema (primera pieza
+responsive del proyecto). En viewport angosto, el área de contenido
+del portal de institución queda comprimida a ~125px, insuficiente para
+casi cualquier pantalla — incluida la fila de dos líneas que ADR-088
+acaba de agregar a `PendingEnrollments.tsx`, que en ese ancho vuelve a
+desbordarse, pero por el shell, no por la fila.
+
+Se revisó también `OpsShell.tsx` (rol super-admin) por tener la misma
+estructura general (sidebar + header, mismo autor/patrón que
+`InstitutionShell`, ADR-072/ADR-074) — mismo problema exacto: `width:
+250` fija, sin `@media`.
+
+**Decisión.** Replicar en ambos, sin modificaciones, el mecanismo ya
+construido y probado en `TutorShell.tsx`:
+
+1. Mismo breakpoint (`max-width: 767px`), mismo mecanismo — sidebar
+   oculta por defecto bajo el breakpoint, una topbar compacta
+   (`height: 56`, fondo `var(--ink-900)`) aparece con un botón de
+   menú que abre la sidebar como panel de pantalla completa
+   (`position: fixed; inset: 0; z-index: 30`).
+2. **No se copia la lógica de negocio de `TutorShell`** (el enlace
+   "App móvil"/`backToMobile`, los datos de `initialsOf` a partir del
+   email) — solo el mecanismo responsivo (el `SHELL_STYLE` con
+   `@media`, las clases `-sidebar`/`-sidebar-open`/`-topbar`, el
+   patrón de `useState` para `menuOpen`). Cada shell conserva su
+   propio contenido de sidebar (9 ítems + badge de pendientes en
+   `InstitutionShell`, 2 ítems + contador de instituciones pendientes
+   en `OpsShell`), footer, y texto de header — nada de eso cambia,
+   solo cómo se oculta/revela en móvil.
+3. El contador (`pendingCount` en `InstitutionShell`,
+   `institutionsByStatus.pending` en `OpsShell`) que hoy vive como
+   badge en el ítem de nav se conserva igual dentro del panel de
+   pantalla completa — no se duplica en la topbar compacta.
+
+**Consecuencias.** Con esto, las 3 superficies de portal
+(`TutorShell`, `InstitutionShell`, `OpsShell`) quedan con el mismo
+tratamiento responsive — deja de ser "la primera pieza responsive del
+proyecto" un caso aislado. `apps/board` (tablero público, sin sidebar)
+queda fuera por no aplicar.

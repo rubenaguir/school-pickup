@@ -7,7 +7,10 @@
  * the kit's own `NAV` has no item for that screen (ADR-072 point 2 keeps it
  * as its own nav item, unlike the kit). No icon library exists in any
  * frontend of this project (ADR-036 criterion: no new dependency without a
- * clear need) — raw SVG, same as the rest of the project.
+ * clear need) — raw SVG, same as the rest of the project. `menu`/`close`
+ * (ADR-090) are the same paths as `TutorShell`'s icon set
+ * (`apps/parent/src/portal-web/icons.tsx`) — no kit source, mobile nav
+ * toggle chrome only.
  */
 import type { SVGProps } from 'react';
 
@@ -21,7 +24,9 @@ export type IconName =
   | 'pin'
   | 'building'
   | 'student'
-  | 'tag';
+  | 'tag'
+  | 'menu'
+  | 'close';
 
 interface IconProps {
   name: IconName;
@@ -122,6 +127,22 @@ export function Icon({ name, size = 20 }: IconProps) {
       <svg {...props}>
         <path d="M12.59 2.59 20 10a2 2 0 0 1 0 2.83l-7.17 7.17a2 2 0 0 1-2.83 0L3 13V4a1 1 0 0 1 1-1z" />
         <circle cx={7.5} cy={7.5} r={1.3} fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  if (name === 'menu') {
+    return (
+      <svg {...props} strokeLinecap="round">
+        <path d="M3 6h18M3 12h18M3 18h18" />
+      </svg>
+    );
+  }
+
+  if (name === 'close') {
+    return (
+      <svg {...props} strokeLinecap="round">
+        <path d="M6 6l12 12M18 6L6 18" />
       </svg>
     );
   }
