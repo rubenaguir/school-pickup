@@ -6954,3 +6954,33 @@ la fila por `id`. `mergeMyEnrollmentDelta` (`apps/parent`), que hasta
 ahora nunca quitaba filas (todo estado se conserva como historial),
 gana su primer caso de remoción — coherente con que `cancel` borra la
 fila de verdad, sin dejar rastro que mostrar.
+
+**Corrección post-implementación (fila de instituciones sin `flexWrap`
+en `PortalStudents.tsx`).** Detectado en producción tras el deploy: en
+viewport angosto, el badge de estado ("Aprobada"/"Rechazada") se
+desbordaba visualmente sobre el texto de tipo/categoría de la
+institución, encimándose. Causa: la fila (`display: flex`, sin
+`flexWrap`) tenía 3 elementos antes de este ADR (ícono, nombre/tipo,
+badge) y cabían bien en el ancho disponible; los botones nuevos
+("Cancelar solicitud"/"Dar de baja") suman un 4º elemento que no cabe
+sin envolver, y el badge —sin `flexShrink: 0`— se encoge por debajo de
+su contenido natural y lo desborda hacia afuera. Mismo patrón que ya
+usa el resto de este archivo (líneas 288, 328) y
+`PendingEnrollments.tsx` para filas equivalentes: se agrega
+`flexWrap: 'wrap'` al contenedor de la fila. No requiere ADR propio —
+es una corrección de la implementación de este mismo ADR, no una
+decisión nueva.
+
+**Segunda corrección post-implementación (layout de dos líneas en
+móvil, mismo archivo).** El `flexWrap` de arriba evitaba el
+encimamiento pero envolvía sin estructura predecible (el botón podía
+quedar solo, o junto al badge, según el ancho exacto). Se reemplaza por
+un layout de dos líneas fijas debajo de `max-width: 767px` — el mismo
+breakpoint que ya usan `TutorShell`/`BrandPanel` (ADR-086), para no
+introducir uno nuevo: arriba ícono + nombre/tipo, abajo estatus +
+acción en los extremos (`justify-content: space-between`). El badge y
+el botón se agrupan en un `<div className="enrollment-row-actions">`
+con `flex-basis: 100%` bajo el media query, forzándolos a su propia
+línea dentro del contenedor `.enrollment-row` (que solo activa
+`flex-wrap: wrap` en ese mismo breakpoint). Arriba de 767px la fila
+sigue en una sola línea, sin cambios. Tampoco requiere ADR propio.

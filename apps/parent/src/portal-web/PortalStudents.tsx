@@ -20,6 +20,16 @@ import { TUTOR_PORTAL_ASSOCIATE_PATH, TUTOR_PORTAL_GUARDIANS_PATH } from '../rou
 import { InlineError } from './InlineError';
 import { Icon } from './icons';
 
+// Mismo breakpoint que TutorShell/BrandPanel (ADR-086): en móvil angosto la
+// fila de cada institución pasa a dos líneas fijas (ícono+nombre arriba,
+// estatus+acción abajo a los extremos) en vez de envolver donde alcance.
+const ENROLLMENT_ROW_STYLE = `
+@media (max-width: 767px) {
+  .enrollment-row { flex-wrap: wrap; }
+  .enrollment-row-actions { flex-basis: 100%; justify-content: space-between; }
+}
+`;
+
 const LABEL_STYLE = { fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' } as const;
 
 const INPUT_STYLE = {
@@ -361,6 +371,7 @@ function StudentRow({
           return (
             <div key={enrollment.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div
+                className="enrollment-row"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -405,42 +416,49 @@ function StudentRow({
                     )}
                   </span>
                 </span>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    padding: '6px 12px',
-                    borderRadius: 999,
-                    background: meta.bg,
-                    color: meta.fg,
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
+                <div
+                  className="enrollment-row-actions"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}
                 >
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.fg }} />
-                  {meta.label}
-                </span>
-                {enrollment.status === 'pending' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => onCancelEnrollment(enrollment.id)}
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '6px 12px',
+                      borderRadius: 999,
+                      background: meta.bg,
+                      color: meta.fg,
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
                   >
-                    Cancelar solicitud
-                  </Button>
-                )}
-                {enrollment.status === 'approved' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => onWithdrawEnrollment(enrollment.id)}
-                  >
-                    Dar de baja
-                  </Button>
-                )}
+                    <span
+                      style={{ width: 7, height: 7, borderRadius: '50%', background: meta.fg }}
+                    />
+                    {meta.label}
+                  </span>
+                  {enrollment.status === 'pending' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => onCancelEnrollment(enrollment.id)}
+                    >
+                      Cancelar solicitud
+                    </Button>
+                  )}
+                  {enrollment.status === 'approved' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => onWithdrawEnrollment(enrollment.id)}
+                    >
+                      Dar de baja
+                    </Button>
+                  )}
+                </div>
               </div>
               {enrollmentRowError?.enrollmentId === enrollment.id && (
                 <InlineError message={enrollmentRowError.message} code={enrollmentRowError.code} />
@@ -486,6 +504,7 @@ export function PortalStudents() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
+      <style>{ENROLLMENT_ROW_STYLE}</style>
       <div
         style={{
           display: 'flex',
