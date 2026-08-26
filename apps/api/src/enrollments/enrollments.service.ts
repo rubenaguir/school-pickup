@@ -3,12 +3,23 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
+import {
+  buildEnrollmentGuardianPayload,
+  buildEnrollmentInstitutionPayload,
+  EMAIL_PROVIDER,
+  enrollmentGuardianTopic,
+  enrollmentInstitutionTopic,
+  MQTT_CLIENT,
+  type EmailProvider,
+  type EnrollmentRealtimeSnapshot,
+  type MqttClient,
+} from '@casillego/shared';
 import { isUniqueViolation } from '../common/db-errors.util';
 import {
   AuditLog,
@@ -81,6 +92,8 @@ const GROUP_NOT_IN_INSTITUTION = {
 
 @Injectable()
 export class EnrollmentsService {
+  private readonly logger = new Logger(EnrollmentsService.name);
+
   constructor(
     @InjectRepository(Enrollment)
     private readonly enrollmentsRepository: Repository<Enrollment>,
@@ -92,8 +105,11 @@ export class EnrollmentsService {
     private readonly institutionMembersRepository: Repository<InstitutionMember>,
     @InjectRepository(InstitutionGroup)
     private readonly institutionGroupsRepository: Repository<InstitutionGroup>,
+    @InjectRepository(Student)
+    private readonly studentsRepository: Repository<Student>,
     private readonly dataSource: DataSource,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
+    @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<EnrollmentResponse> {
@@ -118,6 +134,33 @@ export class EnrollmentsService {
           requestedBy: { id: userId } as User,
         }),
       );
+
+      // saved.student only carries {id} (never loaded by .save()), so the
+      // student's fullName for the realtime payload is fetched separately
+      // rather than assumed present on the entity just written.
+      const student = await this.studentsRepository.findOneBy({ id: dto.studentId });
+      await this.publishEnrollmentRealtimeUpdate(
+        {
+          id: saved.id,
+          studentId: dto.studentId,
+          studentFullName: student?.fullName ?? '',
+          institutionId: institution.id,
+          institutionName: institution.name,
+          institutionType: institution.type,
+          institutionCategory: institution.category,
+          status: saved.status,
+          gradeOrGroup: group?.name ?? null,
+          enrollmentCode: saved.enrollmentCode,
+          requestedByUserId: userId,
+          requestedAt: saved.requestedAt.toISOString(),
+          reviewedByUserId: null,
+          reviewedAt: null,
+        },
+        // Only the institution learns of a brand-new request — the tutor who
+        // just submitted it already knows (ADR-087 pt.2).
+        false,
+      );
+
       return {
         id: saved.id,
         studentId: dto.studentId,
@@ -224,6 +267,8 @@ export class EnrollmentsService {
       return saved;
     });
 
+    await this.publishEnrollmentRealtimeUpdate(this.toRealtimeSnapshot(saved, institution), true);
+
     try {
       await this.emailProvider.send({
         kind: 'enrollment_approved',
@@ -268,6 +313,8 @@ export class EnrollmentsService {
 
       return saved;
     });
+
+    await this.publishEnrollmentRealtimeUpdate(this.toRealtimeSnapshot(saved, institution), true);
 
     try {
       await this.emailProvider.send({
@@ -383,7 +430,10 @@ export class EnrollmentsService {
   private async findPendingOrFail(id: string): Promise<Enrollment> {
     const enrollment = await this.enrollmentsRepository.findOne({
       where: { id },
-      relations: { student: true, requestedBy: true },
+      // group: true (beyond student/requestedBy) so approve()/reject() can
+      // build the realtime payload's gradeOrGroup without a second query —
+      // toReviewResponse itself never needed it, but the MQTT publish does.
+      relations: { student: true, requestedBy: true, group: true },
     });
     if (!enrollment) {
       // Defensive: InstitutionMembershipGuard's own @InstitutionResource
@@ -429,5 +479,68 @@ export class EnrollmentsService {
       reviewedByUserId: actorUserId,
       reviewedAt: (enrollment.reviewedAt as Date).toISOString(),
     };
+  }
+
+  /**
+   * Already-resolved input for `publishEnrollmentRealtimeUpdate` — `enrollment`
+   * must carry `student`/`requestedBy`/`group` loaded (`findPendingOrFail`
+   * does), and `institution` is passed separately because approve()/reject()
+   * already have it loaded on its own for the `INSTITUTION_NOT_APPROVED`
+   * check / email, so this stays a pure mapping rather than a second query.
+   */
+  private toRealtimeSnapshot(
+    enrollment: Enrollment,
+    institution: Institution,
+  ): EnrollmentRealtimeSnapshot {
+    return {
+      id: enrollment.id,
+      studentId: enrollment.student.id,
+      studentFullName: enrollment.student.fullName,
+      institutionId: institution.id,
+      institutionName: institution.name,
+      institutionType: institution.type,
+      institutionCategory: institution.category,
+      status: enrollment.status,
+      gradeOrGroup: enrollment.group?.name ?? null,
+      enrollmentCode: enrollment.enrollmentCode,
+      requestedByUserId: enrollment.requestedBy.id,
+      requestedAt: enrollment.requestedAt.toISOString(),
+      reviewedByUserId: enrollment.reviewedBy ? enrollment.reviewedBy.id : null,
+      reviewedAt: enrollment.reviewedAt ? enrollment.reviewedAt.toISOString() : null,
+    };
+  }
+
+  /**
+   * ADR-087: publishes to the institution's inbox topic always, and to the
+   * requesting guardian's inbox topic only when `notifyGuardian` is set —
+   * true on approve/reject (the tutor needs to learn of the status change),
+   * false on create (the tutor who just submitted the request already knows).
+   * Same try/catch-log policy as PickupsService.publishRealtimeUpdate: a
+   * publish failure is logged and must never fail the REST response, the
+   * write already committed.
+   */
+  private async publishEnrollmentRealtimeUpdate(
+    snapshot: EnrollmentRealtimeSnapshot,
+    notifyGuardian: boolean,
+  ): Promise<void> {
+    try {
+      await this.mqttClient.publish(
+        enrollmentInstitutionTopic(snapshot.institutionId),
+        buildEnrollmentInstitutionPayload(snapshot),
+        1,
+      );
+      if (notifyGuardian) {
+        await this.mqttClient.publish(
+          enrollmentGuardianTopic(snapshot.requestedByUserId),
+          buildEnrollmentGuardianPayload(snapshot),
+          1,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish enrollment ${snapshot.id} realtime update to MQTT`,
+        error as Error,
+      );
+    }
   }
 }

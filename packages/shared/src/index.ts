@@ -35,6 +35,8 @@ export * from './types/geo-point';
 export * from './pickup-request-status-machine';
 export * from './realtime-channel';
 export * from './pickup-request-payloads';
+export * from './enrollment-realtime-payloads';
+export * from './institution-admin-payload';
 export * from './board-monitor-rows';
 export * from './student-guardian-labels';
 export * from './ports';
@@ -176,4 +178,66 @@ export function parseBoardMonitorTopic(topic: string): { institutionId: string }
   const match = /^school-pickup\/institution\/([^/]+)\/board-monitor$/.exec(topic);
   if (!match) return null;
   return { institutionId: match[1] };
+}
+
+/**
+ * Enrollment inbox stream of one institution's approval queue (ADR-087):
+ * `school-pickup/institution/{institutionId}/enrollments`. Consumed by
+ * `PendingEnrollments.tsx` (`apps/portal`) via its `EnrollmentsGateway`
+ * institution-scoped connections.
+ */
+export function enrollmentInstitutionTopic(institutionId: string): string {
+  return `${institutionTopic(institutionId)}/enrollments`;
+}
+
+/**
+ * Inverse of `enrollmentInstitutionTopic`, same contract as `parseBoardTopic`:
+ * returns `null`, never throws, for anything that isn't that exact shape.
+ */
+export function parseEnrollmentInstitutionTopic(topic: string): { institutionId: string } | null {
+  const match = /^school-pickup\/institution\/([^/]+)\/enrollments$/.exec(topic);
+  if (!match) return null;
+  return { institutionId: match[1] };
+}
+
+/**
+ * Enrollment inbox stream of one guardian, covering every enrollment they
+ * requested at once (ADR-087 pt.2) — not one topic per enrollment, unlike
+ * `pickupLocationTopic`. Segmented by `userId`, not `institutionId`: this is
+ * the one topic family in this file that hangs off `guardian/`, not
+ * `institution/`, since a guardian's pending requests can span several
+ * institutions at once. `school-pickup/guardian/{userId}/enrollments`.
+ */
+export function enrollmentGuardianTopic(userId: string): string {
+  return `${MQTT_TOPIC_ROOT}/guardian/${userId}/enrollments`;
+}
+
+/**
+ * Inverse of `enrollmentGuardianTopic`, same contract as `parseBoardTopic`:
+ * returns `null`, never throws, for anything that isn't that exact shape.
+ */
+export function parseEnrollmentGuardianTopic(topic: string): { userId: string } | null {
+  const match = /^school-pickup\/guardian\/([^/]+)\/enrollments$/.exec(topic);
+  if (!match) return null;
+  return { userId: match[1] };
+}
+
+/**
+ * Institution-approval stream for the super-admin queue (ADR-087 pt.2) —
+ * **global**, unlike every other topic in this file: there is no per-
+ * institution segment, since the super-admin sees every institution's status
+ * transitions at once, with no tenant to scope to.
+ * `school-pickup/admin/institutions`.
+ */
+export function institutionsAdminTopic(): string {
+  return `${MQTT_TOPIC_ROOT}/admin/institutions`;
+}
+
+/**
+ * Unlike its `parse*Topic` siblings, there is no segment to extract — this
+ * only confirms the exact literal match, so the gateway can discard anything
+ * else arriving on a broker shared with other applications.
+ */
+export function isInstitutionsAdminTopic(topic: string): boolean {
+  return topic === institutionsAdminTopic();
 }

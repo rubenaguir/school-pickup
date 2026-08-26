@@ -1,7 +1,14 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
-import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
+import {
+  buildInstitutionAdminPayload,
+  EMAIL_PROVIDER,
+  institutionsAdminTopic,
+  MQTT_CLIENT,
+  type EmailProvider,
+  type MqttClient,
+} from '@casillego/shared';
 import type { InstitutionStatus } from '@casillego/shared';
 import { AuditLog, Institution, InstitutionMember, type User } from '@casillego/shared/entities';
 import { generateUniqueJoinCode, randomJoinCodeSuffix } from '../auth/join-code.util';
@@ -67,6 +74,8 @@ const TRANSITIONS = {
 
 @Injectable()
 export class InstitutionsService {
+  private readonly logger = new Logger(InstitutionsService.name);
+
   constructor(
     @InjectRepository(Institution)
     private readonly institutionsRepository: Repository<Institution>,
@@ -74,6 +83,7 @@ export class InstitutionsService {
     private readonly institutionMembersRepository: Repository<InstitutionMember>,
     private readonly dataSource: DataSource,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
+    @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
   ) {}
 
   async get(id: string): Promise<GetInstitutionResponse> {
@@ -231,9 +241,32 @@ export class InstitutionsService {
       return saved;
     });
 
+    await this.publishInstitutionAdminUpdate(saved);
     await this.notifyInstitutionAdmins(saved, transition.emailKind);
 
     return { id: saved.id, status: saved.status };
+  }
+
+  /**
+   * ADR-087 pt.3: same try/catch-log policy as PickupsService's realtime
+   * publishes — a broker outage is logged and must never fail the REST
+   * response, the status change already committed. Global topic, no
+   * per-institution scope (`institutionsAdminTopic()` takes no argument): the
+   * super-admin queue watches every institution's transitions at once.
+   */
+  private async publishInstitutionAdminUpdate(institution: Institution): Promise<void> {
+    try {
+      await this.mqttClient.publish(
+        institutionsAdminTopic(),
+        buildInstitutionAdminPayload(institution),
+        1,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish institution ${institution.id} status transition to MQTT`,
+        error as Error,
+      );
+    }
   }
 
   /**

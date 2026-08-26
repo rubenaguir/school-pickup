@@ -48,8 +48,10 @@ function buildService(overrides?: {
   studentGuardians?: Partial<Record<'find' | 'exists', unknown>>;
   institutionMembers?: Partial<Record<'exists', unknown>>;
   institutionGroups?: Partial<Record<'findOne', unknown>>;
+  students?: Partial<Record<'findOneBy', unknown>>;
   dataSource?: Partial<Record<'transaction', unknown>>;
   emailProvider?: Partial<Record<'send', unknown>>;
+  mqttClient?: Partial<Record<'publish', unknown>>;
 }) {
   const enrollmentsRepo = {
     find: vi.fn().mockResolvedValue([]),
@@ -83,6 +85,10 @@ function buildService(overrides?: {
     ),
     ...overrides?.institutionGroups,
   };
+  const studentsRepo = {
+    findOneBy: vi.fn().mockResolvedValue({ id: 'stu-1', fullName: 'Ana Pérez' }),
+    ...overrides?.students,
+  };
   const auditRepo = {
     create: vi.fn((partial: object) => ({ ...partial })),
     save: vi.fn((entity: object) =>
@@ -105,14 +111,20 @@ function buildService(overrides?: {
     send: vi.fn().mockResolvedValue(undefined),
     ...overrides?.emailProvider,
   };
+  const mqttClient = {
+    publish: vi.fn().mockResolvedValue(undefined),
+    ...overrides?.mqttClient,
+  };
   const service = new EnrollmentsService(
     enrollmentsRepo as never,
     institutionsRepo as never,
     studentGuardiansRepo as never,
     institutionMembersRepo as never,
     institutionGroupsRepo as never,
+    studentsRepo as never,
     dataSource as never,
     emailProvider as never,
+    mqttClient as never,
   );
   return {
     service,
@@ -121,9 +133,11 @@ function buildService(overrides?: {
     studentGuardiansRepo,
     institutionMembersRepo,
     institutionGroupsRepo,
+    studentsRepo,
     auditRepo,
     dataSource,
     emailProvider,
+    mqttClient,
   };
 }
 
@@ -220,6 +234,34 @@ describe('EnrollmentsService', () => {
       await expect(
         service.create('user-1', { studentId: 'stu-1', institutionId: 'inst-1' }),
       ).rejects.toBe(otherError);
+    });
+
+    // ADR-087 pt.2: the institution learns of a brand-new request; the tutor
+    // who just submitted it does not need a second notice on their own topic.
+    it('publishes to the institution enrollments topic only, not the guardian one', async () => {
+      const { service, mqttClient } = buildService();
+
+      await service.create('user-1', { studentId: 'stu-1', institutionId: 'inst-1' });
+
+      expect(mqttClient.publish).toHaveBeenCalledOnce();
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/institution/inst-1/enrollments',
+        expect.objectContaining({ studentFullName: 'Ana Pérez', status: 'pending' }),
+        1,
+      );
+    });
+
+    it('does not fail the request when the MQTT publish throws', async () => {
+      const { service } = buildService({
+        mqttClient: { publish: vi.fn().mockRejectedValue(new Error('broker down')) },
+      });
+
+      const result = await service.create('user-1', {
+        studentId: 'stu-1',
+        institutionId: 'inst-1',
+      });
+
+      expect(result.status).toBe('pending');
     });
   });
 
@@ -422,6 +464,36 @@ describe('EnrollmentsService', () => {
         service.approve('enr-1', 'admin-1', { groupId: 'foreign-group' }),
       ).rejects.toMatchObject({ status: 422, response: { code: 'GROUP_NOT_IN_INSTITUTION' } });
     });
+
+    // ADR-087 pt.2: unlike create(), a status change is published to BOTH the
+    // institution and the requesting guardian's own topic.
+    it('publishes to both the institution and the requesting guardian topics', async () => {
+      const { service, mqttClient } = buildService();
+
+      await service.approve('enr-1', 'admin-1');
+
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/institution/inst-1/enrollments',
+        expect.objectContaining({ status: 'approved' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/guardian/user-1/enrollments',
+        expect.objectContaining({ status: 'approved' }),
+        1,
+      );
+    });
+
+    it('does not fail the approval when the MQTT publish throws', async () => {
+      const { service } = buildService({
+        mqttClient: { publish: vi.fn().mockRejectedValue(new Error('broker down')) },
+      });
+
+      const result = await service.approve('enr-1', 'admin-1');
+
+      expect(result.status).toBe('approved');
+    });
   });
 
   describe('reject', () => {
@@ -459,6 +531,24 @@ describe('EnrollmentsService', () => {
         status: 409,
         response: { code: 'ENROLLMENT_NOT_PENDING' },
       });
+    });
+
+    it('publishes to both the institution and the requesting guardian topics', async () => {
+      const { service, mqttClient } = buildService();
+
+      await service.reject('enr-1', 'admin-1');
+
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/institution/inst-1/enrollments',
+        expect.objectContaining({ status: 'rejected' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/guardian/user-1/enrollments',
+        expect.objectContaining({ status: 'rejected' }),
+        1,
+      );
     });
   });
 

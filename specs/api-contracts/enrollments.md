@@ -310,6 +310,9 @@ Nota: a diferencia de `approve`, `reject` no valida `institutions.status`
   catálogo).
 - `specs/features/029-editar-grupo-alumno.md` (pantalla "Alumnos" del
   portal, consumidora de `PATCH /enrollments/:id/group`).
+- ADR-087 (`specs/api-contracts/enrollments-ws.md`): canal WebSocket que
+  extiende este snapshot REST con deltas en vivo — `create` publica al
+  topic de institución, `approve`/`reject` a ambos (institución + tutor).
 
 ## Preguntas abiertas
 

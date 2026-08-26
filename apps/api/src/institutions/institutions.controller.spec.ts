@@ -11,7 +11,7 @@ import { InstitutionsController } from './institutions.controller';
 import { InstitutionsService } from './institutions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InstitutionMembershipGuard } from '../auth/guards/institution-membership.guard';
-import { EMAIL_PROVIDER } from '@casillego/shared';
+import { EMAIL_PROVIDER, MQTT_CLIENT } from '@casillego/shared';
 import { Institution, InstitutionMember } from '@casillego/shared/entities';
 
 interface InstitutionRecord {
@@ -142,8 +142,9 @@ describe('InstitutionsController (HTTP)', () => {
         { provide: getRepositoryToken(InstitutionMember), useValue: membersRepo },
         { provide: DataSource, useValue: fakeDataSource },
         // InstitutionsService also drives the status transitions, which notify
-        // by email; none of the routes in this spec send anything.
+        // by email and publish to MQTT; none of the routes in this spec do either.
         { provide: EMAIL_PROVIDER, useValue: { send: vi.fn() } },
+        { provide: MQTT_CLIENT, useValue: { publish: vi.fn().mockResolvedValue(undefined) } },
       ],
     })
       .overrideGuard(JwtAuthGuard)

@@ -1,8 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { useCallback, useState } from 'react';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
 import type { InstitutionStatus, InstitutionType } from '@casillego/shared';
-import { apiClient } from '../api/client';
+import { useRealtimeChannel } from '@casillego/ui';
+import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import { institutionTransitionErrorMessage } from './institution-queue-error-messages';
+import { buildInstitutionsAdminSocketUrl, fatalCloseReason } from './institutions-admin-socket';
+import {
+  mergeAdminInstitutionDelta,
+  parseAdminInstitutionDelta,
+  type AdminInstitutionDelta,
+} from './admin-institution-rows';
+
+/**
+ * Fixed, non-null: this channel is global (ADR-087) — the super-admin queue
+ * has no institution/tutor id to scope by, unlike every sibling realtime
+ * hook. `useRealtimeChannel`'s `channelKey === null` means "don't connect
+ * yet", which does not apply here — there is nothing to wait on.
+ */
+const ADMIN_INSTITUTIONS_CHANNEL_KEY = 'admin-institutions';
 
 /**
  * One row of GET /admin/institutions (specs/api-contracts/admin-institutions.md).
@@ -66,15 +81,11 @@ interface TransitionResponse {
   status: InstitutionStatus;
 }
 
-function fetchInstitutions(filter: StatusFilter): Promise<AdminInstitutionsResponse> {
+function fetchInstitutions(filter: StatusFilter): Promise<AdminInstitutionListItem[]> {
   const query = filter === 'all' ? '' : `?status=${filter}`;
-  return apiClient.get<AdminInstitutionsResponse>(`/admin/institutions${query}`);
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
+  return apiClient
+    .get<AdminInstitutionsResponse>(`/admin/institutions${query}`)
+    .then((response) => response.institutions);
 }
 
 /**
@@ -87,52 +98,64 @@ function isStaleRow(error: ApiError): boolean {
   return error.status === 409 || error.status === 404;
 }
 
-/** Loads the super-admin institution queue and resolves approve/suspend/reactivate actions. */
+/**
+ * Loads the super-admin institution queue and resolves approve/suspend/
+ * reactivate actions — REST snapshot plus WebSocket deltas (ADR-087), via the
+ * generic `useRealtimeChannel` (ADR-075).
+ */
 export function useInstitutionsQueue(): InstitutionsQueueValue {
   const [filter, setFilterState] = useState<StatusFilter>('pending');
-  const [status, setStatus] = useState<InstitutionsQueueStatus>('loading');
-  const [institutions, setInstitutions] = useState<AdminInstitutionListItem[]>([]);
-  const [error, setError] = useState<ApiError | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [rowError, setRowError] = useState<RowError | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
 
-  const reload = useCallback(() => {
-    setStatus('loading');
-    setError(null);
-    setBanner(null);
-    setRowError(null);
-    setAttempt((n) => n + 1);
+  const getSocketUrl = useCallback(() => {
+    const accessToken = readAccessToken(tokenStorage) ?? '';
+    return buildInstitutionsAdminSocketUrl(apiBaseUrl, { accessToken });
   }, []);
 
-  const setFilter = useCallback((next: StatusFilter) => {
-    setFilterState(next);
-    setStatus('loading');
-    setError(null);
+  const fetchSnapshot = useCallback(() => fetchInstitutions(filter), [filter]);
+
+  const mergeDelta = useCallback(
+    (current: AdminInstitutionListItem[], delta: AdminInstitutionDelta) =>
+      mergeAdminInstitutionDelta(current, delta, filter),
+    [filter],
+  );
+
+  const { status, state, error, reload } = useRealtimeChannel<
+    AdminInstitutionListItem[],
+    AdminInstitutionDelta
+  >({
+    channelKey: ADMIN_INSTITUTIONS_CHANNEL_KEY,
+    getSocketUrl,
+    fetchSnapshot,
+    mergeDelta,
+    parseDelta: parseAdminInstitutionDelta,
+    fatalCloseReason,
+  });
+
+  const institutions = state ?? [];
+
+  const reloadQueue = useCallback(() => {
     setBanner(null);
     setRowError(null);
-  }, []);
+    reload();
+  }, [reload]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchInstitutions(filter)
-      .then((response) => {
-        if (cancelled) return;
-        setInstitutions(response.institutions);
-        setStatus('ready');
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return;
-        setError(asApiError(caught));
-        setStatus('error');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filter, attempt]);
+  const setFilter = useCallback(
+    (next: StatusFilter) => {
+      setFilterState(next);
+      setBanner(null);
+      setRowError(null);
+      // The channel is global and its key never changes (ADR-087), so
+      // switching filters would otherwise leave `fetchSnapshot`/`mergeDelta`
+      // bound to the *previous* filter's closure — `reload()` forces the
+      // socket effect to re-run and pick up the fresh ones, same as
+      // switching institutions does in usePendingEnrollments.
+      reload();
+    },
+    [reload],
+  );
 
   const transition = useCallback(
     (institutionId: string, action: TransitionAction) => {
@@ -142,17 +165,11 @@ export function useInstitutionsQueue(): InstitutionsQueueValue {
 
       void apiClient
         .patch<TransitionResponse>(`/institutions/${institutionId}/${action}`)
-        .then((response) => {
-          setInstitutions((current) => {
-            // The row no longer belongs in a status-filtered view (e.g. it
-            // just left the "pending" tab after being approved).
-            if (filter !== 'all' && response.status !== filter) {
-              return current.filter((item) => item.id !== institutionId);
-            }
-            return current.map((item) =>
-              item.id === institutionId ? { ...item, status: response.status } : item,
-            );
-          });
+        .then(() => {
+          // The row is NOT updated here. The realtime delta this same
+          // mutation publishes (ADR-087) is what updates or removes it — the
+          // WebSocket is the single source of truth for this queue, same
+          // policy as useDeliveryPointQueue.deliver().
         })
         .catch((caught: unknown) => {
           const apiError = asApiError(caught);
@@ -162,34 +179,23 @@ export function useInstitutionsQueue(): InstitutionsQueueValue {
               message: institutionTransitionErrorMessage(apiError.code),
               code: apiError.code,
             });
-            return undefined;
+            return;
           }
 
           setBanner({
             message: institutionTransitionErrorMessage(apiError.code),
             code: apiError.code,
           });
-          // Silent refresh: the row moved under us, so the whole queue may be
-          // stale. The list on screen stays readable if the refresh itself
-          // fails — the notice just changes to say why.
-          return fetchInstitutions(filter).then(
-            (response) => {
-              setInstitutions(response.institutions);
-            },
-            (refreshFailure: unknown) => {
-              const refreshError = asApiError(refreshFailure);
-              setBanner({
-                message: institutionTransitionErrorMessage(refreshError.code),
-                code: refreshError.code,
-              });
-            },
-          );
+          // Someone else already moved this institution — the realtime
+          // channel's own reload() re-syncs both the REST snapshot and the
+          // socket.
+          reload();
         })
         .finally(() => {
           setBusyId((current) => (current === institutionId ? null : current));
         });
     },
-    [filter],
+    [reload],
   );
 
   return {
@@ -201,7 +207,7 @@ export function useInstitutionsQueue(): InstitutionsQueueValue {
     busyId,
     filter,
     setFilter,
-    reload,
+    reload: reloadQueue,
     transition,
   };
 }

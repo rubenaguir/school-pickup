@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { useCallback, useState } from 'react';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
 import type { EnrollmentStatus } from '@casillego/shared';
-import { apiClient } from '../api/client';
+import { useRealtimeChannel } from '@casillego/ui';
+import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import { enrollmentReviewErrorMessage } from './enrollment-error-messages';
+import {
+  buildEnrollmentsInstitutionSocketUrl,
+  fatalCloseReason,
+} from './enrollments-institution-socket';
+import {
+  mergePendingEnrollmentDelta,
+  parsePendingEnrollmentDelta,
+} from './pending-enrollment-rows';
 
 /**
  * One row of GET /enrollments?status=pending&institutionId=...
@@ -72,12 +81,6 @@ function fetchPending(institutionId: string): Promise<PendingEnrollmentsResponse
   );
 }
 
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
-}
-
 /**
  * A resolved-elsewhere row (409) or a vanished one (404) is not this screen's
  * error: somebody else already decided. Both are answered by refreshing the
@@ -96,7 +99,9 @@ function isStaleRow(error: ApiError): boolean {
 }
 
 /**
- * Loads the pending-approval inbox of one institution and resolves its rows.
+ * Loads the pending-approval inbox of one institution and resolves its rows —
+ * REST snapshot plus WebSocket deltas (ADR-087), via the generic
+ * `useRealtimeChannel` (ADR-075), same pattern as `useDeliveryPointQueue`.
  *
  * `institutionId` comes from `useInstitution()`; it is null only while the
  * membership lookup is in flight, which `<InstitutionGate>` already gates on —
@@ -104,45 +109,44 @@ function isStaleRow(error: ApiError): boolean {
  * because the screen can render with it.
  */
 export function usePendingEnrollments(institutionId: string | null): PendingEnrollmentsValue {
-  const [status, setStatus] = useState<PendingEnrollmentsStatus>('loading');
-  const [enrollments, setEnrollments] = useState<PendingEnrollment[]>([]);
-  const [error, setError] = useState<ApiError | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [rowError, setRowError] = useState<RowError | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
 
-  // Same shape as InstitutionContext: 'loading' is the initial state and
-  // `reload` restores it from an event handler, so the effect never sets state
-  // synchronously.
-  const reload = useCallback(() => {
-    setStatus('loading');
-    setError(null);
+  const getSocketUrl = useCallback(() => {
+    // Read on every attempt, never captured once — same reasoning as
+    // useDeliveryPointQueue.ts: a reconnection after the access token was
+    // renewed must hand the gateway the renewed one.
+    const accessToken = readAccessToken(tokenStorage) ?? '';
+    return buildEnrollmentsInstitutionSocketUrl(apiBaseUrl, {
+      accessToken,
+      institutionId: institutionId ?? '',
+    });
+  }, [institutionId]);
+
+  const fetchSnapshot = useCallback(() => {
+    return fetchPending(institutionId ?? '').then((response) => response.enrollments);
+  }, [institutionId]);
+
+  const { status, state, error, reload } = useRealtimeChannel<
+    PendingEnrollment[],
+    PendingEnrollment
+  >({
+    channelKey: institutionId,
+    getSocketUrl,
+    fetchSnapshot,
+    mergeDelta: mergePendingEnrollmentDelta,
+    parseDelta: parsePendingEnrollmentDelta,
+    fatalCloseReason,
+  });
+
+  const enrollments = state ?? [];
+
+  const reloadInbox = useCallback(() => {
     setBanner(null);
     setRowError(null);
-    setAttempt((n) => n + 1);
-  }, []);
-
-  useEffect(() => {
-    if (!institutionId) return;
-    let cancelled = false;
-
-    fetchPending(institutionId)
-      .then((response) => {
-        if (cancelled) return;
-        setEnrollments(response.enrollments);
-        setStatus('ready');
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return;
-        setError(asApiError(caught));
-        setStatus('error');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [institutionId, attempt]);
+    reload();
+  }, [reload]);
 
   const review = useCallback(
     (enrollmentId: string, action: ReviewAction, groupId?: string | null) => {
@@ -157,9 +161,10 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
           action === 'approve' ? { groupId } : undefined,
         )
         .then(() => {
-          // Drop just the resolved row: the rest of the inbox is untouched, so
-          // there is nothing to re-fetch.
-          setEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
+          // The row is NOT removed here. The realtime delta this same
+          // mutation publishes (ADR-087) is what takes it out — the
+          // WebSocket is the single source of truth for this inbox, same
+          // policy as useDeliveryPointQueue.deliver().
         })
         .catch((caught: unknown) => {
           const apiError = asApiError(caught);
@@ -169,32 +174,20 @@ export function usePendingEnrollments(institutionId: string | null): PendingEnro
               message: enrollmentReviewErrorMessage(apiError.code),
               code: apiError.code,
             });
-            return undefined;
+            return;
           }
 
           setBanner({ message: enrollmentReviewErrorMessage(apiError.code), code: apiError.code });
-          // Silent refresh: the row is gone or already resolved, so the whole
-          // inbox may be out of date. The list on screen stays readable if the
-          // refresh itself fails — the notice just changes to say why.
-          return fetchPending(institutionId).then(
-            (response) => {
-              setEnrollments(response.enrollments);
-            },
-            (refreshFailure: unknown) => {
-              const refreshError = asApiError(refreshFailure);
-              setBanner({
-                message: enrollmentReviewErrorMessage(refreshError.code),
-                code: refreshError.code,
-              });
-            },
-          );
+          // Someone else already resolved it — the realtime channel's own
+          // reload() re-syncs both the REST snapshot and the socket.
+          reload();
         })
         .finally(() => {
           setBusyId((current) => (current === enrollmentId ? null : current));
         });
     },
-    [institutionId],
+    [institutionId, reload],
   );
 
-  return { status, enrollments, error, banner, rowError, busyId, reload, review };
+  return { status, enrollments, error, banner, rowError, busyId, reload: reloadInbox, review };
 }

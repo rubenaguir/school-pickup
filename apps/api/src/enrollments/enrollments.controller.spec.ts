@@ -7,7 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, FindOperator } from 'typeorm';
 import request from 'supertest';
-import { EMAIL_PROVIDER } from '@casillego/shared';
+import { EMAIL_PROVIDER, MQTT_CLIENT } from '@casillego/shared';
 import { EnrollmentsController } from './enrollments.controller';
 import { EnrollmentsService } from './enrollments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -16,6 +16,7 @@ import {
   Institution,
   InstitutionGroup,
   InstitutionMember,
+  Student,
   StudentGuardian,
 } from '@casillego/shared/entities';
 
@@ -214,12 +215,19 @@ describe('EnrollmentsController (HTTP)', () => {
     // covered by this spec) — required purely for DI resolution, same
     // reasoning as institutionMembersRepo above.
     const institutionGroupsRepo = { findOne: vi.fn() };
+    // create() reads the student's fullName off this repo for the ADR-087
+    // realtime publish — the `students` map already backed toEnrollmentEntity
+    // above, this just exposes it the way EnrollmentsService queries it.
+    const studentsRepo = {
+      findOneBy: vi.fn(({ id }: { id: string }) => Promise.resolve(students.get(id) ?? null)),
+    };
     const fakeDataSource = {
       transaction: () => {
         throw new Error('Not used by the tutor-facing endpoints covered in this spec.');
       },
     };
     const fakeEmailProvider = { send: vi.fn().mockResolvedValue(undefined) };
+    const fakeMqttClient = { publish: vi.fn().mockResolvedValue(undefined) };
 
     const moduleRef = await Test.createTestingModule({
       controllers: [EnrollmentsController],
@@ -230,8 +238,10 @@ describe('EnrollmentsController (HTTP)', () => {
         { provide: getRepositoryToken(StudentGuardian), useValue: studentGuardiansRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: institutionMembersRepo },
         { provide: getRepositoryToken(InstitutionGroup), useValue: institutionGroupsRepo },
+        { provide: getRepositoryToken(Student), useValue: studentsRepo },
         { provide: DataSource, useValue: fakeDataSource },
         { provide: EMAIL_PROVIDER, useValue: fakeEmailProvider },
+        { provide: MQTT_CLIENT, useValue: fakeMqttClient },
       ],
     })
       .overrideGuard(JwtAuthGuard)

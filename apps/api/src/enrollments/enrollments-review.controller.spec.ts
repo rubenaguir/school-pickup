@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
-import { EMAIL_PROVIDER } from '@casillego/shared';
+import { EMAIL_PROVIDER, MQTT_CLIENT } from '@casillego/shared';
 import { EnrollmentsController } from './enrollments.controller';
 import { EnrollmentsDetailController } from './enrollment-detail.controller';
 import { EnrollmentsService } from './enrollments.service';
@@ -19,6 +19,7 @@ import {
   Institution,
   InstitutionGroup,
   InstitutionMember,
+  Student,
   StudentGuardian,
   AuditLog,
 } from '@casillego/shared/entities';
@@ -259,6 +260,11 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
     };
 
     const fakeEmailProvider = { send: vi.fn().mockResolvedValue(undefined) };
+    const fakeMqttClient = { publish: vi.fn().mockResolvedValue(undefined) };
+    // Only used by create() (not covered by this spec — see
+    // enrollments.controller.spec.ts): required purely for DI resolution,
+    // same reasoning as institutionGroupsRepo elsewhere in this file.
+    const studentsRepo = { findOneBy: vi.fn().mockResolvedValue(null) };
 
     const fakeJwtAuthGuard = {
       canActivate: (context: ExecutionContext) => {
@@ -282,8 +288,10 @@ describe('EnrollmentsController / EnrollmentsDetailController — staff review (
         { provide: getRepositoryToken(StudentGuardian), useValue: studentGuardiansRepo },
         { provide: getRepositoryToken(InstitutionMember), useValue: institutionMembersRepo },
         { provide: getRepositoryToken(InstitutionGroup), useValue: institutionGroupsRepo },
+        { provide: getRepositoryToken(Student), useValue: studentsRepo },
         { provide: DataSource, useValue: fakeDataSource },
         { provide: EMAIL_PROVIDER, useValue: fakeEmailProvider },
+        { provide: MQTT_CLIENT, useValue: fakeMqttClient },
       ],
     })
       .overrideGuard(JwtAuthGuard)

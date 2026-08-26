@@ -42,6 +42,7 @@ function buildService(overrides?: {
   institutionsRepo?: Partial<Record<'findOne' | 'save' | 'exists' | 'findAndCount', unknown>>;
   members?: MemberRecord[];
   send?: ReturnType<typeof vi.fn>;
+  publish?: ReturnType<typeof vi.fn>;
 }) {
   const institutionsRepo = {
     findOne: vi.fn().mockResolvedValue(buildInstitution()),
@@ -71,14 +72,16 @@ function buildService(overrides?: {
   };
 
   const emailProvider = { send: overrides?.send ?? vi.fn().mockResolvedValue(undefined) };
+  const mqttClient = { publish: overrides?.publish ?? vi.fn().mockResolvedValue(undefined) };
 
   const service = new InstitutionsService(
     institutionsRepo as never,
     membersRepo as never,
     dataSource as never,
     emailProvider as never,
+    mqttClient as never,
   );
-  return { service, institutionsRepo, membersRepo, auditRepo, emailProvider };
+  return { service, institutionsRepo, membersRepo, auditRepo, emailProvider, mqttClient };
 }
 
 describe('InstitutionsService', () => {
@@ -351,6 +354,30 @@ describe('InstitutionsService', () => {
         status: 'suspended',
       });
       expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    // ADR-087 pt.3: the super-admin queue's realtime channel.
+    it('publishes the transitioned institution to the global admin topic', async () => {
+      const { service, mqttClient } = buildService();
+
+      await service.suspend('inst-1', 'super-1');
+
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        'school-pickup/admin/institutions',
+        expect.objectContaining({ id: 'inst-1', status: 'suspended' }),
+        1,
+      );
+    });
+
+    it('does not fail the transition when the MQTT publish throws', async () => {
+      const { service } = buildService({
+        publish: vi.fn().mockRejectedValue(new Error('broker down')),
+      });
+
+      await expect(service.suspend('inst-1', 'super-1')).resolves.toEqual({
+        id: 'inst-1',
+        status: 'suspended',
+      });
     });
   });
 });

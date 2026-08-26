@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
-import { EMAIL_PROVIDER } from '@casillego/shared';
+import { EMAIL_PROVIDER, MQTT_CLIENT } from '@casillego/shared';
 import { AuditLog, Institution, InstitutionMember } from '@casillego/shared/entities';
 import { InstitutionStatusController } from './institution-status.controller';
 import { InstitutionsService } from './institutions.service';
@@ -82,6 +82,7 @@ describe('InstitutionStatusController (HTTP)', () => {
         { provide: getRepositoryToken(AuditLog), useValue: auditRepo },
         { provide: DataSource, useValue: dataSource },
         { provide: EMAIL_PROVIDER, useValue: emailProvider },
+        { provide: MQTT_CLIENT, useValue: { publish: vi.fn().mockResolvedValue(undefined) } },
       ],
     })
       .overrideGuard(JwtAuthGuard)

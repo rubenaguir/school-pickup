@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { useCallback } from 'react';
+import { ApiError, readAccessToken } from '@casillego/shared';
 import type { EnrollmentStatus, InstitutionType } from '@casillego/shared';
-import { apiClient } from '../api/client';
+import { useRealtimeChannel } from '@casillego/ui';
+import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { buildEnrollmentsGuardianSocketUrl, fatalCloseReason } from './enrollments-guardian-socket';
+import { mergeMyEnrollmentDelta, parseMyEnrollmentDelta } from './my-enrollment-rows';
 
 /** One row of GET /enrollments/mine (specs/api-contracts/enrollments.md, ADR-057). */
 export interface MyEnrollment {
@@ -32,49 +36,53 @@ interface MyEnrollmentsResponse {
   enrollments: MyEnrollment[];
 }
 
+function fetchMine(): Promise<MyEnrollment[]> {
+  return apiClient
+    .get<MyEnrollmentsResponse>('/enrollments/mine')
+    .then((response) => response.enrollments);
+}
+
 /**
  * Loads every enrollment the authenticated tutor can see — not scoped to a
- * single student, since the endpoint has no such filter. Same status/retry
- * shape as `useMyStudents`; callers filter by `studentId`/`status` themselves
- * (see `SelectInstitution`, which needs only the `approved` ones for one
- * student).
+ * single student, since the endpoint has no such filter — REST snapshot plus
+ * WebSocket deltas (ADR-087), via the generic `useRealtimeChannel` (ADR-075).
+ * Same status/retry shape as `useMyStudents`; callers filter by
+ * `studentId`/`status` themselves (see `SelectInstitution`, which needs only
+ * the `approved` ones for one student).
+ *
+ * `channelKey` is the tutor's own `sub` from the access token — not a fixed
+ * literal — so a different account signing in within the same tab (no full
+ * reload) tears down the previous tutor's channel instead of quietly
+ * inheriting it. `useRealtimeChannel` itself has no concept of "empty":
+ * `'empty'` is derived here from `status === 'ready'` plus an empty list, same
+ * derivation the pre-ADR-087 version of this hook already made off the REST
+ * response.
  */
 export function useMyEnrollments(): MyEnrollmentsValue {
-  const [status, setStatus] = useState<MyEnrollmentsStatus>('loading');
-  const [enrollments, setEnrollments] = useState<MyEnrollment[]>([]);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const { session } = useAuth();
 
-  const retry = useCallback(() => {
-    setStatus('loading');
-    setError(null);
-    setAttempt((n) => n + 1);
+  const getSocketUrl = useCallback(() => {
+    const accessToken = readAccessToken(tokenStorage) ?? '';
+    return buildEnrollmentsGuardianSocketUrl(apiBaseUrl, { accessToken });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const {
+    status: channelStatus,
+    state,
+    error,
+    reload,
+  } = useRealtimeChannel<MyEnrollment[], MyEnrollment>({
+    channelKey: session?.sub ?? null,
+    getSocketUrl,
+    fetchSnapshot: fetchMine,
+    mergeDelta: mergeMyEnrollmentDelta,
+    parseDelta: parseMyEnrollmentDelta,
+    fatalCloseReason,
+  });
 
-    apiClient
-      .get<MyEnrollmentsResponse>('/enrollments/mine')
-      .then((response) => {
-        if (cancelled) return;
-        setEnrollments(response.enrollments);
-        setStatus(response.enrollments.length === 0 ? 'empty' : 'ready');
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return;
-        setError(
-          caught instanceof ApiError
-            ? caught
-            : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 }),
-        );
-        setStatus('error');
-      });
+  const enrollments = state ?? [];
+  const status: MyEnrollmentsStatus =
+    channelStatus === 'ready' ? (enrollments.length === 0 ? 'empty' : 'ready') : channelStatus;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt]);
-
-  return { status, enrollments, error, retry };
+  return { status, enrollments, error, retry: reload };
 }

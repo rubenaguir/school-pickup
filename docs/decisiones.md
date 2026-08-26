@@ -6771,3 +6771,78 @@ total), usan el mismo contenedor de 1180px + panel fijo de 470px
 producción. `BrandPanel` gana su primera variante de tamaño (compacta/
 apilada) desde que se compartió en ADR-081 — cualquier futuro tercer
 consumidor del componente hereda ambos modos.
+
+## ADR-087 — Tiempo real para las bandejas de aprobación (enrollments e instituciones), reutilizando el canal genérico de ADR-075
+
+**Contexto.** Detectado en pruebas manuales con cuentas reales en
+producción: un tutor solicita asociar un alumno a una institución
+(`AssociateInstitutionPanel.tsx`/`PortalStudents.tsx` en `apps/parent`,
+vía `useMyEnrollments`), y la solicitud no aparece en la bandeja de
+aprobación de la institución (`PendingEnrollments.tsx` en
+`apps/portal`, vía `usePendingEnrollments`) hasta que el staff recarga
+la página completa a mano — no hay botón de refrescar ni ningún
+mecanismo de actualización en vivo. El mismo patrón de "REST cargado
+una sola vez al montar, sin polling ni WebSocket" aplica también a
+`InstitutionApproval.tsx` (bandeja de aprobación de instituciones del
+super-admin). Confirmado en el código: ninguno de los tres hooks tiene
+suscripción a MQTT/WS, y `enrollments.service.ts`/`institutions.service.ts`
+no publican nada al aprobar/rechazar — a diferencia de
+`pickups.service.ts`, que sí publica a varios topics en cada cambio de
+estado de una recogida.
+
+De las pantallas de "esperar una resolución de otra persona" que existen
+hoy en el proyecto, se identificaron dos pares real: (1) tutor
+esperando ↔ institución resolviendo (enrollments), y (2) institución
+esperando ↔ super-admin resolviendo. Del segundo par solo existe el
+lado del resolutor (`InstitutionApproval.tsx`) — el registro de una
+institución nueva solo muestra un mensaje estático post-registro, no
+hay una pantalla de espera en vivo del lado de la institución; ese
+lado queda fuera de alcance porque no existe hoy.
+
+**Decisión.**
+
+1. **Se reutiliza la infraestructura genérica de ADR-075** —
+   `useRealtimeChannel` (`packages/ui`) y las utilidades de
+   `packages/shared/realtime-channel.ts` — sin crear un patrón nuevo.
+   Los 3 hooks (`usePendingEnrollments`, `useMyEnrollments`, el de
+   `InstitutionApproval`) se reconstruyen sobre ese hook genérico:
+   snapshot REST inicial + deltas por WebSocket, mismo modelo que ya
+   usa la cola del gate console.
+2. **Dos gateways nuevos en `apps/api`**, mismo patrón que
+   `DeliveryPointQueueGateway` (bridge MQTT↔WS, una sola suscripción
+   wildcard al broker por proceso, el navegador nunca toca MQTT
+   directamente):
+   - **Canal de enrollments**, con doble scope: por `institutionId`
+     (para `PendingEnrollments.tsx`, igual que la cola es por
+     `deliveryPointId`) y por `userId` de tutor — **un canal por
+     tutor que cubre todas sus solicitudes a la vez**, no uno por
+     enrollment individual — para `useMyEnrollments`.
+   - **Canal de instituciones**, de scope global (no por
+     institución) — el super-admin ve todas las instituciones
+     pendientes, así que no aplica ACL por institución, solo el guard
+     de super-admin ya existente en la conexión.
+3. **`enrollments.service.ts` e `institutions.service.ts` publican a
+   MQTT** en `create`/`approve`/`reject` (enrollments) y
+   `approve`/`suspend`/`reactivate` (institutions) — mismo patrón
+   try/catch-log de `pickups.service.ts`: un fallo al publicar nunca
+   tumba la respuesta REST, solo se registra en el logger.
+4. **Alcance confirmado: todas las pantallas de este tipo de
+   interacción que existen hoy** — enrollments (ambos lados) e
+   instituciones (lado super-admin, único lado que existe). No se
+   crea una pantalla de espera nueva del lado de institución-esperando-
+   super-admin porque no existe hoy; si se agrega en el futuro, hereda
+   el mismo canal.
+
+**Consecuencias.** El objetivo explícito es que la comunicación se
+sienta lo más cercana a tiempo real posible, sin que el usuario
+necesite saber que debe recargar la página. Dos gateways y dos
+publicadores nuevos, cero patrones nuevos — todo se apoya en la
+abstracción ya validada por 5 consumidores desde ADR-075.
+
+## Referencias
+
+- ADR-050 (bridge MQTT↔WS original, gate console).
+- ADR-075 (extracción de `useRealtimeChannel`/`realtime-channel.ts`).
+- ADR-038/ADR-040 (`SuperAdminGuard`, namespace `/admin/`).
+- `apps/api/src/pickups/pickups.service.ts` (patrón de publish
+  try/catch-log a reutilizar).

@@ -21,13 +21,16 @@ import { AdminModule } from './admin/admin.module';
 import { UsersModule } from './users/users.module';
 import { InstitutionReportsModule } from './institution-reports/institution-reports.module';
 import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions.module';
+import { EnrollmentsRealtimeModule } from './enrollments-realtime/enrollments-realtime.module';
+import { InstitutionsAdminRealtimeModule } from './institutions-admin-realtime/institutions-admin.module';
 
 /**
  * Root module. Domain modules beyond auth/institutions/delivery-points/
  * institution-groups/dismissal-windows/dismissal-exceptions/students/
  * student-guardians/invitations/institution-members/vehicles/enrollments/
  * pickups/delivery-point-queue/pickup-request-tracking/board/admin/users/
- * institution-reports/push-subscriptions are added in later phases.
+ * institution-reports/push-subscriptions/enrollments-realtime/
+ * institutions-admin-realtime are added in later phases.
  */
 @Module({
   imports: [
@@ -52,6 +55,8 @@ import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions
     UsersModule,
     InstitutionReportsModule,
     PushSubscriptionsModule,
+    EnrollmentsRealtimeModule,
+    InstitutionsAdminRealtimeModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditLog, Institution, InstitutionMember } from '@casillego/shared/entities';
 import { AuthModule } from '../auth/auth.module';
 import { EmailModule } from '../email/email.module';
+import { MqttModule } from '../mqtt/mqtt.module';
 import { InstitutionsController } from './institutions.controller';
 import { InstitutionStatusController } from './institution-status.controller';
 import { InstitutionsService } from './institutions.service';
@@ -19,6 +20,7 @@ import { InstitutionAccessService } from './institution-access.service';
     TypeOrmModule.forFeature([Institution, InstitutionMember, AuditLog]),
     AuthModule,
     EmailModule,
+    MqttModule,
   ],
   controllers: [InstitutionsController, InstitutionStatusController],
   providers: [InstitutionsService, InstitutionAccessService],

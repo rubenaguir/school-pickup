@@ -61,3 +61,6 @@ FIFO, coherente con "cola de altas por validar" del `design-brief.md`).
   distintos).
 - ADR-038 (`SuperAdminGuard`, namespace `/admin/`).
 - ADR-040 (decisión completa de este slice).
+- ADR-087 (`specs/api-contracts/institutions-admin-ws.md`): canal
+  WebSocket global que extiende este snapshot con deltas en vivo de
+  `approve`/`suspend`/`reactivate`.

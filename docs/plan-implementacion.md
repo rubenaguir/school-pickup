@@ -565,6 +565,23 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         independiente de `delivered-today`) **se quedan sin migrar, a
         propósito** — forzarlos al contrato actual del hook genérico
         significaría ensuciarlo con conceptos que solo ellos necesitan
+- [x] **Tiempo real para bandejas de aprobación (ADR-087)** — extiende
+      `useRealtimeChannel`/`realtime-channel.ts` (ADR-075) a 2 pares de
+      pantallas que hoy son REST-carga-única sin refresco:
+  - [x] `usePendingEnrollments` (`apps/portal`) y `useMyEnrollments`
+        (`apps/parent`) sobre un canal de enrollments con doble scope
+        (`institutionId` para la institución, `userId` de tutor —un
+        canal por tutor, no por enrollment— para el lado del tutor)
+  - [x] Hook de `InstitutionApproval.tsx` (`apps/portal`) sobre un
+        canal de instituciones de scope global (super-admin ve todas
+        las pendientes, sin ACL por institución)
+  - [x] `enrollments.service.ts` e `institutions.service.ts` publican
+        a MQTT en create/approve/reject y approve/suspend/reactivate
+        respectivamente, mismo patrón try/catch-log que
+        `pickups.service.ts`
+  - [x] Dos gateways nuevos en `apps/api`, mismo patrón que
+        `DeliveryPointQueueGateway` (bridge MQTT↔WS, suscripción
+        wildcard única por proceso)
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de
