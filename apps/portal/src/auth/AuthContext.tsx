@@ -6,7 +6,7 @@ import {
   readAccessToken,
   type AccessTokenClaims,
 } from '@casillego/shared';
-import { useProactiveTokenRefresh } from '@casillego/ui';
+import { useProactiveTokenRefresh, useUpdateAvailable } from '@casillego/ui';
 import { apiClient, tokenStorage } from '../api/client';
 
 export interface AuthContextValue {
@@ -18,6 +18,8 @@ export interface AuthContextValue {
    * point 1).
    */
   isSuperAdmin: boolean;
+  /** ADR-094: a newer deploy has been seen; the app should offer a reload. */
+  updateAvailable: boolean;
   /** Throws an ApiError the caller is expected to translate by `code`. */
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -39,8 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Proactive layer of ADR-091: keeps the access token from ever actually
   // expiring while the Dashboard/gate-console screens sit open with mostly
-  // WebSocket traffic between REST calls.
-  useProactiveTokenRefresh({ apiClient, hasSession: session !== null });
+  // WebSocket traffic between REST calls. The same timer carries the ADR-094
+  // version check (`onTick`).
+  const { updateAvailable, checkForUpdate } = useUpdateAvailable(__APP_BUILD_ID__);
+  useProactiveTokenRefresh({
+    apiClient,
+    hasSession: session !== null,
+    onTick: checkForUpdate,
+  });
 
   const login = useCallback(async (email: string, password: string) => {
     await requestLogin(apiClient, tokenStorage, { email, password });
@@ -55,8 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ session, isSuperAdmin: session?.isSuperAdmin ?? false, login, logout }),
-    [session, login, logout],
+    () => ({
+      session,
+      isSuperAdmin: session?.isSuperAdmin ?? false,
+      updateAvailable,
+      login,
+      logout,
+    }),
+    [session, updateAvailable, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

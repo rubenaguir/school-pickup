@@ -16,7 +16,8 @@
     "paths": {
       "@casillego/shared": ["packages/shared/src/index.ts"],
       "@casillego/ui": ["packages/ui/src/index.ts"],
-      "@casillego/ui/styles.css": ["packages/ui/src/styles.css"]
+      "@casillego/ui/styles.css": ["packages/ui/src/styles.css"],
+      "@casillego/ui/vite-build-id": ["packages/ui/scripts/vite-build-id.ts"]
     }
   }
 }

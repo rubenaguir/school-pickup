@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Well under the access token's 15-minute TTL (`JWT_ACCESS_TTL`, ADR-091), so
@@ -11,6 +11,13 @@ export interface UseProactiveTokenRefreshOptions {
   apiClient: { refreshToken(): Promise<string> };
   /** Whether a session is currently signed in — the timer is idle without one. */
   hasSession: boolean;
+  /**
+   * Optional extra work to run once per timer cycle, alongside (not instead of)
+   * the token refresh (ADR-094 rides the version check on this). A rejection or
+   * throw is logged and swallowed, exactly like a failed refresh — it never
+   * clears tokens or stops the timer.
+   */
+  onTick?: () => void | Promise<void>;
 }
 
 /**
@@ -27,7 +34,14 @@ export interface UseProactiveTokenRefreshOptions {
  * that on its own.
  */
 export function useProactiveTokenRefresh(options: UseProactiveTokenRefreshOptions): void {
-  const { apiClient, hasSession } = options;
+  const { apiClient, hasSession, onTick } = options;
+
+  // Kept in a ref so a changing `onTick` identity (a fresh closure every
+  // render) does not tear down and restart the interval.
+  const onTickRef = useRef(onTick);
+  useEffect(() => {
+    onTickRef.current = onTick;
+  }, [onTick]);
 
   useEffect(() => {
     if (!hasSession) return;
@@ -36,6 +50,13 @@ export function useProactiveTokenRefresh(options: UseProactiveTokenRefreshOption
       apiClient.refreshToken().catch((error: unknown) => {
         console.warn('useProactiveTokenRefresh: background refresh failed', error);
       });
+      void (async () => {
+        try {
+          await onTickRef.current?.();
+        } catch (error: unknown) {
+          console.warn('useProactiveTokenRefresh: onTick failed', error);
+        }
+      })();
     }, PROACTIVE_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(timer);

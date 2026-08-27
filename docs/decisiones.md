@@ -7332,3 +7332,93 @@ en la configuración de institución.
   — se envuelve, no se reescribe desde cero).
 - `apps/portal/src/screens/GateConsole.tsx` (botón manual de
   "volver a anunciar", entra a la misma cola nueva).
+
+## ADR-094 — Notificación de actualización disponible en las 3 apps, sin service worker nuevo, reutilizando el temporizador de ADR-091
+
+**Contexto.** Reportado como fricción real: al desplegar una versión
+nueva en producción, una pestaña ya abierta (tablero, portal, tutor)
+no tiene ninguna forma de enterarse ni de aplicar la actualización.
+Investigado: solo `apps/parent` tiene service worker (VitePWA,
+`registerType: 'autoUpdate'`), pero **sin ninguna UI conectada** — el
+SW puede actualizarse solo de fondo, pero nada se lo indica a la
+persona ni fuerza la recarga de la pestaña ya abierta.
+`apps/portal`/`apps/board` no tienen service worker en absoluto.
+
+Se evaluó y descartó agregar un service worker nuevo a portal/tablero
+para este fin. Motivos (discutidos a fondo con el humano):
+
+1. Un SW no da detección "instantánea" gratis — igual necesita algo
+   que llame a `registration.update()` periódicamente; por debajo es
+   el mismo "revisar cada tanto", con más capas encima.
+2. Intercepta todas las peticiones de red del alcance del SW por
+   defecto — un mal alcance/estrategia de cache termina sirviendo
+   datos viejos sin que nadie se dé cuenta hasta después, justo el
+   tipo de falla silenciosa que ya se ha perseguido en ADR-091/092.
+3. La activación de la versión nueva (worker "esperando" hasta
+   `skipWaiting`/`clients.claim`) es una de las partes más propensas a
+   bugs del estándar — el clásico `ChunkLoadError` de JS viejo en
+   memoria pidiendo un archivo con hash que ya no existe.
+4. Portal y tablero se construyeron deliberadamente "network-first"
+   (más sensibles a esto que `apps/parent`, que ya documentó el mismo
+   riesgo en ADR-063 pt.1) — meter un SW ahí no es un paso incremental
+   pequeño, es un subsistema entero nuevo con su propio ciclo de vida.
+
+También se descartó polling con timer propio: reutiliza el mismo
+temporizador de `useProactiveTokenRefresh` (ADR-091, cada 5 min, ya
+montado en las 3 apps) en vez de agregar un segundo bucle
+independiente — cero temporizadores nuevos en la app.
+
+**Decisión.**
+
+1. **Identificador de versión por build.** Cada build genera un
+   identificador (ej. commit corto de git) inyectado en el bundle vía
+   `define` de Vite, y escrito además a un archivo estático liviano
+   (`/version.json`) servido con cache corto/nulo — necesario en
+   nginx (fuera del repo, pendiente de revisión directa en el
+   servidor junto con el resto de la config no versionada) para que
+   ese archivo puntual nunca quede cacheado de más, aunque el resto de
+   los assets con hash sí puedan cachearse agresivamente sin riesgo.
+2. **`useProactiveTokenRefresh` (ADR-091) gana un `onTick` opcional**,
+   invocado en cada ciclo junto al refresh de token — cada
+   `AuthProvider` le pasa una función que hace `fetch('/version.json',
+   { cache: 'no-store' })` y compara contra el id con el que arrancó
+   la pestaña.
+3. **`UpdateBanner` compartido** (`packages/ui`), on-brand,
+   inconfundible, anclado arriba (no abajo, para no chocar con la
+   barra fija de "¡Ya llegué!" de ADR-092) — texto claro + botón
+   "Actualizar ahora" → `window.location.reload()`.
+4. **Momento de mostrarlo, distinto por app:**
+   - `apps/parent`: el chequeo corre siempre en el tick, pero el
+     banner solo se muestra si `useActivePickupRequest()` (ADR-092) no
+     devuelve una recogida activa — nunca interrumpe un seguimiento en
+     curso.
+   - `apps/portal`: mismo criterio de "momento ideal" — se difiere
+     mientras `queue.busyId !== null` en `GateConsole.tsx` (una
+     confirmación de entrega en curso). Fuera de eso, se muestra de
+     inmediato.
+   - `apps/board`: sin banner con botón — se **auto-actualiza**, pero
+     solo cuando `boardAudioQueue.isIdle()` (nuevo método en la cola
+     de ADR-093: `queue.length === 0 && !draining`) — nunca corta un
+     timbre o un voceo a la mitad. Antes de recargar: guarda
+     `selectedDeliveryPointId` (hoy vive en `useState` puro, se pierde
+     en cualquier reload) en `sessionStorage`, muestra un aviso breve
+     en pantalla, recarga, y al montar de nuevo restaura el filtro de
+     puerta guardado.
+
+**Consecuencias.** Cero temporizadores nuevos, cero service workers
+nuevos. La detección queda acotada al mismo intervalo de 5 minutos de
+ADR-091 — no es instantánea, pero es un salto real desde "nunca" a
+"máximo 5 minutos", sin el riesgo de un SW mal configurado sirviendo
+contenido viejo por accidente. `selectedDeliveryPointId` del tablero
+deja de perderse en cualquier reload futuro, no solo en el de esta
+actualización.
+
+## Referencias
+
+- ADR-091 (`useProactiveTokenRefresh`, el temporizador reutilizado).
+- ADR-092 (`useActivePickupRequest`, el criterio de "momento ideal"
+  en `apps/parent`; la barra fija inferior que define por qué el
+  banner va arriba).
+- ADR-093 (`boardAudioQueue`, `isIdle()` nuevo sobre esa misma cola).
+- ADR-063 pt.1 (riesgo de cache stale ya documentado para
+  `apps/parent`, la razón por la que no se repite en portal/tablero).

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { AuthProvider } from './auth/AuthContext';
+import { AppUpdateBanner } from './update/AppUpdateBanner';
 import { AuthenticatedLayout, InstitutionGate } from './routes/AuthenticatedLayout';
 import { SuperAdminRoute } from './routes/SuperAdminRoute';
 import {
@@ -44,6 +45,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <AppUpdateBanner />
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />

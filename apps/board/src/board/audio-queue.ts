@@ -60,6 +60,12 @@ export interface BoardAudioQueue {
    * the waiting queue without interrupting the item currently playing.
    */
   enqueueVoice(text: string, options?: { priority?: boolean }): void;
+  /**
+   * Nothing playing and nothing waiting — a safe moment for a disruptive
+   * action like the ADR-094 auto-update reload, which must never cut a chime
+   * or a voceo in half.
+   */
+  isIdle(): boolean;
 }
 
 function delay(ms: number): Promise<void> {
@@ -219,6 +225,9 @@ export function createBoardAudioQueue(deps: Partial<BoardAudioQueueDeps> = {}): 
         queue.push(item);
       }
       void drain();
+    },
+    isIdle() {
+      return queue.length === 0 && !draining;
     },
   };
 }

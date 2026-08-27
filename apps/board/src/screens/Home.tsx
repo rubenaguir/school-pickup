@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
@@ -11,6 +11,10 @@ import { DeliveryPointFilter } from '../board/DeliveryPointFilter';
 import { STATUS_META } from '../board/board-display';
 import { pickupAnnouncementText } from '../board/tts';
 import { boardAudioQueue } from '../board/audio-queue';
+import {
+  consumeStashedSelectedDeliveryPoint,
+  rememberSelectedDeliveryPoint,
+} from '../board/board-reload-state';
 import { readStoredBoardMode, writeStoredBoardMode, type BoardMode } from '../board/board-mode';
 import { useClock } from '../board/useClock';
 import { useDismissalWindow } from '../board/useDismissalWindow';
@@ -225,7 +229,15 @@ export function Home() {
     writeStoredBoardMode(next);
   }, []);
 
-  const [selectedDeliveryPointId, setSelectedDeliveryPointId] = useState<string | null>(null);
+  // Lazy init from a stash left by an ADR-094 auto-update reload (single-use);
+  // normally `null`. Kept in sync via the effect below so the next reload can
+  // save it again.
+  const [selectedDeliveryPointId, setSelectedDeliveryPointId] = useState<string | null>(
+    consumeStashedSelectedDeliveryPoint,
+  );
+  useEffect(() => {
+    rememberSelectedDeliveryPoint(selectedDeliveryPointId);
+  }, [selectedDeliveryPointId]);
   const [lastAnnounced, setLastAnnounced] = useState<LastAnnounced | null>(null);
 
   const { clock, dateText } = useClock();

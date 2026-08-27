@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './auth/AuthContext';
+import { AppUpdateBanner } from './update/AppUpdateBanner';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import {
   ACCEPT_INVITATION_PATH,
@@ -28,6 +29,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <AppUpdateBanner />
         <Routes>
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />

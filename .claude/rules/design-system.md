@@ -15,7 +15,7 @@ import '@casillego/ui/styles.css'; // ya importado una vez en cada app, en main.
 
 Un solo barrel raíz — no hay subpaths por grupo (`/core`, `/feedback`, etc.).
 
-## Componentes disponibles (10)
+## Componentes disponibles (11)
 
 | Componente | Grupo | Uso |
 |---|---|---|
@@ -28,6 +28,7 @@ Un solo barrel raíz — no hay subpaths por grupo (`/core`, `/feedback`, etc.).
 | `EmptyState` | feedback | Vacío factual ("Sin recogidas pendientes"), nunca "¡Ups!". |
 | `ErrorState` | feedback | Mensaje del backend + código técnico en mono + "Reintentar" siempre visible. |
 | `SkeletonRow` | feedback | Shimmer de fila de lista — nunca spinner de pantalla completa. |
+| `UpdateBanner` | feedback | Aviso fijo arriba de "hay nueva versión" + acción coral única (ADR-094). Anclado arriba para no chocar con la barra de "¡Ya llegué!" (ADR-092). |
 | `NavItem` | navigation | Ítem de sidebar oscuro, activo en coral, badge de conteo opcional. |
 
 Fuente exacta de cada uno: `packages/ui/src/components/{core,feedback,navigation}/*.tsx`.

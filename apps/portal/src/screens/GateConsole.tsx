@@ -15,6 +15,7 @@ import {
 } from '../gate-console/gate-console-error-messages';
 import type { QueueRow } from '../gate-console/queue-rows';
 import { useDeliveryPointQueue, type ConnectionState } from '../gate-console/useDeliveryPointQueue';
+import { setGateConsoleConfirming } from '../gate-console/gate-console-activity';
 import { useClock } from '../gate-console/useClock';
 import { Alert } from '../components/Alert';
 import { DELIVERY_POINTS_PATH } from '../routes/paths';
@@ -663,6 +664,13 @@ export function GateConsole() {
       setDeliveredCount((n) => n + 1);
     }
   }, [queue.deliveredId]);
+
+  // ADR-094: let the app-level update banner know a delivery confirmation is
+  // mid-flight, so it holds its reload until the gate is free again.
+  useEffect(() => {
+    setGateConsoleConfirming(queue.busyId !== null);
+    return () => setGateConsoleConfirming(false);
+  }, [queue.busyId]);
 
   // Opens on the top of the queue once it loads; never fights a manual pick
   // afterwards, including one that has since left the queue (feature 021 —

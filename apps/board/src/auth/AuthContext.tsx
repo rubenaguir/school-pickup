@@ -6,12 +6,14 @@ import {
   readAccessToken,
   type AccessTokenClaims,
 } from '@casillego/shared';
-import { useProactiveTokenRefresh } from '@casillego/ui';
+import { useProactiveTokenRefresh, useUpdateAvailable } from '@casillego/ui';
 import { apiClient, tokenStorage } from '../api/client';
 
 export interface AuthContextValue {
   /** Claims of the stored access token, or null when signed out. */
   session: AccessTokenClaims | null;
+  /** ADR-094: a newer deploy has been seen; the board auto-reloads once idle. */
+  updateAvailable: boolean;
   /** Throws an ApiError the caller is expected to translate by `code`. */
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -40,8 +42,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Proactive layer of ADR-091: this is the screen the ADR was written for —
   // a kiosk meant to sit open for hours with no REST traffic of its own to
-  // ever trigger the ordinary 401 interceptor.
-  useProactiveTokenRefresh({ apiClient, hasSession: session !== null });
+  // ever trigger the ordinary 401 interceptor. The same timer carries the
+  // ADR-094 version check (`onTick`).
+  const { updateAvailable, checkForUpdate } = useUpdateAvailable(__APP_BUILD_ID__);
+  useProactiveTokenRefresh({
+    apiClient,
+    hasSession: session !== null,
+    onTick: checkForUpdate,
+  });
 
   const login = useCallback(async (email: string, password: string) => {
     await requestLogin(apiClient, tokenStorage, { email, password });
@@ -56,8 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ session, login, logout }),
-    [session, login, logout],
+    () => ({ session, updateAvailable, login, logout }),
+    [session, updateAvailable, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

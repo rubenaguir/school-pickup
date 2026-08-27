@@ -143,6 +143,25 @@ describe('createBoardAudioQueue', () => {
     expect(order).toEqual(['voice:Ana en puerta']);
   });
 
+  it('reports isIdle() only when nothing is playing or waiting', async () => {
+    const { queue, finishCurrentVoice } = recordingQueue();
+
+    expect(queue.isIdle()).toBe(true); // fresh queue
+
+    queue.enqueueVoice('Ana llegando');
+    queue.enqueueVoice('Beto en puerta');
+    await tick();
+    expect(queue.isIdle()).toBe(false); // Ana playing, Beto waiting
+
+    finishCurrentVoice(); // Ana done, Beto starts
+    await flush();
+    expect(queue.isIdle()).toBe(false); // Beto still playing (blocked)
+
+    finishCurrentVoice(); // Beto done
+    await flush();
+    expect(queue.isIdle()).toBe(true); // drained
+  });
+
   it('is a no-op (never throws) with no Web Audio / speechSynthesis available', async () => {
     // Default deps, node test env: no `window`, no `AudioContext`, no
     // `speechSynthesis` — every method must still be safe to call.

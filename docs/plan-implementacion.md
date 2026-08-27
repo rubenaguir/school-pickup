@@ -679,6 +679,31 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         anuncio manual del gate console (sin cortar lo que suena);
         `tts.ts` queda como helper puro de texto; test de orden con
         ítem prioritario incluido
+- [ ] **Notificación de actualización disponible, 3 apps (ADR-094)**
+      — sin service worker nuevo, reutiliza el timer de ADR-091:
+  - [x] Identificador de versión por build + `/version.json` — plugin
+        Vite compartido (`@casillego/ui/vite-build-id`, `buildIdPlugin`)
+        para las 3 apps: inyecta `__APP_BUILD_ID__` y sirve/emite
+        `version.json` con el mismo id (dev: middleware `no-store`;
+        build: `emitFile` a la raíz). Falta revisar cache headers de
+        nginx en el servidor, fuera del repo
+  - [x] `useProactiveTokenRefresh` gana `onTick` opcional (vía ref, no
+        reinicia el `setInterval`); `useUpdateAvailable` +
+        `parseDeployedBuildId` puro (con test) en `packages/ui`
+  - [x] `UpdateBanner` compartido en `packages/ui` (barra navy anclada
+        arriba, única acción coral), montado sobre el router en cada
+        `AuthProvider` vía `updateAvailable` del contexto
+  - [x] `apps/parent`: `AppUpdateBanner` no se muestra si
+        `useActivePickupRequest()` devuelve una recogida activa (probe
+        diferido hasta que hay actualización)
+  - [x] `apps/portal`: se difiere mientras `queue.busyId !== null` en
+        `GateConsole.tsx` (singleton `gate-console-activity.ts` +
+        `useSyncExternalStore`, ya que el banner vive sobre el router)
+  - [x] `apps/board`: `BoardAutoUpdate` recarga solo cuando
+        `boardAudioQueue.isIdle()` (método nuevo, con test); guarda
+        `selectedDeliveryPointId` en `sessionStorage` (uso único) y lo
+        restaura al montar `Home.tsx`, con aviso breve en pantalla
+        antes de recargar
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de
