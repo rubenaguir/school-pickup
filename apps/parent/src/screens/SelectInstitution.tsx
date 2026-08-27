@@ -14,6 +14,10 @@ import { apiClient } from '../api/client';
 import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
 import { useMyVehicles, type MyVehicle } from '../vehicles/useMyVehicles';
 import { pickupRequestErrorMessage } from '../pickup-requests/pickup-request-error-messages';
+import {
+  findActivePickupRequestId,
+  type PickupRequestsByEnrollmentResponse,
+} from '../pickup-requests/active-pickup-request';
 import { HOME_PATH, trackingPath } from '../routes/paths';
 
 type ArrivalPath = 'catalog' | 'custom' | 'walking';
@@ -24,14 +28,8 @@ interface ArrivalTab {
   label: string;
 }
 
-const ACTIVE_PICKUP_STATUSES = new Set(['en_route', 'arriving', 'arrived']);
-
 interface CreatePickupRequestResponse {
   id: string;
-}
-
-interface PickupRequestsByEnrollmentResponse {
-  pickupRequests: { id: string; status: string }[];
 }
 
 const EYEBROW_STYLE = {
@@ -233,8 +231,8 @@ function SelectInstitutionForStudent({ studentId }: { studentId: string }) {
       const response = await apiClient.get<PickupRequestsByEnrollmentResponse>(
         `/pickup-requests?enrollmentId=${enrollmentId}`,
       );
-      const active = response.pickupRequests.find((p) => ACTIVE_PICKUP_STATUSES.has(p.status));
-      if (active) setActivePickupRequestId(active.id);
+      const activeId = findActivePickupRequestId(response);
+      if (activeId) setActivePickupRequestId(activeId);
     } catch {
       // Best-effort only — on failure the error message below is still enough.
     }

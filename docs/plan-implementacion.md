@@ -634,6 +634,22 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         la capa proactiva de todos modos
   - [x] `useProactiveTokenRefresh` en `packages/ui`, montado en el
         `AuthProvider` de las 3 apps, cada 5 min mientras haya sesión
+- [x] **"¡Ya llegué!" fuera de vista + salida sin aviso de una recogida
+      activa (ADR-092)** — detectado en pruebas E2E, `apps/parent`:
+  - [x] `Tracking.tsx`: botón "¡Ya llegué!" fijo en la parte inferior
+        mientras `isTracking`, contenido scrollable con padding para
+        no quedar tapado
+  - [x] Confirmación en línea antes de "Volver" mientras `isTracking`
+        (mismo patrón que "Cancelar recogida" en el mismo archivo)
+  - [x] `useActivePickupRequest` reutiliza `GET
+        /pickup-requests?enrollmentId=X` (mismo endpoint y misma lista
+        `ACTIVE_PICKUP_STATUSES`, ya compartida en
+        `pickup-requests/active-pickup-request.ts`, que
+        `lookupActivePickupRequest` en `SelectInstitution.tsx`; sin
+        cambios de backend) para detectar una recogida activa por
+        matrícula
+  - [x] Banner en `Home.tsx` con enlace directo al tracking cuando hay
+        una recogida activa
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

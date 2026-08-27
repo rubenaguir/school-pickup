@@ -5,8 +5,9 @@ import { useAuth } from '../auth/AuthContext';
 import { useMyStudents, type MyStudent } from '../students/useMyStudents';
 import { StudentPhoto } from '../students/StudentPhoto';
 import { resolveInitialSurface, setSurface } from '../surface/surface';
-import { selectInstitutionPath, TUTOR_PORTAL_STUDENTS_PATH } from '../routes/paths';
+import { selectInstitutionPath, trackingPath, TUTOR_PORTAL_STUDENTS_PATH } from '../routes/paths';
 import { PushSubscriptionPrompt } from '../push/PushSubscriptionPrompt';
+import { useActivePickupRequest } from '../pickup-requests/useActivePickupRequest';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -81,6 +82,7 @@ export function Home() {
   const navigate = useNavigate();
   const [surface] = useState(resolveInitialSurface);
   const students = useMyStudents();
+  const activePickup = useActivePickupRequest();
 
   // Evaluado una sola vez al montar (ADR-078 punto 4): un ancho de escritorio
   // al aterrizar aquí manda directo a Portal web, sin renderizar "Inicio".
@@ -144,6 +146,28 @@ export function Home() {
         </div>
 
         <PushSubscriptionPrompt />
+
+        {activePickup && (
+          <Card style={{ background: 'var(--surface-muted)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
+                  Tienes una recogida en curso
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+                  {activePickup.studentFullName} · {activePickup.institutionName}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate(trackingPath(activePickup.pickupRequestId))}
+              >
+                Ver seguimiento
+              </Button>
+            </div>
+          </Card>
+        )}
 
         {students.status === 'loading' && (
           <Card padding={0}>

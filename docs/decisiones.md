@@ -7164,3 +7164,72 @@ mantenerse autenticado.
 - ADR-063 punto 6 (`AuthContext` propio por app, no compartido).
 - `packages/shared/api-client/api-client.ts` (`refreshOnce`, el
   deduplicado que el nuevo `refreshToken()` público reutiliza).
+
+## ADR-092 — El botón "¡Ya llegué!" quedaba fuera de vista; abandonar el tracking sin avisar dejaba la recogida huérfana
+
+**Contexto.** Reportado en pruebas manuales en producción: con estado
+`arriving`, el botón "¡Ya llegué!" (`Tracking.tsx`, `apps/parent`) es
+el **último** elemento del contenido — después del mapa, la tarjeta de
+ETA, y hasta después de la nota del wake lock — así que en un teléfono
+normal queda fuera de la pantalla inicial sin hacer scroll. En la
+prueba, el tutor no lo vio, tocó "Volver" (botón `ghost` en el header,
+sin ninguna confirmación) y la recogida quedó activa sin nadie mirando
+la pantalla que la controla.
+
+Investigado: sí existe un camino de regreso, pero es un efecto
+colateral, no algo diseñado — `SelectInstitution.tsx` atrapa
+`ACTIVE_PICKUP_REQUEST_EXISTS` al intentar solicitar de nuevo y busca
+la recogida activa (`lookupActivePickupRequest`) para reencaminar al
+tracking. Funciona, pero depende de que al tutor se le ocurra volver a
+intentar solicitar la recogida — no hay ningún indicio en `Home.tsx`
+("Mis hijos") de que algo sigue en curso.
+
+**Decisión — tres piezas.**
+
+1. **El botón "¡Ya llegué!" pasa a estar fijo en la parte inferior de
+   la pantalla** mientras `isTracking` (`en_route`/`arriving`), no
+   sujeto al orden del contenido — mismo criterio que cualquier CTA
+   primario de una app móvil (patrón "action bar" fijo). El resto del
+   contenido (mapa, ETA, cancelar) sigue el flujo normal y hace
+   scroll debajo de esa barra fija; el contenedor scrollable gana el
+   padding inferior necesario para no quedar tapado por la barra.
+2. **Advertencia antes de "Volver"** mientras `isTracking` — mismo
+   patrón visual ya usado en este archivo para "Cancelar recogida"
+   (confirmación en línea, no un modal nuevo): "Seguir aquí" /
+   "Salir de todos modos". Fuera de `isTracking` (ej. ya entregado),
+   "Volver" navega directo, sin cambios.
+3. **Banner de recogida en curso en `Home.tsx`**. Hook nuevo
+   (`apps/parent`) que, para cada matrícula del tutor
+   (`useMyEnrollments`), reutiliza el mismo `GET
+   /pickup-requests?enrollmentId=X` que ya usa
+   `lookupActivePickupRequest` en `SelectInstitution.tsx` — sin
+   ningún cambio de backend. Si aparece una activa, "Mis hijos"
+   muestra un banner arriba de la lista de alumnos con enlace directo
+   al tracking. Simplificación deliberada: si hubiera más de una
+   recogida activa a la vez (poco común — más de un hijo en camino al
+   mismo tiempo), el banner solo destaca la primera encontrada; no se
+   diseña una lista de varias por ahora.
+
+**Consecuencias.** Las tres piezas atacan capas distintas del mismo
+problema: la 1 evita que pase en primer lugar, la 2 avisa si aun así
+se intenta salir, la 3 da una salida de emergencia genuina (no un
+efecto colateral) para cualquier otra forma de abandonar la pantalla
+(cerrar la pestaña, que el teléfono se bloquee, etc.) que ni la 1 ni
+la 2 pueden cubrir.
+
+**Nota de respaldo.** Confirmado con una segunda captura en otro
+dispositivo: ahí el botón sí era visible sin scroll — la variación es
+real, depende del tamaño de fuente/densidad de pantalla configurados
+en cada teléfono, no es un fallo universal. Esto confirma que
+"reordenar el contenido" no habría sido una solución suficiente por sí
+sola (seguiría siendo frágil según el dispositivo); el botón fijo en
+la parte inferior (punto 1) es la elección correcta porque no depende
+de cuánto contenido quepa arriba.
+
+## Referencias
+
+- `apps/parent/src/screens/SelectInstitution.tsx`
+  (`lookupActivePickupRequest`, el patrón que el banner de `Home.tsx`
+  reutiliza).
+- `apps/api/src/pickups/pickups.service.ts`
+  (`ACTIVE_PICKUP_REQUEST_EXISTS`, sin cambios — se reutiliza tal cual).

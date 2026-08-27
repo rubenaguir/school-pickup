@@ -51,6 +51,29 @@ const TRACKING_STATUSES = new Set<PickupRequestStatus>(['en_route', 'arriving'])
 /** The tutor can still back out from any of these (ADR-017 state machine). */
 const CANCELLABLE_STATUSES = new Set<PickupRequestStatus>(['en_route', 'arriving', 'arrived']);
 
+/**
+ * While `isTracking`, "¡Ya llegué!" is pinned to the bottom of the viewport as
+ * a fixed action bar (ADR-092 punto 1) rather than living at the end of the
+ * scrollable content, where a tall enough phone pushed it out of the first
+ * screen. `SHELL_BOTTOM_BAR_PADDING` is the room the scroll container gives
+ * back so nothing hides behind the bar: its height plus the iOS home-indicator
+ * inset.
+ */
+const ACTION_BAR_STYLE = {
+  position: 'fixed',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  background: 'var(--surface)',
+  borderTop: '1px solid var(--border-strong)',
+  boxShadow: '0 -4px 16px rgba(14, 31, 48, 0.12)',
+  padding: 'var(--space-6)',
+  paddingBottom: 'calc(var(--space-6) + env(safe-area-inset-bottom))',
+  zIndex: 30,
+} as const;
+
+const SHELL_BOTTOM_BAR_PADDING = 'calc(96px + env(safe-area-inset-bottom))';
+
 function etaLabel(etaSeconds: number | null): string {
   if (etaSeconds === null) return 'Calculando tiempo estimado…';
   const minutes = Math.max(1, Math.round(etaSeconds / 60));
@@ -80,6 +103,7 @@ function TrackingForPickupRequest({ pickupRequestId }: { pickupRequestId: string
   const wakeLockStatus = useWakeLock();
   const isVisible = useIsVisible();
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   const status = tracking.pickupRequest?.status ?? null;
   const isTracking = status !== null && TRACKING_STATUSES.has(status);
@@ -121,12 +145,40 @@ function TrackingForPickupRequest({ pickupRequestId }: { pickupRequestId: string
     : null;
 
   return (
-    <TrackingShell
-      institutionName={enrollment?.institutionName}
-      studentFullName={enrollment?.studentFullName}
-      status={pickupRequest.status}
-    >
-      {/*
+    <>
+      <TrackingShell
+        institutionName={enrollment?.institutionName}
+        studentFullName={enrollment?.studentFullName}
+        status={pickupRequest.status}
+        hasBottomBar={isTracking}
+        onBack={() => {
+          if (isTracking) {
+            setConfirmingLeave(true);
+          } else {
+            void navigate(HOME_PATH);
+          }
+        }}
+      >
+        {isTracking && confirmingLeave && (
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontSize: 14, color: 'var(--ink-600)' }}>
+                Tu recogida sigue en camino. Si sales, no vas a poder confirmar la entrega desde
+                aquí.
+              </span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Button variant="outline" onClick={() => setConfirmingLeave(false)}>
+                  Seguir aquí
+                </Button>
+                <Button variant="ghost" onClick={() => void navigate(HOME_PATH)}>
+                  Salir de todos modos
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/*
         The map/ETA/actions below stay mounted regardless of `isVisible` —
         toggling them in and out of the tree on every focus change tears down
         and rebuilds the Mapbox GL instance, which is not just wasteful but
@@ -138,211 +190,222 @@ function TrackingForPickupRequest({ pickupRequestId }: { pickupRequestId: string
         numbers) without destroying and recreating the map every time the tab
         loses and regains focus.
       */}
-      {!isVisible && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'center' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
-              Seguimiento en pausa
-            </span>
-            <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>
-              Los datos en pantalla pueden no estar actualizados. Vuelve a esta pantalla para
-              reanudar el seguimiento en vivo.
-            </span>
-          </div>
-        </Card>
-      )}
+        {!isVisible && (
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'center' }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
+                Seguimiento en pausa
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+                Los datos en pantalla pueden no estar actualizados. Vuelve a esta pantalla para
+                reanudar el seguimiento en vivo.
+              </span>
+            </div>
+          </Card>
+        )}
 
-      {tracking.connectionErrorReason && (
-        <div
-          role="alert"
-          style={{
-            background: 'var(--danger-bg)',
-            border: '1px solid var(--danger-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '11px 13px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
-            El seguimiento en vivo se detuvo.{' '}
-            {trackingSocketErrorMessage(tracking.connectionErrorReason)}
-          </span>
-          <span
+        {tracking.connectionErrorReason && (
+          <div
+            role="alert"
             style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--text-2xs)',
-              color: 'var(--ink-300)',
+              background: 'var(--danger-bg)',
+              border: '1px solid var(--danger-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '11px 13px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
             }}
           >
-            {tracking.connectionErrorReason}
-          </span>
-        </div>
-      )}
-
-      {pickupRequest.status === 'arriving' && (
-        <Card style={{ background: 'var(--status-arriving-bg)', border: '1px solid transparent' }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--status-arriving-fg)' }}>
-            Tu hijo ya está en el área de entrega.
-          </span>
-        </Card>
-      )}
-
-      <TrackingMap
-        accessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-        institutionPosition={pickupRequest.institutionLocation}
-        tutorPosition={tutorPosition}
-      />
-
-      {locationReporting.error && (
-        <span style={{ fontSize: 12, color: 'var(--ink-300)' }}>
-          {locationReporting.error.message}
-        </span>
-      )}
-
-      {isTracking && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={EYEBROW_STYLE}>ETA</span>
-            <span
-              style={{
-                fontSize: 'var(--text-display-lg)',
-                fontWeight: 800,
-                color: 'var(--ink-900)',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1,
-              }}
-            >
-              {etaLabel(pickupRequest.etaSeconds)}
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
+              El seguimiento en vivo se detuvo.{' '}
+              {trackingSocketErrorMessage(tracking.connectionErrorReason)}
             </span>
-          </div>
-        </Card>
-      )}
-
-      {pickupRequest.status === 'arrived' && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-            <span style={EYEBROW_STYLE}>Código de entrega</span>
             <span
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-display-lg)',
-                fontWeight: 800,
-                letterSpacing: '.18em',
-                color: 'var(--ink-900)',
+                fontSize: 'var(--text-2xs)',
+                color: 'var(--ink-300)',
               }}
             >
-              {pickupRequest.deliveryCode}
-            </span>
-            <span style={{ fontSize: 13, color: 'var(--ink-400)', textAlign: 'center' }}>
-              Muéstralo al personal en la puerta para confirmar la entrega.
+              {tracking.connectionErrorReason}
             </span>
           </div>
-        </Card>
-      )}
+        )}
 
-      {isTracking && (
-        <span
-          style={{
-            fontSize: 12,
-            color: 'var(--ink-300)',
-            textAlign: 'center',
-            display: 'block',
-          }}
-        >
-          {wakeLockStatus === 'active' &&
-            'Mantenemos esta pantalla encendida mientras vas en camino.'}
-          {wakeLockStatus === 'unavailable' &&
-            'No pudimos mantener la pantalla encendida automáticamente. Evita que se bloquee mientras conduces.'}
-        </span>
-      )}
-
-      {pickupRequest.status === 'delivered' && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
-              Recogida completada
+        {pickupRequest.status === 'arriving' && (
+          <Card
+            style={{ background: 'var(--status-arriving-bg)', border: '1px solid transparent' }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--status-arriving-fg)' }}>
+              Tu hijo ya está en el área de entrega.
             </span>
-            <Button variant="outline" onClick={() => void navigate(HOME_PATH)}>
-              Volver a mis hijos
-            </Button>
-          </div>
-        </Card>
-      )}
+          </Card>
+        )}
 
-      {pickupRequest.status === 'cancelled' && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
-              Recogida cancelada
-            </span>
-            <Button variant="outline" onClick={() => void navigate(HOME_PATH)}>
-              Volver a mis hijos
-            </Button>
-          </div>
-        </Card>
-      )}
+        <TrackingMap
+          accessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+          institutionPosition={pickupRequest.institutionLocation}
+          tutorPosition={tutorPosition}
+        />
 
-      {tracking.actionError && (
-        <div
-          role="alert"
-          style={{
-            background: 'var(--danger-bg)',
-            border: '1px solid var(--danger-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '11px 13px',
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
-            {trackingActionErrorMessage(tracking.actionError.error.code)}
+        {locationReporting.error && (
+          <span style={{ fontSize: 12, color: 'var(--ink-300)' }}>
+            {locationReporting.error.message}
           </span>
-        </div>
-      )}
+        )}
 
-      {isTracking && (
-        <Button
-          variant="primary"
-          size="lg"
-          full
-          disabled={tracking.actionBusy}
-          onClick={() => tracking.markArrived()}
-        >
-          {tracking.actionBusy ? 'Confirmando…' : '¡Ya llegué!'}
-        </Button>
-      )}
-
-      {CANCELLABLE_STATUSES.has(pickupRequest.status) && !confirmingCancel && (
-        <Button variant="ghost" onClick={() => setConfirmingCancel(true)}>
-          Cancelar recogida
-        </Button>
-      )}
-
-      {CANCELLABLE_STATUSES.has(pickupRequest.status) && confirmingCancel && (
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--ink-600)' }}>
-              ¿Seguro que quieres cancelar esta recogida?
-            </span>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Button
-                variant="destructive"
-                disabled={tracking.actionBusy}
-                onClick={() => {
-                  setConfirmingCancel(false);
-                  tracking.cancel();
+        {isTracking && (
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={EYEBROW_STYLE}>ETA</span>
+              <span
+                style={{
+                  fontSize: 'var(--text-display-lg)',
+                  fontWeight: 800,
+                  color: 'var(--ink-900)',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
                 }}
               >
-                {tracking.actionBusy ? 'Cancelando…' : 'Sí, cancelar'}
-              </Button>
-              <Button variant="ghost" onClick={() => setConfirmingCancel(false)}>
-                Mantener recogida
+                {etaLabel(pickupRequest.etaSeconds)}
+              </span>
+            </div>
+          </Card>
+        )}
+
+        {pickupRequest.status === 'arrived' && (
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+              <span style={EYEBROW_STYLE}>Código de entrega</span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-display-lg)',
+                  fontWeight: 800,
+                  letterSpacing: '.18em',
+                  color: 'var(--ink-900)',
+                }}
+              >
+                {pickupRequest.deliveryCode}
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--ink-400)', textAlign: 'center' }}>
+                Muéstralo al personal en la puerta para confirmar la entrega.
+              </span>
+            </div>
+          </Card>
+        )}
+
+        {isTracking && (
+          <span
+            style={{
+              fontSize: 12,
+              color: 'var(--ink-300)',
+              textAlign: 'center',
+              display: 'block',
+            }}
+          >
+            {wakeLockStatus === 'active' &&
+              'Mantenemos esta pantalla encendida mientras vas en camino.'}
+            {wakeLockStatus === 'unavailable' &&
+              'No pudimos mantener la pantalla encendida automáticamente. Evita que se bloquee mientras conduces.'}
+          </span>
+        )}
+
+        {pickupRequest.status === 'delivered' && (
+          <Card>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}
+            >
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
+                Recogida completada
+              </span>
+              <Button variant="outline" onClick={() => void navigate(HOME_PATH)}>
+                Volver a mis hijos
               </Button>
             </div>
+          </Card>
+        )}
+
+        {pickupRequest.status === 'cancelled' && (
+          <Card>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}
+            >
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>
+                Recogida cancelada
+              </span>
+              <Button variant="outline" onClick={() => void navigate(HOME_PATH)}>
+                Volver a mis hijos
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {tracking.actionError && (
+          <div
+            role="alert"
+            style={{
+              background: 'var(--danger-bg)',
+              border: '1px solid var(--danger-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '11px 13px',
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
+              {trackingActionErrorMessage(tracking.actionError.error.code)}
+            </span>
           </div>
-        </Card>
+        )}
+
+        {CANCELLABLE_STATUSES.has(pickupRequest.status) && !confirmingCancel && (
+          <Button variant="ghost" onClick={() => setConfirmingCancel(true)}>
+            Cancelar recogida
+          </Button>
+        )}
+
+        {CANCELLABLE_STATUSES.has(pickupRequest.status) && confirmingCancel && (
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontSize: 14, color: 'var(--ink-600)' }}>
+                ¿Seguro que quieres cancelar esta recogida?
+              </span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Button
+                  variant="destructive"
+                  disabled={tracking.actionBusy}
+                  onClick={() => {
+                    setConfirmingCancel(false);
+                    tracking.cancel();
+                  }}
+                >
+                  {tracking.actionBusy ? 'Cancelando…' : 'Sí, cancelar'}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmingCancel(false)}>
+                  Mantener recogida
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+      </TrackingShell>
+
+      {isTracking && (
+        <div style={ACTION_BAR_STYLE}>
+          <div style={{ maxWidth: 480, margin: '0 auto' }}>
+            <Button
+              variant="primary"
+              size="lg"
+              full
+              disabled={tracking.actionBusy}
+              onClick={() => tracking.markArrived()}
+            >
+              {tracking.actionBusy ? 'Confirmando…' : '¡Ya llegué!'}
+            </Button>
+          </div>
+        </div>
       )}
-    </TrackingShell>
+    </>
   );
 }
 
@@ -350,14 +413,19 @@ function TrackingShell({
   institutionName,
   studentFullName,
   status,
+  onBack,
+  hasBottomBar = false,
   children,
 }: {
   institutionName?: string;
   studentFullName?: string;
   status?: PickupRequestStatus;
+  onBack?: () => void;
+  hasBottomBar?: boolean;
   children: React.ReactNode;
 }) {
   const navigate = useNavigate();
+  const handleBack = onBack ?? (() => void navigate(HOME_PATH));
 
   return (
     <main
@@ -365,6 +433,7 @@ function TrackingShell({
         minHeight: '100vh',
         background: 'var(--bg-app)',
         padding: 'var(--space-8)',
+        paddingBottom: hasBottomBar ? SHELL_BOTTOM_BAR_PADDING : 'var(--space-8)',
         fontFamily: 'var(--font-sans)',
       }}
     >
@@ -406,7 +475,7 @@ function TrackingShell({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
             {status && <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>}
-            <Button variant="ghost" size="sm" onClick={() => void navigate(HOME_PATH)}>
+            <Button variant="ghost" size="sm" onClick={handleBack}>
               Volver
             </Button>
           </div>
