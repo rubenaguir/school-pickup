@@ -32,6 +32,7 @@ export { mergeBoardMonitorDelta };
 function isBoardStatus(value: unknown): value is PickupRequestStatus {
   return (
     value === 'en_route' ||
+    value === 'approaching' ||
     value === 'arriving' ||
     value === 'arrived' ||
     value === 'delivered' ||
@@ -101,15 +102,16 @@ export function parseBoardMonitorDelta(raw: unknown): BoardMonitorRow | null {
 const STATUS_PRIORITY: Record<PickupRequestStatus, number> = {
   arrived: 0,
   arriving: 1,
-  en_route: 2,
-  delivered: 3,
-  cancelled: 4,
+  approaching: 2,
+  en_route: 3,
+  delivered: 4,
+  cancelled: 5,
 };
 
 /**
- * Status priority first (`arrived` → `arriving` → `en_route`), ETA ascending
- * as the tiebreak within a status, student name as the final tiebreak — same
- * rule as Carril's `sortBoardRows` (ADR-071 point 5).
+ * Status priority first (`arrived` → `arriving` → `approaching` → `en_route`),
+ * ETA ascending as the tiebreak within a status, student name as the final
+ * tiebreak — same rule as Carril's `sortBoardRows` (ADR-071 point 5, ADR-093).
  */
 export function sortBoardRows(rows: readonly BoardMonitorRow[]): BoardMonitorRow[] {
   return [...rows].sort((a, b) => {

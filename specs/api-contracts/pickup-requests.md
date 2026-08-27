@@ -148,16 +148,17 @@ derivan/generan en el servidor (denormalización de `institution_id`, resolució
 | 404 | `RESOURCE_NOT_FOUND` | el `enrollments` no existe, o el `vehicleId` indicado no existe |
 | 422 | `ENROLLMENT_NOT_APPROVED` | el `enrollments` no está en `status = approved` (regla cruzada entre entidades; ADR-018 punto 2, ADR-025 punto 5) |
 | 422 | `INSTITUTION_NOT_APPROVED` | la `institutions` del `enrollments` (denormalizada) no está en `status = approved`: puede haberse suspendido después de que el `enrollments` fue aprobado (ADR-032) |
-| 422 | `ACTIVE_PICKUP_REQUEST_EXISTS` | ya existe un `pickup_requests` no terminal (`en_route`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1) |
+| 422 | `ACTIVE_PICKUP_REQUEST_EXISTS` | ya existe un `pickup_requests` no terminal (`en_route`/`approaching`/`arriving`/`arrived`) para ese `enrollmentId` (ADR-024 punto 1, ADR-093) |
 
 Los dos errores de `vehicleId` (`404 RESOURCE_NOT_FOUND` si no existe,
 `403 NOT_VEHICLE_OWNER` si es de otro tutor) aplican **solo** a la vía de
 catálogo. La captura libre (`vehicleDescription`/`vehiclePlate` sin `vehicleId`)
 no consulta `vehicles` y no puede producirlos.
 
-`activationRadiusMeters` no se valida en el servidor: es afordance de cliente
-(ADR-024 punto 7). El servidor no exige que el tutor esté dentro del radio para
-crear la recogida.
+`activationRadiusMeters` no se valida en el servidor al crear la recogida: el
+servidor no exige que el tutor esté dentro del radio. Su consumidor es el
+`worker`, que lo usa para la transición automática `en_route → approaching`
+(ADR-093, feature 020).
 
 ## `GET /pickup-requests/:id`
 
@@ -174,7 +175,7 @@ Devuelve el estado actual de una recogida. Ver features 018–022.
   "institutionLocation": { "lat": "number", "lng": "number" },
   "guardianUserId": "uuid",
   "deliveryPointId": "uuid | null",
-  "status": "en_route | arriving | arrived | delivered | cancelled",
+  "status": "en_route | approaching | arriving | arrived | delivered | cancelled",
   "deliveryCode": "string (4 dígitos)",
   "arrivalMode": "vehicle | walking | null",
   "vehicleDescription": "string | null",
@@ -248,8 +249,8 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 
 ### Diferencias del modo `deliveryPointId`
 
-- **Solo estados activos** (`en_route`, `arriving`, `arrived`), nunca historial
-  completo (ADR-050 punto 6): la cola de una puerta es una vista operativa del
+- **Solo estados activos** (`en_route`, `approaching`, `arriving`, `arrived`), nunca historial
+  completo (ADR-050 punto 6, ADR-093): la cola de una puerta es una vista operativa del
   momento, no un registro histórico. Un `pickup_requests` `delivered` o
   `cancelled` desaparece de la cola.
 - `status`, si se envía, **acota dentro** de ese conjunto activo; no lo amplía.
@@ -262,8 +263,8 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
 
 ### Diferencias del modo `institutionId`
 
-- **Solo estados activos** (`en_route`, `arriving`, `arrived`), mismo criterio
-  que el modo `deliveryPointId` (ADR-068 punto 2): el tablero es una vista
+- **Solo estados activos** (`en_route`, `approaching`, `arriving`, `arrived`), mismo criterio
+  que el modo `deliveryPointId` (ADR-068 punto 2, ADR-093): el tablero es una vista
   operativa del momento, no un registro histórico.
 - `status`, si se envía, **acota dentro** de ese conjunto activo, igual que en
   el modo `deliveryPointId`.
@@ -290,7 +291,7 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   "pickupRequests": [
     {
       "id": "uuid",
-      "status": "en_route | arriving | arrived | delivered | cancelled",
+      "status": "en_route | approaching | arriving | arrived | delivered | cancelled",
       "startedAt": "string (timestamptz)",
       "completedAt": "string (timestamptz) | null",
       "deliveryPointId": "uuid | null"
@@ -308,7 +309,7 @@ Paginación con `limit`/`offset`, orden `created_at DESC` (ADR-024 punto 9): un
   "pickupRequests": [
     {
       "pickupRequestId": "uuid",
-      "status": "en_route | arriving | arrived",
+      "status": "en_route | approaching | arriving | arrived",
       "studentFullName": "string (join: student vía enrollment)",
       "gradeOrGroup": "string | null (join: enrollment)",
       "vehicleDescription": "string | null",
@@ -340,7 +341,7 @@ fusionarlos sin transformación.
   "pickupRequests": [
     {
       "pickupRequestId": "uuid",
-      "status": "en_route | arriving | arrived",
+      "status": "en_route | approaching | arriving | arrived",
       "studentFullName": "string (join: student vía enrollment)",
       "gradeOrGroup": "string | null (join: enrollment)",
       "deliveryPointId": "uuid | null",
@@ -370,7 +371,7 @@ nombres que el modo `deliveryPointId` frente a `buildQueuePayload()`, para que
   "pickupRequests": [
     {
       "pickupRequestId": "uuid",
-      "status": "en_route | arriving | arrived",
+      "status": "en_route | approaching | arriving | arrived",
       "studentFullName": "string (join: student vía enrollment)",
       "gradeOrGroup": "string | null (join: enrollment)",
       "deliveryPointId": "uuid | null",
@@ -549,7 +550,8 @@ compartida (ADR-024 punto 8), no escribe la fila del `pickup_requests`, sin
 tabla ni columna nueva. Ver ADR-073 punto 1.
 
 Válido solo para un `pickup_requests` en estado activo (`en_route` /
-`arriving` / `arrived`) — mismo `ACTIVE_STATUSES` que ya usa `deliver()`.
+`approaching` / `arriving` / `arrived`) — mismo `ACTIVE_STATUSES` que ya usa
+`deliver()` (ADR-093).
 
 **Efecto:** escribe `audit_log` (`action = pickup_request.announced`,
 `entity_type = 'pickup_request'`, `entity_id` = el id del `pickup_requests`,

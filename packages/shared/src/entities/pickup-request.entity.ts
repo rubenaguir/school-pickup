@@ -23,10 +23,12 @@ import { PICKUP_REQUEST_STATUS_VALUES } from './pickup-request-status.values';
 
 const ARRIVAL_MODE_VALUES: readonly ArrivalMode[] = ['vehicle', 'walking'];
 
-// Espejo declarativo de los índices ya aplicados en la migración
-// 1783697356401-PartialUniqueAndGinIndexes.ts — el SQL crudo de esa
-// migración sigue siendo la fuente de verdad; estos decoradores solo evitan
-// que TypeORM proponga recrearlos. Ver ADR-024, ADR-025.
+// Espejo declarativo de los índices ya aplicados en las migraciones
+// 1783697356401-PartialUniqueAndGinIndexes.ts y
+// 1787900000000-PickupRequestApproachingStatus.ts (esta última amplió el
+// predicado con 'approaching', ADR-093) — el SQL crudo de esas migraciones
+// sigue siendo la fuente de verdad; estos decoradores solo evitan que TypeORM
+// proponga recrearlos. Ver ADR-024, ADR-025, ADR-093.
 @Entity('pickup_requests')
 @Index(['institution', 'status'])
 @Index('IDX_pickup_requests_active_per_enrollment', ['enrollment'], {
@@ -38,7 +40,7 @@ const ARRIVAL_MODE_VALUES: readonly ArrivalMode[] = ['vehicle', 'walking'];
   ['institution', 'deliveryCode'],
   {
     unique: true,
-    where: `"status" IN ('en_route', 'arriving', 'arrived')`,
+    where: `"status" IN ('en_route', 'approaching', 'arriving', 'arrived')`,
   },
 )
 export class PickupRequest {

@@ -84,11 +84,13 @@ export interface ManualAnnouncePayload {
  *
  * `onAnnounce`, when given, fires once per live delta whose merge lands the
  * pickup's `pickupRequestId` in `changedStatusIds` with a resulting `status`
- * of `arriving`/`arrived` (ADR-069 point 5) — never for deltas folded from
- * the post-reconnect buffer, which only need to produce a consistent final
- * state, not re-announce transitions the kiosk already voiced before the
- * drop. Kept out of the hook's own concerns (no `SpeechSynthesis` call in
- * here) so the merge logic stays testable without a browser TTS engine.
+ * of `approaching`/`arriving`/`arrived` (ADR-069 point 5, ADR-093) — never for
+ * deltas folded from the post-reconnect buffer, which only need to produce a
+ * consistent final state, not re-announce transitions the kiosk already voiced
+ * before the drop. The screen decides what each status sounds like (a chime
+ * for `approaching`, a spoken line for the other two); the hook makes no
+ * `AudioContext`/`SpeechSynthesis` call itself, so the merge logic stays
+ * testable without a browser audio engine.
  *
  * `onManualAnnounce`, when given, fires once per `kind: 'announce'` message
  * — the "Vocear" event an operator triggers from the gate console (ADR-073
@@ -204,7 +206,9 @@ export function useInstitutionBoard(
       flagChanged(merged.changedStatusIds);
       if (
         merged.changedStatusIds.has(delta.pickupRequestId) &&
-        (delta.status === 'arriving' || delta.status === 'arrived')
+        (delta.status === 'approaching' ||
+          delta.status === 'arriving' ||
+          delta.status === 'arrived')
       ) {
         onAnnounceRef.current?.(delta);
       }

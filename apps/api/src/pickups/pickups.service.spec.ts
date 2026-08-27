@@ -991,7 +991,7 @@ describe('PickupsService', () => {
       expect(findAndCount).toHaveBeenCalledWith({
         where: {
           deliveryPoint: { id: DP_ID },
-          status: In(['en_route', 'arriving', 'arrived']),
+          status: In(['en_route', 'approaching', 'arriving', 'arrived']),
         },
         relations: { enrollment: { student: true, group: true }, guardian: true },
         order: { createdAt: 'DESC' },
@@ -1180,7 +1180,7 @@ describe('PickupsService', () => {
       expect(findAndCount).toHaveBeenCalledWith({
         where: {
           institution: { id: INST_ID },
-          status: In(['en_route', 'arriving', 'arrived']),
+          status: In(['en_route', 'approaching', 'arriving', 'arrived']),
         },
         relations: { enrollment: { student: true, group: true }, deliveryPoint: true },
         order: { createdAt: 'DESC' },
@@ -1391,7 +1391,7 @@ describe('PickupsService', () => {
       expect(findAndCount).toHaveBeenCalledWith({
         where: {
           institution: { id: INST_ID },
-          status: In(['en_route', 'arriving', 'arrived']),
+          status: In(['en_route', 'approaching', 'arriving', 'arrived']),
         },
         relations: {
           enrollment: { student: true, group: true },
@@ -1620,7 +1620,7 @@ describe('PickupsService', () => {
   });
 
   describe('cancel', () => {
-    it.each(['en_route', 'arriving', 'arrived'] as const)(
+    it.each(['en_route', 'approaching', 'arriving', 'arrived'] as const)(
       'transitions from %s to cancelled and sets completed_at',
       async (status) => {
         const { service } = buildService({
@@ -1766,7 +1766,7 @@ describe('PickupsService', () => {
       recordedAt: '2026-07-16T08:05:00.000Z',
     };
 
-    it.each(['en_route', 'arriving', 'arrived'] as const)(
+    it.each(['en_route', 'approaching', 'arriving', 'arrived'] as const)(
       'republishes to the pickup location topic at QoS 0 while status is %s',
       async (status) => {
         const { service, mqttClient } = buildService({
@@ -2275,7 +2275,7 @@ describe('PickupsService', () => {
   });
 
   describe('announce', () => {
-    it.each(['en_route', 'arriving', 'arrived'] as const)(
+    it.each(['en_route', 'approaching', 'arriving', 'arrived'] as const)(
       'publishes to the board-announce topic when the pickup_request is active (status=%s)',
       async (status) => {
         const { service, mqttClient } = buildService({

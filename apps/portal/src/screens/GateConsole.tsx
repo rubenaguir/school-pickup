@@ -26,12 +26,15 @@ const DELIVERY_CODE_LENGTH = 4;
 /* ------------------------------------------------------------------ */
 
 /**
- * The five-state system is shared by the three frontends and never recoloured
- * (.claude/rules/design-system.md); only three of them can reach a queue
- * (ADR-050 point 6), the other two are here because the type has five members.
+ * The pickup status system is shared by the three frontends and never
+ * recoloured (.claude/rules/design-system.md); `approaching` (ADR-093) borrows
+ * the violet activation accent. Only four of the six states can reach a queue
+ * (ADR-050 point 6, ADR-093), the terminal two are here because the type has
+ * six members.
  */
 const STATUS_LABELS: Record<PickupRequestStatus, string> = {
   en_route: 'En camino',
+  approaching: 'Cerca',
   arriving: 'Por llegar',
   arrived: 'En puerta',
   delivered: 'Entregado',
@@ -40,9 +43,10 @@ const STATUS_LABELS: Record<PickupRequestStatus, string> = {
 
 const STATUS_TONES: Record<
   PickupRequestStatus,
-  'en-route' | 'arriving' | 'arrived' | 'delivered' | 'cancelled'
+  'en-route' | 'approaching' | 'arriving' | 'arrived' | 'delivered' | 'cancelled'
 > = {
   en_route: 'en-route',
+  approaching: 'approaching',
   arriving: 'arriving',
   arrived: 'arrived',
   delivered: 'delivered',
@@ -674,7 +678,7 @@ export function GateConsole() {
 
   const arrivedCount = queue.rows.filter((row) => row.status === 'arrived').length;
   const enRouteCount = queue.rows.filter(
-    (row) => row.status === 'en_route' || row.status === 'arriving',
+    (row) => row.status === 'en_route' || row.status === 'approaching' || row.status === 'arriving',
   ).length;
 
   const activeAnnounceId = queue.announcingId ?? queue.lastAnnouncedId;

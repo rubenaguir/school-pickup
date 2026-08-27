@@ -102,19 +102,36 @@ export class LocationIngestionService {
     pickupRequest.etaSeconds = eta.etaSeconds;
     pickupRequest.etaCalculatedAt = now;
 
-    const shouldEvaluateArriving = pickupRequest.status === 'en_route';
+    // `arriving` is evaluated first, and is now valid coming from `approaching`
+    // too, not only from `en_route` (ADR-093). Only if it does not apply, and
+    // the pickup is still `en_route`, do we consider the wider `approaching`
+    // ring — a pickup that already meets `arriving` on its first location
+    // update jumps straight there, `approaching` is never forced.
+    const distanceToDestination = haversineDistanceMeters(origin, destination);
+
+    const shouldEvaluateArriving =
+      pickupRequest.status === 'en_route' || pickupRequest.status === 'approaching';
     const meetsArrivingLeadTime =
       eta.etaSeconds <= pickupRequest.institution.arrivingLeadMinutes * 60;
     const meetsArrivalGeofence =
-      haversineDistanceMeters(origin, destination) <=
-      pickupRequest.institution.geofenceRadiusMeters;
+      distanceToDestination <= pickupRequest.institution.geofenceRadiusMeters;
 
-    const updated =
-      shouldEvaluateArriving && (meetsArrivingLeadTime || meetsArrivalGeofence)
-        ? await this.dataSource.transaction((manager) =>
-            applyPickupRequestTransition(manager, pickupRequest, 'arriving', null),
-          )
-        : await this.pickupRequestRepo.save(pickupRequest);
+    const meetsActivationRadius =
+      pickupRequest.status === 'en_route' &&
+      distanceToDestination <= pickupRequest.institution.activationRadiusMeters;
+
+    let updated: PickupRequest;
+    if (shouldEvaluateArriving && (meetsArrivingLeadTime || meetsArrivalGeofence)) {
+      updated = await this.dataSource.transaction((manager) =>
+        applyPickupRequestTransition(manager, pickupRequest, 'arriving', null),
+      );
+    } else if (meetsActivationRadius) {
+      updated = await this.dataSource.transaction((manager) =>
+        applyPickupRequestTransition(manager, pickupRequest, 'approaching', null),
+      );
+    } else {
+      updated = await this.pickupRequestRepo.save(pickupRequest);
+    }
 
     await this.publishRealtimeUpdate(updated);
   }

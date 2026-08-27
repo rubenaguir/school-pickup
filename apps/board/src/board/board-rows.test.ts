@@ -114,6 +114,29 @@ describe('mergeBoardDelta', () => {
     expect(result.changedStatusIds).toEqual(new Set(['pr-1']));
   });
 
+  it('appends and flags a pickup that shows up already approaching (ADR-093 — the chime)', () => {
+    const result = mergeBoardDelta([], row({ status: 'approaching' }));
+    expect(result.rows).toHaveLength(1);
+    expect(result.changedStatusIds).toEqual(new Set(['pr-1']));
+  });
+
+  it('flags the change when a row advances en_route -> approaching', () => {
+    const result = mergeBoardDelta(
+      [row({ status: 'en_route' })],
+      row({ status: 'approaching', updatedAt: '2026-08-09T14:05:00.000Z' }),
+    );
+    expect(result.rows[0].status).toBe('approaching');
+    expect(result.changedStatusIds).toEqual(new Set(['pr-1']));
+  });
+
+  it('keeps an approaching row on the board (not treated as terminal)', () => {
+    const result = mergeBoardDelta(
+      [row({ status: 'en_route' })],
+      row({ status: 'approaching', updatedAt: '2026-08-09T14:05:00.000Z' }),
+    );
+    expect(result.rows).toHaveLength(1);
+  });
+
   it('replaces the row and announces the change when status advances', () => {
     const result = mergeBoardDelta(
       [row(), row({ pickupRequestId: 'pr-2' })],
@@ -210,19 +233,21 @@ describe('sortBoardRows', () => {
     expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-2', 'pr-1']);
   });
 
-  it('orders arrived before arriving before en_route regardless of ETA', () => {
+  it('orders arrived before arriving before approaching before en_route regardless of ETA (ADR-093)', () => {
     const sorted = sortBoardRows([
       row({ pickupRequestId: 'pr-1', status: 'en_route', etaSeconds: 60 }),
-      row({ pickupRequestId: 'pr-2', status: 'arriving', etaSeconds: 120 }),
-      row({ pickupRequestId: 'pr-3', status: 'arrived', etaSeconds: 300 }),
+      row({ pickupRequestId: 'pr-2', status: 'approaching', etaSeconds: 90 }),
+      row({ pickupRequestId: 'pr-3', status: 'arriving', etaSeconds: 120 }),
+      row({ pickupRequestId: 'pr-4', status: 'arrived', etaSeconds: 300 }),
     ]);
-    expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-3', 'pr-2', 'pr-1']);
+    expect(sorted.map((item) => item.pickupRequestId)).toEqual(['pr-4', 'pr-3', 'pr-2', 'pr-1']);
   });
 });
 
 describe('isActiveBoardStatus', () => {
-  it('matches exactly the three states the snapshot returns', () => {
+  it('matches exactly the four active states the snapshot returns (ADR-093)', () => {
     expect(isActiveBoardStatus('en_route')).toBe(true);
+    expect(isActiveBoardStatus('approaching')).toBe(true);
     expect(isActiveBoardStatus('arriving')).toBe(true);
     expect(isActiveBoardStatus('arrived')).toBe(true);
     expect(isActiveBoardStatus('delivered')).toBe(false);

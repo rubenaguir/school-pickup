@@ -650,6 +650,35 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         matrícula
   - [x] Banner en `Home.tsx` con enlace directo al tracking cuando hay
         una recogida activa
+- [x] **Estado `approaching` (radio de activación) + cola de audio del
+      tablero (ADR-093)**:
+  - [x] Migración `1787900000000-PickupRequestApproachingStatus`: valor
+        `approaching` en `pickup_requests_status_enum` y
+        `pickup_request_status_history_status_enum` (recrea ambos tipos,
+        no `ADD VALUE`, para poder usar el valor nuevo en la misma
+        transacción); amplía los dos índices únicos parciales de
+        `pickup_requests` con `'approaching'`
+  - [x] `pickup-request-status-machine.ts`: `en_route → approaching`,
+        `approaching → [arriving, arrived, cancelled]` (+ matriz 6×6 en
+        el test)
+  - [x] `location-ingestion.service.ts`: `arriving` primero (ahora
+        válido también desde `approaching`); si no, y sigue en
+        `en_route`, evalúa `activationRadiusMeters` (distancia haversine,
+        mismo patrón que `geofenceRadiusMeters`) → `approaching`
+  - [x] `apps/parent`: `TRACKING_STATUSES`, `CANCELLABLE_STATUSES`,
+        `ACTIVE_PICKUP_STATUSES`, `isTrackingStatus`, badge "Cerca"
+        (`--accent-violet`) para `approaching`
+  - [x] `apps/board`/`apps/portal`: `isActive*Status`/`STATUS_PRIORITY`/
+        `STATUS_META`/`BADGE_TONE`/guards de unión suman `approaching`
+        (prioridad `arrived < arriving < approaching < en_route`);
+        `apps/api` `ACTIVE_STATUSES` y el DTO de query también
+  - [x] `apps/board/src/board/audio-queue.ts`: cola FIFO única (Web
+        Audio API, sin assets) — `activation-chime` para `approaching`,
+        `attention-chime` distinto antes de cada voceo, pausa fija
+        (`GAP_MS` 650ms) entre ítems, inserción al frente para el
+        anuncio manual del gate console (sin cortar lo que suena);
+        `tts.ts` queda como helper puro de texto; test de orden con
+        ítem prioritario incluido
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

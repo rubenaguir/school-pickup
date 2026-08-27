@@ -9,15 +9,22 @@ export interface StatusMeta {
 /**
  * Shared status vocabulary of the three modes (§4 of the ADR-071 prompt) —
  * same five-state system as `.claude/rules/design-system.md`, never
- * recoloured. `delivered`/`cancelled` almost never render in production (the
- * merge removes them from `rows`, ADR-069 point 3) but the branches stay for
- * fidelity to the kit and defensiveness.
+ * recoloured. `approaching` (ADR-093) is the 6th state: it uses the violet
+ * activation accent, distinct from the 5 status colours, so the board reads
+ * "the tutor is close" at a glance. `delivered`/`cancelled` almost never
+ * render in production (the merge removes them from `rows`, ADR-069 point 3)
+ * but the branches stay for fidelity to the kit and defensiveness.
  */
 export const STATUS_META: Record<PickupRequestStatus, StatusMeta> = {
   en_route: {
     label: 'En camino',
     color: 'var(--status-en-route)',
     soft: 'var(--status-en-route-bg)',
+  },
+  approaching: {
+    label: 'Cerca',
+    color: 'var(--accent-violet)',
+    soft: 'var(--accent-violet-bg)',
   },
   arriving: {
     label: 'Llegando',

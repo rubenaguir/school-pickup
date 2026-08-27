@@ -1,7 +1,15 @@
 import type { ReactNode } from 'react';
 
 export interface BadgeProps {
-  tone?: 'en-route' | 'arriving' | 'arrived' | 'delivered' | 'cancelled' | 'brand' | 'neutral';
+  tone?:
+    | 'en-route'
+    | 'approaching'
+    | 'arriving'
+    | 'arrived'
+    | 'delivered'
+    | 'cancelled'
+    | 'brand'
+    | 'neutral';
   dot?: boolean;
   children: ReactNode;
 }
@@ -11,6 +19,14 @@ const TONES: Record<NonNullable<BadgeProps['tone']>, { bg: string; fg: string; d
     bg: 'var(--status-en-route-bg)',
     fg: 'var(--status-en-route-fg)',
     dc: 'var(--status-en-route)',
+  },
+  // `approaching` (ADR-093) is a 6th pickup state, not a recolor of the 5-state
+  // system: it borrows the violet activation accent — the same hue GeofenceMap
+  // paints the activation ring with (`packages/ui/src/components/map`).
+  approaching: {
+    bg: 'var(--accent-violet-bg)',
+    fg: 'var(--accent-violet-fg)',
+    dc: 'var(--accent-violet)',
   },
   arriving: {
     bg: 'var(--status-arriving-bg)',

@@ -24,6 +24,7 @@ export { mergeBoardMonitorDelta };
 function isBoardStatus(value: unknown): value is PickupRequestStatus {
   return (
     value === 'en_route' ||
+    value === 'approaching' ||
     value === 'arriving' ||
     value === 'arrived' ||
     value === 'delivered' ||

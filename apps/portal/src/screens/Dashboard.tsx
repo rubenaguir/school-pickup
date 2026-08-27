@@ -30,6 +30,7 @@ const PANEL_TITLE_STYLE = {
 
 const BADGE_TONE: Record<PickupRequestStatus, NonNullable<BadgeProps['tone']>> = {
   en_route: 'en-route',
+  approaching: 'approaching',
   arriving: 'arriving',
   arrived: 'arrived',
   delivered: 'delivered',
@@ -79,7 +80,8 @@ type Filter = (typeof FILTERS)[number];
 
 function matchesFilter(row: BoardMonitorRow, filter: Filter): boolean {
   if (filter === 'Todos') return true;
-  if (filter === 'En camino') return row.status === 'en_route' || row.status === 'arriving';
+  if (filter === 'En camino')
+    return row.status === 'en_route' || row.status === 'approaching' || row.status === 'arriving';
   if (filter === 'En puerta') return row.status === 'arrived';
   return row.status === 'delivered';
 }
@@ -149,7 +151,7 @@ export function Dashboard() {
   const [filter, setFilter] = useState<Filter>('Todos');
 
   const enCaminoCount = monitor.rows.filter(
-    (row) => row.status === 'en_route' || row.status === 'arriving',
+    (row) => row.status === 'en_route' || row.status === 'approaching' || row.status === 'arriving',
   ).length;
   const enPuertaCount = monitor.rows.filter((row) => row.status === 'arrived').length;
   const entregadosCount = monitor.deliveredToday.total;

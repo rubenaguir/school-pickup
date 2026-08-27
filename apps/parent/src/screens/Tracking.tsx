@@ -29,6 +29,7 @@ const EYEBROW_STYLE = {
  */
 const STATUS_LABELS: Record<PickupRequestStatus, string> = {
   en_route: 'En camino',
+  approaching: 'Cerca',
   arriving: 'Llegando',
   arrived: 'En puerta',
   delivered: 'Entregado',
@@ -37,19 +38,29 @@ const STATUS_LABELS: Record<PickupRequestStatus, string> = {
 
 const STATUS_TONES: Record<
   PickupRequestStatus,
-  'en-route' | 'arriving' | 'arrived' | 'delivered' | 'cancelled'
+  'en-route' | 'approaching' | 'arriving' | 'arrived' | 'delivered' | 'cancelled'
 > = {
   en_route: 'en-route',
+  approaching: 'approaching',
   arriving: 'arriving',
   arrived: 'arrived',
   delivered: 'delivered',
   cancelled: 'cancelled',
 };
 
-/** The trip is still moving — the only window where location is watched/sent and "Ya llegué" applies. */
-const TRACKING_STATUSES = new Set<PickupRequestStatus>(['en_route', 'arriving']);
+/**
+ * The trip is still moving — the only window where location is watched/sent and
+ * "Ya llegué" applies. `approaching` (ADR-093) is exactly like `en_route` here:
+ * the trip is on its way, just closer.
+ */
+const TRACKING_STATUSES = new Set<PickupRequestStatus>(['en_route', 'approaching', 'arriving']);
 /** The tutor can still back out from any of these (ADR-017 state machine). */
-const CANCELLABLE_STATUSES = new Set<PickupRequestStatus>(['en_route', 'arriving', 'arrived']);
+const CANCELLABLE_STATUSES = new Set<PickupRequestStatus>([
+  'en_route',
+  'approaching',
+  'arriving',
+  'arrived',
+]);
 
 /**
  * While `isTracking`, "¡Ya llegué!" is pinned to the bottom of the viewport as

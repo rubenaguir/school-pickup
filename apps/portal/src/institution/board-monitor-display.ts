@@ -20,6 +20,13 @@ export const STATUS_META: Record<PickupRequestStatus, StatusMeta> = {
     color: 'var(--status-en-route)',
     soft: 'var(--status-en-route-bg)',
   },
+  // `approaching` (ADR-093): violet activation accent, not a recolor of the
+  // 5-state system — same treatment as `apps/board`'s `STATUS_META`.
+  approaching: {
+    label: 'Cerca',
+    color: 'var(--accent-violet)',
+    soft: 'var(--accent-violet-bg)',
+  },
   arriving: {
     label: 'Llegando',
     color: 'var(--status-arriving)',

@@ -9,7 +9,8 @@ import { CarrilBoard } from '../board/CarrilBoard';
 import { ModeSwitcher } from '../board/ModeSwitcher';
 import { DeliveryPointFilter } from '../board/DeliveryPointFilter';
 import { STATUS_META } from '../board/board-display';
-import { announcePickup } from '../board/tts';
+import { pickupAnnouncementText } from '../board/tts';
+import { boardAudioQueue } from '../board/audio-queue';
 import { readStoredBoardMode, writeStoredBoardMode, type BoardMode } from '../board/board-mode';
 import { useClock } from '../board/useClock';
 import { useDismissalWindow } from '../board/useDismissalWindow';
@@ -237,8 +238,16 @@ export function Home() {
   const points = useDeliveryPoints(institutionId);
 
   const onAnnounce = useCallback((row: BoardRow) => {
+    // `approaching` (ADR-093): a wordless activation chime, no student name, no
+    // "Voceando:" footer update — nothing was spoken.
+    if (row.status === 'approaching') {
+      boardAudioQueue.enqueueActivationChime();
+      return;
+    }
     if (row.status !== 'arriving' && row.status !== 'arrived') return;
-    announcePickup({ studentFullName: row.studentFullName, status: row.status });
+    boardAudioQueue.enqueueVoice(
+      pickupAnnouncementText({ studentFullName: row.studentFullName, status: row.status }),
+    );
     setLastAnnounced({
       studentFullName: row.studentFullName,
       statusLabel: STATUS_META[row.status].label,
@@ -246,7 +255,13 @@ export function Home() {
   }, []);
 
   const onManualAnnounce = useCallback((payload: ManualAnnouncePayload) => {
-    announcePickup({ studentFullName: payload.studentFullName, status: 'arrived' });
+    // The manual "vocear" jumps the queue (ADR-093): it is explicit, must never
+    // sit behind a backlog of automatic announcements, but does not cut off
+    // whatever is already playing.
+    boardAudioQueue.enqueueVoice(
+      pickupAnnouncementText({ studentFullName: payload.studentFullName, status: 'arrived' }),
+      { priority: true },
+    );
     setLastAnnounced({
       studentFullName: payload.studentFullName,
       statusLabel: STATUS_META.arrived.label,

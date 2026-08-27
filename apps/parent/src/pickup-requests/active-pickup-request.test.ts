@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { ACTIVE_PICKUP_STATUSES, findActivePickupRequestId } from './active-pickup-request';
 
 describe('ACTIVE_PICKUP_STATUSES', () => {
-  it('is exactly the non-terminal states of the ADR-024 machine', () => {
-    expect([...ACTIVE_PICKUP_STATUSES].sort()).toEqual(['arrived', 'arriving', 'en_route']);
+  it('is exactly the non-terminal states of the ADR-024 / ADR-093 machine', () => {
+    expect([...ACTIVE_PICKUP_STATUSES].sort()).toEqual([
+      'approaching',
+      'arrived',
+      'arriving',
+      'en_route',
+    ]);
   });
 });
 

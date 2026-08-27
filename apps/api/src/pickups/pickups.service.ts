@@ -123,7 +123,7 @@ const INVALID_DELIVERY_CODE = {
 
 const MAX_DELIVERY_CODE_ATTEMPTS = 10;
 
-const ACTIVE_STATUSES = ['en_route', 'arriving', 'arrived'] as const;
+const ACTIVE_STATUSES = ['en_route', 'approaching', 'arriving', 'arrived'] as const;
 
 // Defensive fallback for the delivery-confirmed push notification (ADR-066
 // pt.5): used only if pickup_request.guardian.fullName is somehow null,

@@ -17,7 +17,7 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 | `address` | `varchar(500)` | NOT NULL | |
 | `location` | `geography(Point,4326)` | NOT NULL | punto de la institución |
 | `geofence_radius_meters` | `int` | NOT NULL, default `100` | radio de arribo. Ver ADR-013 y ADR-025 |
-| `activation_radius_meters` | `int` | NOT NULL, default `3000` | radio de activación del botón "ya voy". Ver ADR-013 y ADR-025 |
+| `activation_radius_meters` | `int` | NOT NULL, default `3000` | radio de activación: distancia a partir de la cual el `worker` pasa el `pickup_requests` a `approaching` (el tutor ya está cerca). Ver ADR-013, ADR-025 y ADR-093 |
 | `timezone` | `varchar(50)` | NOT NULL | ej. `America/Mexico_City` |
 | `cct_code` | `varchar(20)` | nullable | clave de centro de trabajo (SEP). Ver ADR-015 |
 | `levels` | `varchar(50)[]` | NOT NULL, default `{}` | ver ADR-015 |
@@ -47,7 +47,7 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 ## Invariantes de negocio
 
 - `category` debe ser `NULL` cuando `type = 'school'`; solo puede tener valor cuando `type = 'extracurricular'`. Documentado explícitamente en `docs/modelo-datos.md`. No implementado como `CHECK` constraint en la tabla — se recomienda `CHECK (type = 'extracurricular' OR category IS NULL)`.
-- `geofence_radius_meters` (arribo) y `activation_radius_meters` (activación del botón "ya voy") son conceptualmente distintos y coexisten como dos campos independientes; no deben colapsarse en uno solo. Ver ADR-013.
+- `geofence_radius_meters` (arribo → `arriving`) y `activation_radius_meters` (activación → `approaching`) son conceptualmente distintos y coexisten como dos campos independientes; no deben colapsarse en uno solo. Ver ADR-013 y ADR-093.
 - `levels` y `category` son texto libre (arrays/varchar), no catálogo curado, para no bloquear altas de niveles/disciplinas nuevas antes de tener un catálogo cerrado. Ver ADR-015.
 
 ## Enums
@@ -64,6 +64,8 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 - ADR-018 (transiciones válidas de `status`).
 - ADR-024 (`arriving_lead_minutes`: umbral de tiempo configurable para la
   transición a `arriving`).
+- ADR-093 (`activation_radius_meters` pasa a tener consumidor: transición
+  `en_route → approaching` en el `worker`).
 - ADR-025 (defaults de `geofence_radius_meters`, `activation_radius_meters`,
   `arrival_tolerance_minutes` y `advance_notice_minutes`).
 - ADR-084 (catálogo de grupos `institution_groups`, relación `groups`).

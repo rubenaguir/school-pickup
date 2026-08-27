@@ -63,7 +63,7 @@ Plantel: escuela o actividad extracurricular.
 | `address` | varchar | |
 | `location` | geography(Point,4326) | punto de la institución |
 | `geofence_radius_meters` | int | default `100` — radio de **arribo**: detecta llegada a la institución (polígono = mejora futura). Distinto de `activation_radius_meters` — ver ADR-013 y ADR-025 |
-| `activation_radius_meters` | int | default `3000` — radio de **activación**: distancia a partir de la cual se habilita el botón "ya voy" en la app del padre. Coexiste con `geofence_radius_meters`, no lo sustituye — ver ADR-013 y ADR-025 |
+| `activation_radius_meters` | int | default `3000` — radio de **activación**: distancia a partir de la cual el `worker` pasa el `pickup_request` a `approaching` (el tutor ya está cerca). Coexiste con `geofence_radius_meters`, no lo sustituye — ver ADR-013, ADR-025 y ADR-093 |
 | `timezone` | varchar | para los horarios de salida |
 | `cct_code` | varchar | nullable — clave de centro de trabajo (SEP). Ver ADR-015 |
 | `levels` | varchar[] | niveles que ofrece la institución (ej. preescolar, primaria, secundaria). Ver ADR-015 |
@@ -204,7 +204,7 @@ Evento central: "voy en camino".
 | `institution_id` | uuid (FK) | denormalizado desde `enrollment.institution_id` al crear el registro; inmutable después. Evita el join `pickup_request → enrollment → institution` en consultas del tablero y al resolver el topic MQTT. Ver ADR-018 |
 | `guardian_user_id` | uuid (FK) | tutor que va en camino |
 | `delivery_point_id` | uuid (FK) | nullable — punto de entrega asignado a este viaje. Resuelto automáticamente al crear el `pickup_request` matcheando `enrollments.grade_or_group` contra `delivery_points.assigned_groups`. Nullable para instituciones con un solo punto de entrega o cuando no hay match. Ver ADR-012 |
-| `status` | enum | `en_route`, `arriving`, `arrived`, `delivered`, `cancelled` |
+| `status` | enum | `en_route`, `approaching`, `arriving`, `arrived`, `delivered`, `cancelled` |
 | `started_at` | timestamptz | |
 | `estimated_arrival_at` | timestamptz | nullable |
 | `eta_seconds` | int | nullable (último ETA calculado) |
@@ -230,7 +230,7 @@ Evento central: "voy en camino".
 > `pickup_requests` no cambia retroactivamente. Ver ADR-014.
 >
 > **Recogida activa única.** Índice único parcial sobre `(enrollment_id)` con
-> `WHERE status IN ('en_route', 'arriving', 'arrived')`: no puede haber más de un
+> `WHERE status IN ('en_route', 'approaching', 'arriving', 'arrived')`: no puede haber más de un
 > `pickup_request` no terminal por `enrollment_id`. Un segundo intento se rechaza
 > con 422. Ver ADR-024 punto 1 y ADR-025.
 
@@ -310,13 +310,20 @@ Trazabilidad de acciones sensibles.
 ## Ciclo de vida de `pickup_request`
 
 ```
-en_route ──> arriving ──> arrived ──> delivered
-   │   └────── salto directo ──────> arrived
-   │             │            │
-   └─────────────┴────────────┴──> cancelled
+en_route ──> approaching ──> arriving ──> arrived ──> delivered
+   │   └──────── salto directo ─────────────────────> arrived
+   │   └──────── salto directo ──────> arriving
+   │              │           │           │
+   └──────────────┴───────────┴───────────┴──> cancelled
 ```
 
 - `en_route`: el tutor inició el trayecto; se publica ubicación y se calcula ETA.
+- `approaching`: la última posición entró al `activation_radius_meters` de la
+  institución (radio de activación). El `worker` lo detecta con el mismo patrón
+  que usa para `arriving` (distancia haversine). Es un punto intermedio del
+  mismo tramo que `en_route`, no una rama distinta: se puede saltar directo a
+  `arriving`/`arrived` si el tutor arranca ya muy cerca. Marca en el tablero,
+  con un tono breve (sin voz), que el tutor ya está cerca. Ver ADR-093.
 - `arriving`: el ETA es bajo o entró a la geocerca.
 - `arrived`: en Camino A, el tutor confirma "ya llegué" (sin geofence en
   background); el staff lo ve en el tablero. Es alcanzable tanto desde `arriving`

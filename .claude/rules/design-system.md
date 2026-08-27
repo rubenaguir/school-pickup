@@ -20,7 +20,7 @@ Un solo barrel raíz — no hay subpaths por grupo (`/core`, `/feedback`, etc.).
 | Componente | Grupo | Uso |
 |---|---|---|
 | `Button` | core | `variant`: primary/outline/ghost/destructive/subtle · `size`: sm/md/lg. Solo un `primary` (coral) por vista. |
-| `Badge` | core | `tone`: los 5 estados de recogida (`en-route`/`arriving`/`arrived`/`delivered`/`cancelled`) + `brand`/`neutral`. |
+| `Badge` | core | `tone`: los 5 estados de recogida (`en-route`/`arriving`/`arrived`/`delivered`/`cancelled`) + `approaching` (6º estado, ADR-093, acento violeta de activación) + `brand`/`neutral`. |
 | `Card` | core | Superficie base (fondo blanco, borde 1px, sombra `--shadow-xs`) para paneles/listas/stats. |
 | `Avatar` | core | Iniciales, acento rotativo por `index` (paleta de 6 colores). |
 | `Toggle` | core | Interruptor on/off, coral cuando está activo. |
@@ -50,6 +50,9 @@ Fuente exacta de cada uno: `packages/ui/src/components/{core,feedback,navigation
   - `delivered` → `--status-delivered` verde (`#22C55E`)
   - `cancelled` → `--status-cancelled` gris (`#94A3B8`)
   - Cada uno trae variante `-bg`/`-fg` para fondo/texto de badge.
+  - **6º estado `approaching`** (ADR-093, radio de activación): NO tiene token
+    `--status-*` propio — reutiliza el acento `--accent-violet` (el mismo con
+    que `GeofenceMap` pinta el anillo de activación). Etiqueta "Cerca".
 - **Semánticos:** `--success`, `--danger` (+ `-bg`/`-border`), `--warning`.
 - **Acentos de rol/categoría** (avatares, tags — rotar, no fijar): `--accent-{blue,teal,violet,amber,pink,slate}` (+ `-bg`/`-fg`).
 

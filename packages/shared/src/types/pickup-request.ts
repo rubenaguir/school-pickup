@@ -1,4 +1,5 @@
-export type PickupRequestStatus = 'en_route' | 'arriving' | 'arrived' | 'delivered' | 'cancelled';
+export type PickupRequestStatus =
+  'en_route' | 'approaching' | 'arriving' | 'arrived' | 'delivered' | 'cancelled';
 
 export type ArrivalMode = 'vehicle' | 'walking';
 

@@ -42,7 +42,7 @@ export function CarrilBoard({
   onLogout,
 }: CarrilBoardProps) {
   const countActive = rows.filter(
-    (row) => row.status === 'en_route' || row.status === 'arriving',
+    (row) => row.status === 'en_route' || row.status === 'approaching' || row.status === 'arriving',
   ).length;
   const countPuerta = rows.filter((row) => row.status === 'arrived').length;
 

@@ -18,6 +18,10 @@ function buildPickupRequest(overrides?: Partial<PickupRequest>): PickupRequest {
       location: { type: 'Point', coordinates: [-99.1332, 19.4326] },
       arrivingLeadMinutes: 5,
       geofenceRadiusMeters: 100,
+      // Deliberately tight so `validPayload` (~770 m out) stays outside it and
+      // the ETA-only tests keep exercising the no-transition path. The
+      // approaching tests below use their own closer payloads.
+      activationRadiusMeters: 200,
     },
     guardian: { id: 'user-1', fullName: 'Sofía Ramírez' },
     deliveryPoint: null,
@@ -417,6 +421,105 @@ describe('LocationIngestionService', () => {
       await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
 
       expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('automatic transition to approaching (feature 020, ADR-093)', () => {
+    // ~140 m from the institution: inside activationRadiusMeters (200), outside
+    // geofenceRadiusMeters (100), and the default mocked ETA (600 s) stays above
+    // arrivingLeadMinutes — so only the approaching condition fires.
+    const withinActivationPayload = {
+      lat: 19.43385,
+      lng: -99.1332,
+      recordedAt: '2026-07-17T08:05:00.000Z',
+    };
+
+    it('transitions en_route to approaching when inside activationRadiusMeters but not yet arriving', async () => {
+      const { service, pickupRequestRepo, statusHistoryRepo, mqttClient } = buildService();
+
+      await service.handleLocationMessage(
+        INSTITUTION_ID,
+        PICKUP_REQUEST_ID,
+        withinActivationPayload,
+      );
+
+      expect(pickupRequestRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'approaching' }),
+      );
+      expect(statusHistoryRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'approaching', changedBy: null }),
+      );
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        `school-pickup/institution/${INSTITUTION_ID}/board`,
+        expect.objectContaining({ status: 'approaching' }),
+        1,
+      );
+      expect(mqttClient.publish).toHaveBeenCalledTimes(2);
+    });
+
+    it('stays en_route when still outside the activation radius', async () => {
+      const { service, statusHistoryRepo, mqttClient } = buildService();
+
+      await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
+
+      expect(statusHistoryRepo.save).not.toHaveBeenCalled();
+      expect(mqttClient.publish).toHaveBeenCalledWith(
+        `school-pickup/institution/${INSTITUTION_ID}/board`,
+        expect.objectContaining({ status: 'en_route' }),
+        1,
+      );
+    });
+
+    it('advances approaching to arriving once an arriving condition is met', async () => {
+      const { service, pickupRequestRepo, statusHistoryRepo } = buildService({
+        pickupRequest: buildPickupRequest({ status: 'approaching' }),
+        mapsProvider: {
+          getEta: vi.fn().mockResolvedValue({ etaSeconds: 250, distanceMeters: 2000 }),
+        },
+      });
+
+      await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, validPayload);
+
+      expect(pickupRequestRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'arriving' }),
+      );
+      expect(statusHistoryRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'arriving', changedBy: null }),
+      );
+    });
+
+    it('jumps en_route straight to arriving without passing through approaching', async () => {
+      const { service, statusHistoryRepo } = buildService();
+
+      await service.handleLocationMessage(INSTITUTION_ID, PICKUP_REQUEST_ID, {
+        lat: 19.4327,
+        lng: -99.1333,
+        recordedAt: '2026-07-17T08:05:00.000Z',
+      });
+
+      expect(statusHistoryRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'arriving', changedBy: null }),
+      );
+      expect(statusHistoryRepo.save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'approaching' }),
+      );
+    });
+
+    it('does not re-evaluate approaching for a pickup_request already in approaching that is still far from arriving', async () => {
+      const { service, pickupRequestRepo, statusHistoryRepo } = buildService({
+        pickupRequest: buildPickupRequest({ status: 'approaching' }),
+      });
+
+      await service.handleLocationMessage(
+        INSTITUTION_ID,
+        PICKUP_REQUEST_ID,
+        withinActivationPayload,
+      );
+
+      expect(statusHistoryRepo.save).not.toHaveBeenCalled();
+      expect(pickupRequestRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'approaching' }),
+      );
     });
   });
 });

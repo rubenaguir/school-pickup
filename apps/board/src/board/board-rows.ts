@@ -22,7 +22,12 @@ export type BoardRow = PickupRequestBoardPayload;
  * point 2), so a delta that arrives in any other state means the pickup left
  * the board rather than changed on it.
  */
-const ACTIVE_STATUSES: readonly PickupRequestStatus[] = ['en_route', 'arriving', 'arrived'];
+const ACTIVE_STATUSES: readonly PickupRequestStatus[] = [
+  'en_route',
+  'approaching',
+  'arriving',
+  'arrived',
+];
 
 export function isActiveBoardStatus(status: PickupRequestStatus): boolean {
   return ACTIVE_STATUSES.includes(status);
@@ -31,6 +36,7 @@ export function isActiveBoardStatus(status: PickupRequestStatus): boolean {
 function isBoardStatus(value: unknown): value is PickupRequestStatus {
   return (
     value === 'en_route' ||
+    value === 'approaching' ||
     value === 'arriving' ||
     value === 'arrived' ||
     value === 'delivered' ||
@@ -142,9 +148,10 @@ export interface MergeBoardDeltaResult {
  *   never enters `changedStatusIds` — a row that just left the screen is not
  *   announced (ADR-069 point 5);
  * - a delta for a pickup the board had not seen is appended, and enters
- *   `changedStatusIds` only when it shows up directly in `arriving` or
- *   `arrived` — a row that appears already in one of those states must still
- *   be announced;
+ *   `changedStatusIds` only when it shows up directly in `approaching`,
+ *   `arriving` or `arrived` — a row that appears already in one of those
+ *   states must still be announced (the chime, for `approaching`; the voice,
+ *   for the other two — ADR-093);
  * - a delta that replaces an existing row enters `changedStatusIds` only when
  *   its `status` differs from the row it replaced.
  */
@@ -165,7 +172,11 @@ export function mergeBoardDelta(rows: readonly BoardRow[], delta: BoardRow): Mer
   const changedStatusIds = new Set<string>();
   if (current) {
     if (delta.status !== current.status) changedStatusIds.add(delta.pickupRequestId);
-  } else if (delta.status === 'arriving' || delta.status === 'arrived') {
+  } else if (
+    delta.status === 'approaching' ||
+    delta.status === 'arriving' ||
+    delta.status === 'arrived'
+  ) {
     changedStatusIds.add(delta.pickupRequestId);
   }
 
@@ -177,19 +188,20 @@ export function mergeBoardDelta(rows: readonly BoardRow[], delta: BoardRow): Mer
 }
 
 /**
- * Status priority the real kit uses (`arrived` → `arriving` → `en_route`),
- * ETA as the tiebreak within each group (ADR-071 point 5, amending ADR-069
- * point 2's "ETA ascending only"). In practice the two orders coincide
- * almost always — `arrived`/`arriving` already carry a low ETA by
- * definition — but with enough simultaneous active rows they can diverge,
- * and the kit's rule is status first.
+ * Status priority the real kit uses (`arrived` → `arriving` → `approaching` →
+ * `en_route`), ETA as the tiebreak within each group (ADR-071 point 5,
+ * amending ADR-069 point 2's "ETA ascending only"; `approaching` slotted in
+ * ADR-093). In practice the orders coincide almost always — the closer states
+ * already carry a low ETA by definition — but with enough simultaneous active
+ * rows they can diverge, and the kit's rule is status first.
  */
 const STATUS_PRIORITY: Record<BoardRow['status'], number> = {
   arrived: 0,
   arriving: 1,
-  en_route: 2,
-  delivered: 3,
-  cancelled: 4,
+  approaching: 2,
+  en_route: 3,
+  delivered: 4,
+  cancelled: 5,
 };
 
 interface SortableBoardRow {

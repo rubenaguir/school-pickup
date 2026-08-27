@@ -25,7 +25,12 @@ export type QueueRow = PickupRequestQueuePayload;
  * point 6), so a delta that arrives in any other state means the pickup left
  * the queue rather than changed inside it.
  */
-const ACTIVE_STATUSES: readonly PickupRequestStatus[] = ['en_route', 'arriving', 'arrived'];
+const ACTIVE_STATUSES: readonly PickupRequestStatus[] = [
+  'en_route',
+  'approaching',
+  'arriving',
+  'arrived',
+];
 
 export function isActiveQueueStatus(status: PickupRequestStatus): boolean {
   return ACTIVE_STATUSES.includes(status);
@@ -34,6 +39,7 @@ export function isActiveQueueStatus(status: PickupRequestStatus): boolean {
 function isQueueStatus(value: unknown): value is PickupRequestStatus {
   return (
     value === 'en_route' ||
+    value === 'approaching' ||
     value === 'arriving' ||
     value === 'arrived' ||
     value === 'delivered' ||

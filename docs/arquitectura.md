@@ -61,8 +61,11 @@ el plugin de background sin tocar el resto. Ver `docs/decisiones.md`.
 ### 5. `board` (PWA React, modo kiosko)
 Pantalla grande dentro de la institución. Muestra el listado de alumnos próximos
 a ser recogidos, estilo "llegadas de aeropuerto". Se suscribe por MQTT.js al
-topic **agregado** de su institución y usa la Web Speech API (TTS) para el
-voceo automático.
+topic **agregado** de su institución. Todo el sonido del tablero (Web Speech API
+para el voceo, más los tonos generados con Web Audio API) pasa por una única
+cola FIFO con pausas entre anuncios (`audio-queue.ts`, ADR-093): tono de
+activación para `approaching`, tono de atención + voz para `arriving`/`arrived`
+y para el anuncio manual del gate console.
 
 ### 6. Broker MQTT (Mosquitto)
 Transporte de tiempo real. Expone un listener WSS para los navegadores. El `api`
@@ -120,8 +123,10 @@ interfaces (ports) con implementación concreta inyectada por NestJS
 misma familia de decisión, aunque vive en el frontend y no en el backend.
 
 **Máquina de estados de `pickup_request` en `packages/shared`.** Las
-transiciones válidas del ciclo de vida (`en_route → arriving → arrived →
-delivered/cancelled`, ver ADR-013 y `docs/modelo-datos.md`) se implementan
+transiciones válidas del ciclo de vida (`en_route → approaching → arriving →
+arrived → delivered/cancelled`, con `approaching` como punto intermedio
+opcional del mismo tramo que `en_route` — ver ADR-013, ADR-093 y
+`docs/modelo-datos.md`) se implementan
 como función pura, sin dependencia de TypeORM ni de NestJS, en
 `packages/shared/pickup-request-status-machine.ts` (nombre sugerido), con
 funciones tipo `canTransition(from, to): boolean` y
@@ -258,8 +263,8 @@ raíz:
   mensaje entrante en una llamada al servicio de dominio correspondiente.
 - `LocationIngestionModule` — features 019 y 020: persiste cada lectura en
   `location_updates`, aplica el throttling, recalcula el ETA vía `MapsProvider` y
-  evalúa la transición automática a `arriving` contra la máquina de estados
-  compartida.
+  evalúa las transiciones automáticas a `approaching` (radio de activación,
+  ADR-093) y a `arriving` contra la máquina de estados compartida.
 - `MapsModule` — provee la implementación concreta de `MapsProvider`
   (`StubMapsProvider` hoy).
 - `PurgeModule` — feature 023: el job diario de retención de `location_updates`,

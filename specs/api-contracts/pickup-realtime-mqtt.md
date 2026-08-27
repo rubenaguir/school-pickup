@@ -136,7 +136,7 @@ school-pickup/institution/{institutionId}/board
 {
   "kind": "row",
   "pickupRequestId": "uuid",
-  "status": "en_route | arriving | arrived | delivered | cancelled",
+  "status": "en_route | approaching | arriving | arrived | delivered | cancelled",
   "studentFullName": "string (join: student vía enrollment)",
   "gradeOrGroup": "string | null (join: enrollment)",
   "deliveryPointId": "uuid | null",
@@ -217,7 +217,7 @@ school-pickup/institution/{institutionId}/delivery-point/{deliveryPointId}/queue
 ```json
 {
   "pickupRequestId": "uuid",
-  "status": "en_route | arriving | arrived | delivered | cancelled",
+  "status": "en_route | approaching | arriving | arrived | delivered | cancelled",
   "studentFullName": "string (join: student vía enrollment)",
   "gradeOrGroup": "string | null (join: enrollment)",
   "vehicleDescription": "string | null",
@@ -303,7 +303,7 @@ arquitectónico que ya separa este topic de la cola de la consola de puerta
 ```json
 {
   "pickupRequestId": "uuid",
-  "status": "en_route | arriving | arrived | delivered | cancelled",
+  "status": "en_route | approaching | arriving | arrived | delivered | cancelled",
   "studentFullName": "string (join: student vía enrollment)",
   "gradeOrGroup": "string | null (join: enrollment)",
   "deliveryPointId": "uuid | null",

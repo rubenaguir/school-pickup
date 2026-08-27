@@ -6,7 +6,12 @@ import type { PickupRequestStatus } from './types/pickup-request';
  * (ADR-071 pt.2), so a delta that arrives in any other state means the
  * pickup left the monitor rather than changed on it.
  */
-const ACTIVE_STATUSES: readonly PickupRequestStatus[] = ['en_route', 'arriving', 'arrived'];
+const ACTIVE_STATUSES: readonly PickupRequestStatus[] = [
+  'en_route',
+  'approaching',
+  'arriving',
+  'arrived',
+];
 
 export function isActiveBoardStatus(status: PickupRequestStatus): boolean {
   return ACTIVE_STATUSES.includes(status);

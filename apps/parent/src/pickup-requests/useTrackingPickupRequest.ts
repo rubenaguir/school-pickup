@@ -87,6 +87,7 @@ function asApiError(caught: unknown): ApiError {
 function isTrackingStatus(value: unknown): value is PickupRequestStatus {
   return (
     value === 'en_route' ||
+    value === 'approaching' ||
     value === 'arriving' ||
     value === 'arrived' ||
     value === 'delivered' ||

@@ -7233,3 +7233,102 @@ de cuánto contenido quepa arriba.
   reutiliza).
 - `apps/api/src/pickups/pickups.service.ts`
   (`ACTIVE_PICKUP_REQUEST_EXISTS`, sin cambios — se reutiliza tal cual).
+
+## ADR-093 — Nuevo estado `approaching` para el radio de activación; cola de audio con pausas y dos tonos distintos (aviso vs. atención)
+
+**Contexto.** Al revisar el radio de arribo/activación (pregunta del
+humano), se confirmó en el código que `activationRadiusMeters` es un
+campo de configuración de institución (editable en
+`InstitutionProfile.tsx`) **sin ningún consumidor** — ni en
+`location-ingestion.service.ts` (worker), ni en la creación de
+recogidas (`pickups.service.ts`), ni en `apps/parent`. La propia UI ya
+documenta la intención original ("habilita el botón «ya voy» del
+tutor"), pero nunca se implementó. Se descarta esa idea original — el
+botón "¡ya voy!" nunca debe deshabilitarse — y se define un uso nuevo:
+marcar en el tablero, mediante un cambio de estado real (no solo un
+flag visual), que el tutor ya está cerca, con un tono breve — sin voz,
+sin nombre del alumno.
+
+De paso se identificó un riesgo real de escala: con muchos alumnos en
+recogida simultánea (ej. 100 niños a la salida), los voceos existentes
+(`arriving`/`arrived`) se encolan uno tras otro sin pausa
+(`tts.ts` no tiene cola propia, depende del serializado nativo del
+navegador) — ininteligibles en sucesión, sumado al ruido ambiente de
+la salida.
+
+**Decisión.**
+
+1. **Nuevo estado `approaching`**, agregado a
+   `pickup_requests_status_enum` y
+   `pickup_request_status_history_status_enum` (migración nueva) y al
+   tipo `PickupRequestStatus` compartido. Transiciones nuevas en
+   `pickup-request-status-machine.ts` (única fuente de verdad,
+   ADR-024 pt.8): `en_route → approaching` se suma a las ya
+   existentes; `approaching → [arriving, arrived, cancelled]` (mismo
+   conjunto que ya tiene `en_route`, ya que `approaching` es un punto
+   intermedio del mismo tramo, no una rama distinta).
+2. **Detección en el worker** (`location-ingestion.service.ts`),
+   mismo lugar y mismo patrón que ya evalúa `arriving` (distancia vía
+   `haversineDistanceMeters`): se evalúa primero si se cumplen las
+   condiciones de `arriving` (como hoy, ahora también válido viniendo
+   desde `approaching`, no solo desde `en_route`); si no, y el estado
+   sigue en `en_route`, se evalúa si la distancia cae dentro de
+   `activationRadiusMeters` → transición a `approaching`. Un tutor que
+   arranca ya muy cerca puede saltar `approaching` directo a
+   `arriving`/`arrived` — el estado nunca es obligatorio de pasar, la
+   máquina de estados ya lo permite.
+3. **`isActiveBoardStatus`, `STATUS_PRIORITY`, `CANCELLABLE_STATUSES`
+   (`apps/parent`), `TRACKING_STATUSES`/`isTracking`**: todos suman
+   `approaching` al conjunto correspondiente — el viaje sigue en
+   curso exactamente igual que en `en_route`/`arriving` (wake lock,
+   botón "Ya llegué" visible, aviso al presionar "Volver", se puede
+   cancelar). Etiqueta nueva para el badge del tutor: "Cerca".
+4. **Audio del tablero — cola única, con pausas, dos tonos
+   distintos.** Nuevo módulo de cola en `apps/board` (sin dependencia
+   de archivos de audio — tonos generados con Web Audio API,
+   `oscillator`, para no depender de assets):
+   - **Timbre de activación** (`approaching`): un tono corto y suave,
+     sin voz, sin nombre — distinto del tono de atención (punto
+     siguiente) para no confundirse.
+   - **Tono de atención**, distinto al anterior, breve, inmediatamente
+     antes de cada voceo hablado (`arriving`/`arrived`) — para que se
+     note que viene un anuncio importante.
+   - **Una sola cola compartida** para los tres tipos de evento
+     (timbre de activación, atención+voceo de `arriving`, atención+voceo
+     de `arrived`) — nunca se solapan. Cada ítem deja una pausa fija
+     después de terminar antes de que arranque el siguiente (breathing
+     room real entre anuncios, no la simple concatenación que hace hoy
+     el navegador).
+   - **El botón manual de "volver a anunciar" (gate console) tiene
+     prioridad sobre todo lo demás y nunca se omite — es explícito,
+     no un descuido.** Si se dispara mientras algo ya está sonando,
+     no lo interrumpe (evita cortar audio a la mitad y que suene mal),
+     pero se inserta al frente de la fila de espera, así que es lo
+     próximo en sonar en cuanto termine lo que esté en curso — nunca
+     detrás de un backlog de anuncios automáticos. Como la cola nunca
+     descarta nada (FIFO puro salvo esta única excepción de orden),
+     "nunca se omite" ya se cumple por diseño; lo que faltaba era la
+     prioridad de orden, no la garantía de que suene.
+   - Nada de esto cambia el volumen o la insistencia — un timbre que
+     se repite mucho por muchos alumnos simultáneos debe seguir siendo
+     tolerable al oído, no un problema aparte a resolver ahora (se
+     deja para evaluar con uso real, no se sobre-diseña de entrada).
+
+**Consecuencias.** Migración con nuevo valor de enum + entrada en la
+máquina de estados. El tablero gana un subsistema de audio propio
+(antes no existía ninguna cola, solo llamadas directas a
+`speechSynthesis.speak`), reutilizable si en el futuro se agregan más
+tipos de anuncio. `activationRadiusMeters` dejó de ser un campo muerto
+en la configuración de institución.
+
+## Referencias
+
+- `apps/portal/src/screens/InstitutionProfile.tsx` (línea 346, la
+  descripción original que prometía deshabilitar el botón — ya no
+  aplica, el botón nunca se deshabilita).
+- `packages/shared/src/pickup-request-status-machine.ts` (ADR-024
+  pt.8, única fuente de verdad de transiciones).
+- `apps/board/src/board/tts.ts` (el `announcePickup` actual, sin cola
+  — se envuelve, no se reescribe desde cero).
+- `apps/portal/src/screens/GateConsole.tsx` (botón manual de
+  "volver a anunciar", entra a la misma cola nueva).

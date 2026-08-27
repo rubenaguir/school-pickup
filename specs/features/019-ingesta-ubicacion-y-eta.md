@@ -20,8 +20,8 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
   `school-pickup/institution/{institutionId}/pickup/{pickupRequestId}/location`
   (`docs/arquitectura.md`). La publicación la hace la app `parent`; el ACL por
   tenant del broker garantiza que solo clientes de esa institución publican ahí.
-- El `pickup_requests` está en un `status` no terminal (`en_route`/`arriving`/
-  `arrived`): recibir ubicación de un trayecto ya `delivered`/`cancelled` no
+- El `pickup_requests` está en un `status` no terminal (`en_route`/`approaching`/
+  `arriving`/`arrived`): recibir ubicación de un trayecto ya `delivered`/`cancelled` no
   alimenta ni ETA ni tablero (principio de "rastrear solo durante la ventana de
   recogida", `docs/arquitectura.md` §Privacidad).
 
@@ -44,7 +44,7 @@ regresivas. Es el motor de tiempo real de la recogida, del lado del servidor.
   posición conocida, desnormalizada para lectura rápida del tablero),
   `estimated_arrival_at` y `eta_seconds`.
 - Tras actualizar, el `worker` publica el estado (ver feature 020 para la
-  posible transición a `arriving`, y `pickup-realtime-mqtt.md` para el payload).
+  posible transición a `approaching`/`arriving`, y `pickup-realtime-mqtt.md` para el payload).
   Esta feature cubre la ingesta y el ETA; la evaluación de transición de estado
   vive en la feature 020.
 
