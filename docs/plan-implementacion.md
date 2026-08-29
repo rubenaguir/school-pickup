@@ -824,11 +824,16 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
       corriendo ahí; en Akky solo se compró el dominio, nunca hosting).
       ADR-010 queda con una nota de corrección apuntando a ADR-100, sin
       reescribir su texto original.
-- [ ] `specs/ui-screens/` sigue vacía (ver `specs/README.md`) — gap real (ver `specs/README.md`) — gap real
-      de metodología SDD, no solo bloqueo resuelto: las pantallas "hero"
-      que debía cubrir (tablero, consola de puerta, "Camino A") ya se
-      construyeron sin la spec previa. Decisión pendiente: escribirlas
-      retroactivamente o descartar este tipo de spec explícitamente.
+- [x] `specs/ui-screens/` — **Resuelto — ADR-101**: se descarta como tipo
+      de spec del proyecto, decisión final, no pendiente. Causa real
+      (corregida tras aporte del humano): no fue solo "tokens
+      bloqueados" — las pantallas siguieron desalineadas de los kits
+      reales incluso después de ADR-036, hasta que auditorías tardías
+      (ADR-071 tablero, ADR-072/073/074 portal) obligaron a
+      regenerarlas. Nunca hubo un punto estable donde congelar la spec
+      tuviera sentido; la complejidad de las 3 pantallas ya queda
+      capturada en esos ADRs y en ADR-063–066 (Camino A).
+      `specs/README.md` actualizado.
 - [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md`
 - [ ] Pasada de limpieza de prosa en `specs/` — la corrección de nomenclatura
       de tablas (ADR-027, singular→plural) dejó algunas oraciones en español

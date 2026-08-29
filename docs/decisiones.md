@@ -7884,3 +7884,82 @@ originalmente en ADR-010.
   reescribirlo).
 - `docs/decisiones.md` — nota de corrección agregada directamente en el
   texto de ADR-010, apuntando aquí.
+
+## ADR-101 — `specs/ui-screens/` se descarta como tipo de spec del proyecto
+
+**Contexto.** `specs/README.md` definía un 4to tipo de spec — una por
+pantalla "hero" o compleja (tablero de institución, consola de puerta,
+"Camino A" del tutor) — dejado vacío desde el inicio "pendiente de los
+tokens del design system". Encontrado como gap en la auditoría exhaustiva
+de Fase 10 — el tercero y último de los 3 gaps reales de esa auditoría
+(los otros dos, aviso de privacidad y ADRs retroactivos de
+infraestructura, ya se resolvieron en ADR-099 y ADR-100).
+
+**La causa real no fue solo "tokens bloqueados, luego nadie volvió"**
+(corrección aportada por el humano tras la primera versión de este
+análisis): los tokens de ADR-036 llegaron, pero eso no significó
+pantallas ya alineadas a los kits reales. Se siguieron construyendo
+pantallas desalineadas de `ui_kits/portal-admin`, `tablero-institucion` y
+`puerta-consola` durante buena parte del proyecto — tarjetas centradas
+sueltas sin el shell del kit, tablero sin sus 3 modos reales. Ese
+desalineamiento recién se detectó en auditorías tardías (ADR-071 para el
+tablero; ADR-072/073/074 para el portal), que obligaron a **regenerar**
+pantallas que ya estaban construidas para alinearlas de verdad al
+design system. Es decir: las pantallas fueron un blanco móvil durante
+la mayor parte del proyecto, no un objetivo estable — nunca hubo un
+punto intermedio razonable donde congelar una spec de `ui-screens/`
+tuviera sentido, porque para cuando los tokens ya existían, las
+pantallas todavía no coincidían con el diseño real. Solo se
+estabilizaron de verdad hasta esas auditorías, ya muy avanzada la Fase
+7/9 del proyecto.
+
+**Decisión.** Se descarta `ui-screens/` como tipo de spec del proyecto —
+no queda pendiente, es una decisión final. La complejidad de las 3
+pantallas que debía cubrir ya está capturada en otro lado:
+
+- El **tablero de institución** (3 modos: Andén, Sereno, Carril) está
+  documentado en ADR-071 (rediseño completo contra el kit real, la
+  auditoría que detectó el desalineamiento) y ADR-069 (lógica de
+  fusión/voceo).
+- La **consola de puerta** (layout de dos paneles, código de entrega,
+  "Vocear") está en ADR-073 (misma auditoría, mismo hallazgo) y ADR-024
+  (flujo completo de `pickup_request`).
+- **"Camino A"** (seguimiento del tutor: mapa, ETA, Wake Lock, código de
+  entrega) está en ADR-063 a ADR-066 — esta pantalla no pasó por el
+  mismo ciclo de regeneración tardía que el tablero/portal, se mantuvo
+  más estable desde su construcción original.
+
+Escribir `ui-screens/` retroactivamente, ahora que las 3 pantallas por
+fin están construidas y estables, duplicaría esa documentación sin el
+beneficio real que SDD busca — atrapar problemas de diseño **antes** de
+construir, no documentar después de que ya se construyó, se descubrió
+desalineada, y se reconstruyó. Mismo criterio que ADR-070 (QR de código
+de entrega) y ADR-074 punto final (roles de OPS): documentar la decisión
+de no construir/no escribir especulativamente, en vez de dejarlo como
+pendiente indefinido sin resolver.
+
+**Consecuencias.** `specs/ui-screens/` permanece vacía (`.gitkeep`) de
+forma permanente — no es deuda técnica ni un hueco de metodología sin
+cerrar, es una decisión informada por lo que realmente pasó: el tipo de
+spec habría llegado tarde de cualquier forma, dado que las pantallas
+tardaron en estabilizarse mucho más de lo que el plan original
+anticipaba. `specs/README.md` actualizado para reflejar esto. Ninguna
+pantalla nueva del proyecto necesitará este tipo de spec en el futuro
+salvo que se revierta explícitamente esta decisión con su propio ADR.
+
+## Referencias
+
+- ADR-036 (tokens del design system — llegaron antes de que las
+  pantallas estuvieran alineadas, no resolvieron el desalineamiento por
+  sí solos).
+- ADR-071 (tablero) y ADR-072/073/074 (portal) — las auditorías tardías
+  que detectaron el desalineamiento y forzaron la regeneración de
+  pantallas ya construidas; documentan de facto lo que `ui-screens/`
+  hubiera cubierto.
+- ADR-063–066 (Camino A) — la única de las 3 pantallas que no pasó por
+  un ciclo de regeneración tardía.
+- ADR-024 (flujo completo de `pickup_request`, consola de puerta).
+- ADR-070 (QR), ADR-074 punto final (roles OPS) — mismo criterio de
+  documentar una decisión de no construir/no escribir, en vez de dejarlo
+  pendiente.
+- `specs/README.md`.

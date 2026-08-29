@@ -71,9 +71,12 @@ request/response, códigos de error y reglas de autorización (qué rol o
 condición se necesita para cada operación).
 
 ### `ui-screens/`
-Un documento por pantalla "hero" o compleja (ej. tablero de institución,
-consola de puerta, "Camino A" del padre). Mapeo campo↔entidad, estados
-posibles de la pantalla, y acciones disponibles en cada estado.
+**Descartado — ver ADR-101.** El template quedó documentado aquí por
+completitud histórica, pero el proyecto decidió no usar este tipo de
+spec. Originalmente: un documento por pantalla "hero" o compleja (ej.
+tablero de institución, consola de puerta, "Camino A" del padre).
+Mapeo campo↔entidad, estados posibles de la pantalla, y acciones
+disponibles en cada estado.
 
 ## Estado actual
 
@@ -87,15 +90,20 @@ posibles de la pantalla, y acciones disponibles en cada estado.
   super-admin (024–025), perfil de tutor y reportes (026–027),
   notificación push, edición de grupo y baja de enrollment (028–030).
 - **`api-contracts/`** — 25 archivos, completo.
-- **`ui-screens/`** — vacía (con `.gitkeep`). **Gap real, no solo
-  pendiente de bloqueo.** La justificación original ("pendiente de los
-  tokens del design system") ya no aplica — esos tokens existen desde
-  ADR-036, y las pantallas "hero" que este tipo de spec debía cubrir
-  (tablero de institución, consola de puerta, "Camino A" del padre) ya
-  se construyeron (Fase 6, 8, 9, 10). Nunca se volvió a este tipo de spec
-  una vez desbloqueado — pendiente de decisión: escribirlas
-  retroactivamente o descartar explícitamente este tipo de spec para el
-  proyecto. Ver `docs/plan-implementacion.md`.
+- **`ui-screens/`** — vacía (con `.gitkeep`) **a propósito, decisión
+  final.** ADR-101: los tokens del design system (ADR-036) llegaron antes
+  de que las pantallas reales estuvieran alineadas a los kits — se
+  siguieron construyendo pantallas desalineadas de los kits (`ui_kits/
+  portal-admin`, `tablero-institucion`, `puerta-consola`) durante buena
+  parte del proyecto, hasta que auditorías tardías (ADR-071 tablero;
+  ADR-072/073/074 portal) obligaron a **regenerar** pantallas ya
+  construidas para alinearlas de verdad. Las pantallas fueron un blanco
+  móvil hasta esas auditorías — nunca hubo un punto estable antes de eso
+  donde congelar una spec de `ui-screens/` tuviera sentido, y para
+  cuando sí se estabilizaron, escribirla habría sido pura duplicación
+  retroactiva sin el beneficio real de SDD (atrapar problemas de diseño
+  antes de construir). Este tipo de spec queda descartado para el
+  proyecto, no pendiente.
 
 ## Orden de migración
 
