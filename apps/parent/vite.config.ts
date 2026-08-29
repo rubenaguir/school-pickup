@@ -8,7 +8,11 @@ export default defineConfig({
     buildIdPlugin(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate' (ADR-095): the plugin's injected script must
+      // install a new version silently and wait — never reload the page on its
+      // own. The reload only happens after the user confirms it in the ADR-094
+      // banner, which calls `updateSW(true)` (see src/update/service-worker.ts).
+      registerType: 'prompt',
       // injectManifest, not generateSW (ADR-066 pt.6): generateSW cannot host a
       // custom `push`/`notificationclick` handler, needed for the delivery-
       // confirmation push notification. `src/sw.ts` is our own service worker;

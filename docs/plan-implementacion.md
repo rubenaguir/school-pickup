@@ -704,6 +704,21 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         `selectedDeliveryPointId` en `sessionStorage` (uso único) y lo
         restaura al montar `Home.tsx`, con aviso breve en pantalla
         antes de recargar
+- [x] **`apps/parent`: SW no activaba la versión nueva (ADR-095)**:
+  - [x] `registerType: 'prompt'` (no `'autoUpdate'`) en `vite.config.ts`
+  - [x] `sw-src/sw.ts`: listener de mensaje `SKIP_WAITING` →
+        `self.skipWaiting()` (verificado presente en `dist/sw.js` tras
+        el build)
+  - [x] Registro del SW al iniciar vía `virtual:pwa-register`
+        (`src/update/service-worker.ts`, llamado desde `main.tsx`);
+        `updateSW` guardado en el módulo, expuesto como
+        `applyPendingUpdate()`
+  - [x] Botón "Actualizar ahora" del banner (ADR-094) llama
+        `applyPendingUpdate()` → `updateSW(true)` en vez de
+        `window.location.reload()` a secas
+  - [x] No auto-actualiza nunca sin confirmación explícita — `'prompt'`
+        + sin `onNeedRefresh`/`onOfflineReady`; la detección sigue
+        siendo 100% de ADR-094
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

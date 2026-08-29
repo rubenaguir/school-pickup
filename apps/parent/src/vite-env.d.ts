@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/vanillajs" />
 
 /** Build id injected by `buildIdPlugin` (ADR-094); compared against `/version.json`. */
 declare const __APP_BUILD_ID__: string;

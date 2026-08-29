@@ -7422,3 +7422,72 @@ actualización.
 - ADR-093 (`boardAudioQueue`, `isIdle()` nuevo sobre esa misma cola).
 - ADR-063 pt.1 (riesgo de cache stale ya documentado para
   `apps/parent`, la razón por la que no se repite en portal/tablero).
+
+## ADR-095 — `apps/parent`: el service worker nunca activaba la versión nueva; se resuelve sin reabrir la puerta al auto-reload que ADR-094 evitó a propósito
+
+**Contexto.** Detectado al ayudar a un usuario con la PWA instalada en
+su teléfono desde antes de ADR-094: la app no detectaba ninguna
+actualización. Investigado en el código real: `sw-src/sw.ts` (el
+service worker propio de `apps/parent`, `strategies: 'injectManifest'`
+por el handler de push de ADR-066 pt.6) nunca llama a
+`self.skipWaiting()` ni escucha ningún mensaje para forzarlo. Con
+`registerType: 'autoUpdate'`, `vite-plugin-pwa` sí inyecta un script de
+registro en `index.html` que intenta activar la versión nueva y
+recargar por su cuenta — pero como el SW nunca responde a esa señal,
+la versión nueva se queda "esperando" indefinidamente mientras haya
+una instancia vieja abierta. Ese es el bug inmediato.
+
+Pero agregar solo la pieza que falta (el listener de `skipWaiting`)
+sin más **reabre un problema que ADR-094 ya había resuelto a
+propósito**: con `autoUpdate`, el script de `vite-plugin-pwa` recarga
+la página por su cuenta en cuanto detecta la versión nueva, sin
+coordinarse con nada — exactamente el auto-reload sin avisar que
+ADR-094 evitó deliberadamente con `useActivePickupRequest` (nunca
+interrumpir una recogida en curso). Confirmado explícitamente con el
+humano: en `apps/parent`, la actualización **siempre** requiere
+confirmación explícita del usuario — nunca debe aplicarse sola.
+
+**Decisión.**
+
+1. `registerType` cambia de `'autoUpdate'` a `'prompt'` — el script
+   inyectado por `vite-plugin-pwa` deja de recargar por su cuenta;
+   instala la versión nueva en silencio y espera.
+2. `sw-src/sw.ts` gana el listener que falta:
+   `self.addEventListener('message', (event) => { if (event.data?.type
+   === 'SKIP_WAITING') self.skipWaiting(); })` — ahora sí puede
+   activarse, pero solo cuando se le indique explícitamente.
+3. `apps/parent` registra el SW una vez al iniciar (vía
+   `virtual:pwa-register`, la API oficial del plugin) y guarda la
+   función `updateSW` que expone. El botón "Actualizar ahora" del
+   banner de ADR-094 deja de hacer `window.location.reload()` a secas
+   y pasa a llamar `updateSW(true)` — que manda la señal de
+   `SKIP_WAITING` correcta y solo entonces recarga.
+4. **ADR-094 sigue siendo la única fuente de verdad de "hay una
+   actualización" y de "cuándo es seguro mostrarla"** — la detección
+   (comparación de `__APP_BUILD_ID__` contra `/version.json`, cada 5
+   min vía el timer de ADR-091) y el criterio de "no interrumpir una
+   recogida activa" no cambian. Este ADR solo corrige *qué pasa* una
+   vez que la persona ya confirmó que quiere actualizar — antes,
+   apenas si acaso llegaba a recargar; ahora sí toma la versión
+   correcta del service worker.
+5. No se usa `onNeedRefresh`/`onOfflineReady` del plugin — ADR-094 ya
+   cubre la detección por su cuenta, no hace falta una segunda señal
+   en paralelo.
+
+**Consecuencias.** `apps/parent` sigue siendo la única de las 3 apps
+con service worker, y ahora es la única con esta corrección — no
+aplica a `apps/portal`/`apps/board`. Cualquier PWA instalada antes de
+este cambio necesita, una única vez, cerrarse por completo y
+reabrirse para recibir el service worker corregido — a partir de ahí,
+el ciclo completo (detectar → avisar → confirmar → activar) queda
+resuelto de punta a punta.
+
+## Referencias
+
+- ADR-094 (detección + criterio de "momento ideal" — la pieza que NO
+  cambia aquí).
+- ADR-066 pt.6 (por qué es `injectManifest` con un SW propio, no
+  `generateSW` — el handler de push que obliga a tener `sw-src/sw.ts`
+  a mano).
+- ADR-063 pt.1 (precache de solo el app-shell, sin runtime caching de
+  la API — tampoco cambia).

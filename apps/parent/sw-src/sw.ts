@@ -24,6 +24,16 @@ self.addEventListener('push', (event: PushEvent) => {
   );
 });
 
+// ADR-095: activate a waiting worker only when told to. The ADR-094 banner's
+// "Actualizar ahora" calls `updateSW(true)` (src/update/service-worker.ts),
+// which posts this message; without the listener a new version would sit
+// "waiting" forever while an old tab stays open — the bug this fixes.
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
+  if ((event.data as { type?: unknown } | null)?.type === 'SKIP_WAITING') {
+    void self.skipWaiting();
+  }
+});
+
 // ADR-066 pt.5: tapping the notification opens/focuses "Mis hijos" (HOME_PATH).
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close();

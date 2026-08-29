@@ -1,6 +1,7 @@
 import { UpdateBanner } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useActivePickupRequest } from '../pickup-requests/useActivePickupRequest';
+import { applyPendingUpdate } from './service-worker';
 
 /**
  * ADR-094: renders the update banner, but never while the tutor has a pickup
@@ -17,5 +18,7 @@ export function AppUpdateBanner() {
 function UpdateBannerWhenNoActivePickup() {
   const activePickup = useActivePickupRequest();
   if (activePickup) return null;
-  return <UpdateBanner onUpdate={() => window.location.reload()} />;
+  // ADR-095: activate the waiting service worker (then reload), rather than a
+  // bare reload that would keep serving the old worker's cached shell.
+  return <UpdateBanner onUpdate={() => void applyPendingUpdate()} />;
 }
