@@ -25,6 +25,7 @@ export type IconName =
   | 'building'
   | 'student'
   | 'tag'
+  | 'user'
   | 'menu'
   | 'close';
 
@@ -127,6 +128,18 @@ export function Icon({ name, size = 20 }: IconProps) {
       <svg {...props}>
         <path d="M12.59 2.59 20 10a2 2 0 0 1 0 2.83l-7.17 7.17a2 2 0 0 1-2.83 0L3 13V4a1 1 0 0 1 1-1z" />
         <circle cx={7.5} cy={7.5} r={1.3} fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  // 'user': individual person glyph (circle + arc) — not in the design kit's
+  // Icon() set. Transcribed verbatim from `apps/parent/src/portal-web/icons.tsx`
+  // for its "Perfil" nav item (ADR-098); same criterion as 'pin'/'tag' above.
+  if (name === 'user') {
+    return (
+      <svg {...props}>
+        <circle cx={12} cy={8} r={3.5} />
+        <path d="M5 20a7 7 0 0114 0" />
       </svg>
     );
   }

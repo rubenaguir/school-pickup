@@ -7599,3 +7599,119 @@ solo instalaciones nuevas) hereda la corrección en el próximo
 - `node_modules/vite-plugin-pwa/dist/client/build/register.js` (código
   fuente real de la versión instalada — la referencia que reveló el
   problema, no la documentación pública del paquete).
+
+## ADR-098 — Separar navegación real de identidad/sesión en los 3 shells: "Perfil" y "App móvil" dejan de vivir amontonados en el pie; `/profile` entra al shell correcto por rol
+
+**Contexto.** Revisión de capturas reales de los 3 shells de portal
+señaló el mismo problema de fondo en tres lugares distintos: mezclar
+navegación real (pantallas a las que se puede ir) con el bloque de
+identidad/sesión del usuario (avatar, nombre, rol, cerrar sesión), en
+vez de separarlos con claridad visual.
+
+Confirmado contra el código real:
+
+1. `PROFILE_PATH` (`apps/portal/src/App.tsx`) está registrado como
+   ruta hermana de `InstitutionGate`, no dentro de `InstitutionShell`
+   ni de `OpsShell` — `Profile.tsx` se renderiza sin sidebar ni
+   topbar, sin forma de navegar salvo el botón "atrás" del navegador.
+   El comentario que justificaba esto citaba "ADR-078 point 1", que en
+   realidad no dice eso — la razón real (verificada en
+   `AuthenticatedLayout.tsx`) es que `InstitutionGate` bloquea con un
+   estado vacío a cualquier cuenta sin membresía de institución,
+   incluyendo cuentas OPS/super-admin; anidar `/profile` ahí dejaría a
+   un operador sin poder llegar a su propio perfil. Por eso quedó
+   fuera de todo shell, no por una decisión de layout.
+2. `InstitutionShell.tsx`/`OpsShell.tsx`: el pie de sidebar
+   (avatar+nombre+rol) trae debajo, en el mismo bloque, "Perfil" y
+   "Cerrar sesión" como dos enlaces de texto — exactamente lo que
+   ADR-079 punto 1 decidió a propósito ("esos ítems son secciones de
+   la institución/operación... no configuración de su propia
+   cuenta"). Confirmado con el humano: ese criterio seguía siendo
+   razonable en su momento, pero ADR-079 no identificó el problema que
+   motiva este ADR — el amontonamiento visual de 5 elementos
+   (avatar, nombre, rol, "Perfil", "Cerrar sesión") en un bloque de
+   pie pensado para 2. Se revierte ese punto específico.
+3. `TutorShell.tsx` (`apps/parent`): mismo patrón — "App móvil"
+   (`backToMobile`, decisión de ubicación de ADR-078 punto 4 ítem 3,
+   "cerca del pie de cuenta... es lo más consistente") vive pegado
+   arriba del bloque de avatar+"Cerrar sesión", en vez de la lista de
+   navegación principal donde ya viven "Mis hijos"/"Asociar
+   institución"/"Tutores autorizados"/"Perfil".
+
+**Decisión.**
+
+### 1. `Profile.tsx` se monta dentro del shell correcto según rol, no como ruta suelta
+
+Se elimina el registro de `PROFILE_PATH` como hijo directo de
+`AuthenticatedLayout` en `App.tsx`. Se registra dos veces, cada una
+como hija del shell correspondiente — mismo componente `<Profile />`
+reutilizado en ambas, ya que la pantalla es agnóstica de rol (usa
+`useProfile()` sobre `/users/me`, no toca `useInstitution()`):
+
+- Dentro del árbol de `InstitutionShell` (anidado en `InstitutionGate`,
+  junto a las 9 rutas existentes) — para personal de institución.
+- Dentro del árbol de `OpsShell` (anidado en `SuperAdminRoute`, junto
+  a `ADMIN_INSTITUTIONS_PATH`/`ADMIN_METRICS_PATH`) — para operador.
+
+De regalo, esto le da a `/profile` breadcrumb ("Institución / Perfil"
+u "Operador / Perfil") y resaltado activo en la nav, que hoy no tiene.
+
+`Profile.tsx` ajusta su JSX raíz: el `<main style={{minHeight:
+'100vh', background: 'var(--bg-app)', padding: 'var(--space-10)'}}>`
+propio se reemplaza por el mismo patrón de `<div>` simple
+(`maxWidth: 820`, sin fondo ni padding propios) que ya usa
+`InstitutionProfile.tsx` para pantallas que viven dentro de un
+shell — el `<main>` del shell ya aporta fondo, padding y scroll; el
+`<main>` propio de `Profile.tsx` duplicaría ambos y anidaría dos
+landmarks `<main>`. El botón "Cerrar sesión" que ya tiene en su propia
+tarjeta de cabecera se conserva sin cambio (ADR-079 punto 3 ya
+estableció que el acceso duplicado — pie del shell + dentro de la
+pantalla — no es dañino).
+
+### 2. `InstitutionShell`/`OpsShell`: "Perfil" pasa a ser un ítem normal de navegación — revierte ADR-079 punto 1
+
+Se agrega `{ path: PROFILE_PATH, label: 'Perfil', icon: 'user' }` al
+arreglo `NAV` de ambos shells: 10º ítem en `InstitutionShell` (después
+de "Reportes"), 3er ítem en `OpsShell` (después de "Instituciones").
+El pie de sidebar se recorta a solo avatar+nombre+rol y "Cerrar
+sesión" — se quita el span de "Perfil" y el separador `·`.
+
+El set de iconos de `apps/portal` (`institution/icons.tsx`, compartido
+por ambos shells) no tenía un ícono de persona individual — solo
+`'users'` (grupo, ya usado por "Personal"). Se agrega un ícono
+`'user'` nuevo, transcribiendo el mismo path (círculo + arco) que
+`apps/parent/src/portal-web/icons.tsx` ya usa para su propio ítem
+"Perfil" — mismo criterio que el propio archivo documenta (sin
+librería de íconos, SVG plano, igual que el resto del proyecto).
+
+### 3. `apps/parent`, `TutorShell`: "App móvil" pasa a ser un ítem normal de navegación
+
+Se mueve del bloque de pie a un `NavItem` más, renderizado justo
+después del `.map()` de `NAV` (debajo de "Perfil", el último ítem
+real), usando el mismo componente que los 4 ítems reales — paridad
+visual completa. No se integra al arreglo `NAV` mismo: no es una ruta
+dentro de `TutorShell` (llama a `setSurface('movil')` y navega fuera,
+a `apps/parent`'s superficie móvil), así que nunca lleva estado
+activo. El pie se recorta al mismo patrón que los otros dos shells:
+avatar+nombre+rol y "Cerrar sesión" únicamente.
+
+**Consecuencias.** Los 3 shells del proyecto (Institución, Operador,
+Tutor) convergen en el mismo pie de sidebar — identidad y sesión
+únicamente, cero navegación — cerrando el ciclo que ADR-079 dejó
+parcial (solo `TutorShell` tenía "Perfil" bien ubicado desde el
+principio). Sin cambios de backend, sin endpoints nuevos. "Cerrar
+sesión" no se mueve de ningún pie — sigue siendo la única acción de
+sesión pura en los 3 shells, junto con el avatar/nombre/rol.
+
+## Referencias
+
+- ADR-072/074 (`InstitutionShell`/`OpsShell` originales, el patrón de
+  pie de sidebar que este ADR recorta).
+- ADR-078 punto 3 (`TutorShell`, patrón de shell replicado) y punto 4
+  ítem 3 (ubicación original de "App móvil", que este ADR reubica).
+- ADR-079 (decisión que este ADR revierte parcialmente — solo el punto
+  1, para `InstitutionShell`/`OpsShell`; los puntos 2 y 3 — "Perfil"
+  ya bien ubicado en `TutorShell`, botón de cerrar sesión duplicado
+  dentro de `Profile.tsx` — quedan sin cambio).
+- ADR-090 (colapso responsive de sidebar en los 3 shells, sin cambios
+  de este ADR).

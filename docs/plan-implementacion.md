@@ -739,6 +739,28 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         tiempo corto antes de `updateSW(true)`, cae a
         `window.location.reload()` si se agota el tiempo
   - [ ] ADR-094 (detección, criterio de momento ideal) sin cambios
+- [ ] **Separar navegación real de identidad/sesión en los 3 shells
+      (ADR-098)** — "Perfil"/"App móvil" amontonados en el pie de
+      sidebar junto a avatar/nombre/rol/cerrar sesión, `/profile` sin
+      shell (`Profile.tsx` se renderiza suelto, sin sidebar ni topbar):
+  - [ ] `apps/portal/src/App.tsx`: `PROFILE_PATH` deja de ser hijo
+        directo de `AuthenticatedLayout`; se registra dentro del árbol
+        de `InstitutionShell` y, por separado, dentro del árbol de
+        `OpsShell` — mismo componente `<Profile />` en ambas
+  - [ ] `Profile.tsx`: JSX raíz pasa de `<main>` propio (fondo/padding
+        propios) al patrón de `<div>` simple que ya usa
+        `InstitutionProfile.tsx` para pantallas dentro de un shell
+  - [ ] `InstitutionShell.tsx`/`OpsShell.tsx`: "Perfil" se agrega al
+        arreglo `NAV` (10º ítem tras "Reportes" / 3er ítem tras
+        "Instituciones"); el pie de sidebar se recorta a solo
+        avatar+nombre+rol+"Cerrar sesión"
+  - [ ] `apps/portal/src/institution/icons.tsx`: ícono `'user'` nuevo
+        (transcrito del mismo path que ya usa
+        `apps/parent/src/portal-web/icons.tsx`)
+  - [ ] `apps/parent/src/portal-web/TutorShell.tsx`: "App móvil" se
+        mueve del bloque de pie a un `NavItem` más, debajo de "Perfil"
+        (fuera del arreglo `NAV` en sí, sin estado activo); pie
+        recortado igual que los otros dos shells
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

@@ -13,10 +13,11 @@ interface NavEntry {
   icon: IconName;
 }
 
-/** 2 items (ADR-074 point 1) — not the kit's 4: "Usuarios"/"Configuración" are deferred indefinitely, not shown even disabled. */
+/** 3 items (ADR-074 point 1, ADR-098) — not the kit's 4: "Usuarios"/"Configuración" are deferred indefinitely, not shown even disabled. "Perfil" (ADR-098) es navegación real de la cuenta, ya no amontonado en el pie. */
 const NAV: readonly NavEntry[] = [
   { path: ADMIN_METRICS_PATH, label: 'Resumen', icon: 'grid' },
   { path: ADMIN_INSTITUTIONS_PATH, label: 'Instituciones', icon: 'building' },
+  { path: PROFILE_PATH, label: 'Perfil', icon: 'user' },
 ];
 
 const SHELL_STYLE = `
@@ -221,18 +222,12 @@ export function OpsShell() {
               </span>
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            <span
-              onClick={() => goTo(PROFILE_PATH)}
-              style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
-            >
-              Perfil
-            </span>
-            <span style={{ color: 'rgba(255,255,255,.3)' }}>·</span>
-            <span onClick={logout} style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}>
-              Cerrar sesión
-            </span>
-          </div>
+          <span
+            onClick={logout}
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
+          >
+            Cerrar sesión
+          </span>
         </div>
       </aside>
 

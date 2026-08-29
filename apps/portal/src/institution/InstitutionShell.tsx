@@ -26,7 +26,7 @@ interface NavEntry {
   icon: IconName;
 }
 
-/** 9 items (ADR-072 point 2, ADR-083, ADR-084) — "Grupos" es el noveno: el catálogo que alimenta el selector de "Alumnos" y "Puntos de entrega". */
+/** 10 items (ADR-072 point 2, ADR-083, ADR-084) — "Grupos" es el noveno: el catálogo que alimenta el selector de "Alumnos" y "Puntos de entrega". "Perfil" es el décimo (ADR-098): navegación real de la cuenta, ya no amontonado en el pie. */
 const NAV: readonly NavEntry[] = [
   { path: DASHBOARD_PATH, label: 'Dashboard', icon: 'grid' },
   { path: PENDING_ENROLLMENTS_PATH, label: 'Aprobaciones', icon: 'inbox' },
@@ -37,6 +37,7 @@ const NAV: readonly NavEntry[] = [
   { path: DISMISSAL_SCHEDULE_PATH, label: 'Horarios', icon: 'clock' },
   { path: PERSONNEL_PATH, label: 'Personal', icon: 'users' },
   { path: REPORTS_PATH, label: 'Reportes', icon: 'chart' },
+  { path: PROFILE_PATH, label: 'Perfil', icon: 'user' },
 ];
 
 const SHELL_STYLE = `
@@ -226,18 +227,12 @@ export function InstitutionShell() {
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>{roleText}</span>
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            <span
-              onClick={() => goTo(PROFILE_PATH)}
-              style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
-            >
-              Perfil
-            </span>
-            <span style={{ color: 'rgba(255,255,255,.3)' }}>·</span>
-            <span onClick={logout} style={{ color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}>
-              Cerrar sesión
-            </span>
-          </div>
+          <span
+            onClick={logout}
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', cursor: 'pointer' }}
+          >
+            Cerrar sesión
+          </span>
         </div>
       </aside>
 

@@ -51,10 +51,6 @@ export function App() {
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
           <Route path={ACCEPT_INVITATION_PATH} element={<AcceptInvitation />} />
           <Route element={<AuthenticatedLayout />}>
-            {/* InstitutionGate wraps only the institution routes; PROFILE_PATH
-                stays outside it since Profile.tsx applies to any signed-in
-                institution session regardless of which screen it opens
-                (ADR-078 point 1). */}
             <Route element={<InstitutionGate />}>
               {/* GateConsole stays outside the shell: it is a separate kiosk
                   screen, no sidebar in the kit either (ADR-072). */}
@@ -69,9 +65,9 @@ export function App() {
                 <Route path={DISMISSAL_SCHEDULE_PATH} element={<DismissalSchedule />} />
                 <Route path={PERSONNEL_PATH} element={<Personnel />} />
                 <Route path={REPORTS_PATH} element={<Reports />} />
+                <Route path={PROFILE_PATH} element={<Profile />} />
               </Route>
             </Route>
-            <Route path={PROFILE_PATH} element={<Profile />} />
           </Route>
           {/* Separate guard, no InstitutionProvider: a super-admin does not
               carry institution membership (ADR-055 point 2). */}
@@ -79,6 +75,7 @@ export function App() {
             <Route element={<OpsShell />}>
               <Route path={ADMIN_INSTITUTIONS_PATH} element={<InstitutionApproval />} />
               <Route path={ADMIN_METRICS_PATH} element={<GlobalMetrics />} />
+              <Route path={PROFILE_PATH} element={<Profile />} />
             </Route>
           </Route>
           {/* Includes "/": every unknown path lands on the home route, which

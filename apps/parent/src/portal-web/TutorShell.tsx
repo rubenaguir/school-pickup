@@ -55,11 +55,12 @@ const SHELL_STYLE = `
  * punto 3), calco de `InstitutionShell`/`OpsShell` en apps/portal (250px,
  * `var(--ink-900)`, mismo patrón de ítem activo) con las adaptaciones del
  * kit real: eyebrow "Tutor" + "Cuenta familiar" en vez del nombre de una
- * institución, y enlace de vuelta a "App móvil".
+ * institución, y "App móvil" como ítem más de la lista de navegación
+ * (ADR-098), no en el pie.
  *
  * Primera pieza responsive del proyecto (ADR-078 punto 3): por debajo de
  * 768px la sidebar se oculta y aparece una barra superior compacta con un
- * botón de menú que despliega los mismos 4 ítems como panel de pantalla
+ * botón de menú que despliega los mismos ítems como panel de pantalla
  * completa — decisión de implementación simple sobre elegante, sin
  * precedente que copiar.
  */
@@ -156,6 +157,10 @@ export function TutorShell() {
               onClick={() => goTo(entry.path)}
             />
           ))}
+          {/* "App móvil" no es una ruta de este shell (llama a setSurface y
+              navega fuera), por eso vive tras el .map() y nunca lleva estado
+              activo — pero como ítem normal de la lista, no en el pie (ADR-098). */}
+          <NavItem icon={<Icon name="mobile" />} label="App móvil" onClick={backToMobile} />
         </nav>
 
         <div
@@ -167,21 +172,6 @@ export function TutorShell() {
             gap: 12,
           }}
         >
-          <span
-            onClick={backToMobile}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 9,
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'rgba(255,255,255,.55)',
-              cursor: 'pointer',
-            }}
-          >
-            <Icon name="mobile" size={16} />
-            App móvil
-          </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <span
               style={{

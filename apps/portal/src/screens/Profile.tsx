@@ -387,98 +387,87 @@ export function Profile() {
   } = useProfile();
 
   return (
-    <main
+    <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-app)',
-        padding: 'var(--space-10)',
-        fontFamily: 'var(--font-sans)',
+        maxWidth: 820,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
       }}
     >
-      <div
-        style={{
-          maxWidth: 820,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <Card>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={EYEBROW_STYLE}>Cuenta</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-display-sm)',
+                fontWeight: 800,
+                color: 'var(--ink-900)',
+                letterSpacing: '-.02em',
+              }}
             >
-              <span style={EYEBROW_STYLE}>Cuenta</span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'var(--text-display-sm)',
-                  fontWeight: 800,
-                  color: 'var(--ink-900)',
-                  letterSpacing: '-.02em',
-                }}
-              >
-                Mi perfil
-              </h1>
-              <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
-                Sesión de {session?.email}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button variant="outline" size="sm" onClick={logout}>
-                Cerrar sesión
-              </Button>
-            </div>
+              Mi perfil
+            </h1>
+            <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>
+              Sesión de {session?.email}
+            </span>
           </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {status === 'loading' && (
+        <Card padding={0}>
+          <SkeletonRow />
+          <SkeletonRow />
         </Card>
+      )}
 
-        {status === 'loading' && (
-          <Card padding={0}>
-            <SkeletonRow />
-            <SkeletonRow />
-          </Card>
-        )}
+      {status === 'error' && (
+        <Card>
+          <ErrorState
+            title="No pudimos cargar tu perfil"
+            message={error ? profileErrorMessage(error.code) : undefined}
+            code={error?.code}
+            onRetry={reload}
+          />
+        </Card>
+      )}
 
-        {status === 'error' && (
-          <Card>
-            <ErrorState
-              title="No pudimos cargar tu perfil"
-              message={error ? profileErrorMessage(error.code) : undefined}
-              code={error?.code}
-              onRetry={reload}
-            />
-          </Card>
-        )}
-
-        {status === 'ready' && profile && (
-          <>
-            <PersonalDataForm
-              key={savedCount}
-              profile={profile}
-              saving={saving}
-              saveError={saveError}
-              justSaved={savedCount > 0}
-              onSave={save}
-            />
-            <ChangePasswordForm
-              changing={changingPassword}
-              changeError={changePasswordError}
-              clearChangeError={clearChangePasswordError}
-              onChangePassword={changePassword}
-            />
-            <AppVersionLabel buildId={__APP_BUILD_ID__} />
-          </>
-        )}
-      </div>
-    </main>
+      {status === 'ready' && profile && (
+        <>
+          <PersonalDataForm
+            key={savedCount}
+            profile={profile}
+            saving={saving}
+            saveError={saveError}
+            justSaved={savedCount > 0}
+            onSave={save}
+          />
+          <ChangePasswordForm
+            changing={changingPassword}
+            changeError={changePasswordError}
+            clearChangeError={clearChangePasswordError}
+            onChangePassword={changePassword}
+          />
+          <AppVersionLabel buildId={__APP_BUILD_ID__} />
+        </>
+      )}
+    </div>
   );
 }
