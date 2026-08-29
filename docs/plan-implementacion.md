@@ -816,11 +816,15 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         Perfil (patrón `AppVersionLabel`, ADR-096)
 - [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
       documentar explícitamente por qué se deja fuera del alcance final
-- [ ] **2 ADRs retroactivos de infraestructura, confirmados aún
-      pendientes en esta auditoría** — ADR-010 sigue describiendo "DNS en
-      Akky" y "reverse proxy Caddy", ambos falsos en producción hoy (DNS
-      en Linode, nginx). Sin ADR posterior que lo corrija.
-- [ ] `specs/ui-screens/` sigue vacía (ver `specs/README.md`) — gap real
+- [x] **2 ADRs retroactivos de infraestructura** — ADR-010 describía "DNS
+      en Akky" y "reverse proxy Caddy", ambos falsos en producción hoy
+      (DNS en Linode, nginx). **Resuelto — ADR-100**: ambas desviaciones
+      comparten la misma razón (practicidad, reusar el VPS de Linode que
+      Rubén ya usaba para otras aplicaciones propias, con nginx ya
+      corriendo ahí; en Akky solo se compró el dominio, nunca hosting).
+      ADR-010 queda con una nota de corrección apuntando a ADR-100, sin
+      reescribir su texto original.
+- [ ] `specs/ui-screens/` sigue vacía (ver `specs/README.md`) — gap real (ver `specs/README.md`) — gap real
       de metodología SDD, no solo bloqueo resuelto: las pantallas "hero"
       que debía cubrir (tablero, consola de puerta, "Camino A") ya se
       construyeron sin la spec previa. Decisión pendiente: escribirlas

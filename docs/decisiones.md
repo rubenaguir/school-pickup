@@ -150,7 +150,10 @@ deben convivir bajo el dominio `casillego.com.mx`.
   subdominio.
 - El DNS se administra en Akky; el reverse proxy (Caddy) y los certificados se
   configuran directamente en el VPS al momento del despliegue — queda fuera
-  del alcance del código de este repo.
+  del alcance del código de este repo. **Corrección retroactiva (ver
+  ADR-100):** en el despliegue real, el DNS vive en Linode y el reverse
+  proxy es nginx, no Caddy — este punto describe el plan original al
+  momento de este ADR, no el estado final.
 
 ## ADR-011 — Personal de institución y acceso operativo
 
@@ -7826,3 +7829,58 @@ es un cambio de código simple, sin migración.
 - `docs/aviso-privacidad.md`,
   `specs/features/031-aviso-privacidad-consentimiento.md`,
   `specs/entities/user.md`.
+
+## ADR-100 — Retroactivo: nginx en vez de Caddy, DNS en Linode en vez de Akky
+
+**Contexto.** ADR-010 planeó el despliegue por subdominios asumiendo Caddy
+como reverse proxy y Akky como administrador de DNS. La producción real
+(`casillego.com.mx` y sus 4 subdominios) usa **nginx** y **DNS en
+Linode** — ninguna de las dos coincide con lo planeado, y ninguna de las
+dos tenía un ADR propio que explicara el cambio. Encontrado como gap en
+la auditoría exhaustiva de Fase 10 (a petición del humano, "qué nos está
+haciendo falta para terminar el proyecto"): de los 3 gaps reales
+encontrados en esa auditoría, este es puramente de trazabilidad
+documental, sin riesgo de producto — el sistema funciona bien con
+nginx/Linode, solo faltaba que el registro escrito lo reflejara.
+
+**Decisión — ambas desviaciones comparten la misma razón de fondo:
+practicidad, reusar infraestructura propia ya existente y conocida, en
+vez de adoptar herramientas nuevas solo porque el plan original las
+mencionaba.**
+
+### 1. nginx en vez de Caddy
+
+El VPS de Linode donde se despliega CasiLlego no se aprovisionó desde
+cero para este proyecto — es un servidor que Rubén ya usaba para
+desplegar otras aplicaciones propias, con **nginx ya corriendo ahí** y
+experiencia previa suya con nginx. Al llegar el momento de desplegar
+CasiLlego, usar el reverse proxy que ya estaba montado y que ya conocía
+fue más simple que introducir Caddy como herramienta nueva y separada
+solo para este proyecto. Caddy no se descartó por ninguna limitación
+técnica encontrada — nunca se llegó a evaluar en la práctica.
+
+### 2. DNS en Linode en vez de Akky
+
+En Akky **solo se compró el dominio** (`casillego.mx`, `casillego.com.mx`,
+`casillego.com`) — nunca se contrató hosting ni panel de DNS ahí. Como
+el VPS de Linode ya existía, usar la gestión de DNS que Linode ya ofrece
+sobre ese mismo panel fue más simple que sumar el panel de Akky como un
+sistema aparte que administrar — un solo lugar para VPS + DNS + (vía
+certbot) certificados, en vez de dos. Los registros SPF/DKIM/TXT de
+Resend (`mail.casillego.com.mx`) también viven ahí, mismo criterio.
+
+**Consecuencias.** Sin cambios de código ni de comportamiento — es
+documentación alcanzando a una realidad que ya llevaba meses en
+producción. `ADR-010` queda con una nota apuntando aquí (no se reescribe
+su texto original: describía el plan válido en su momento, no un error).
+Cualquier futura migración de proveedor de DNS o de reverse proxy
+debería evaluarse contra este mismo criterio de practicidad, no asumir
+que Caddy/Akky siguen siendo la referencia por ser lo documentado
+originalmente en ADR-010.
+
+## Referencias
+
+- ADR-010 (plan original que este ADR corrige retroactivamente, sin
+  reescribirlo).
+- `docs/decisiones.md` — nota de corrección agregada directamente en el
+  texto de ADR-010, apuntando aquí.
