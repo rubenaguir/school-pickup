@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Button, Card, ErrorState, SkeletonRow, Toggle } from '@casillego/ui';
+import { AppVersionLabel, Button, Card, ErrorState, SkeletonRow, Toggle } from '@casillego/ui';
 import type { ApiError } from '@casillego/shared';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -475,6 +475,7 @@ export function Profile() {
               clearChangeError={clearChangePasswordError}
               onChangePassword={changePassword}
             />
+            <AppVersionLabel buildId={__APP_BUILD_ID__} />
           </>
         )}
       </div>

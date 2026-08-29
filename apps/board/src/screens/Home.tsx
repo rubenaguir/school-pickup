@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
+import { AppVersionLabel, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import { useAuth } from '../auth/AuthContext';
 import { useInstitution } from '../institution/InstitutionContext';
 import { boardListErrorMessage, boardSocketErrorMessage } from '../board/board-error-messages';
@@ -362,6 +362,14 @@ export function Home() {
     <div style={{ position: 'relative' }}>
       {screen}
       <ModeSwitcher value={mode} onChange={changeMode} />
+      {/*
+       * ADR-096: deliberately parked in the bottom-left corner (ModeSwitcher
+       * owns bottom-right), `--ink-100` and tiny — near-invisible to a parent
+       * or student at the gate, legible for whoever looks for it on purpose.
+       */}
+      <div style={{ position: 'fixed', left: 8, bottom: 6, zIndex: 1, pointerEvents: 'none' }}>
+        <AppVersionLabel buildId={__APP_BUILD_ID__} tone="faint" />
+      </div>
     </div>
   );
 }

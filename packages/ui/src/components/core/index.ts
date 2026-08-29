@@ -1,3 +1,5 @@
+export { AppVersionLabel } from './AppVersionLabel';
+export type { AppVersionLabelProps } from './AppVersionLabel';
 export { Avatar } from './Avatar';
 export type { AvatarProps } from './Avatar';
 export { Badge } from './Badge';

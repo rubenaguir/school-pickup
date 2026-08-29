@@ -1,5 +1,13 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Avatar, Button, Card, ErrorState, SkeletonRow, Toggle } from '@casillego/ui';
+import {
+  AppVersionLabel,
+  Avatar,
+  Button,
+  Card,
+  ErrorState,
+  SkeletonRow,
+  Toggle,
+} from '@casillego/ui';
 import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import {
   changePasswordErrorMessage,
@@ -928,6 +936,8 @@ export function PortalProfile() {
             clearChangeError={clearChangePasswordError}
             onChangePassword={changePassword}
           />
+
+          <AppVersionLabel buildId={__APP_BUILD_ID__} />
         </div>
       )}
     </div>

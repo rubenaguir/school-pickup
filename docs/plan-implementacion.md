@@ -719,6 +719,16 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
   - [x] No auto-actualiza nunca sin confirmación explícita — `'prompt'`
         + sin `onNeedRefresh`/`onOfflineReady`; la detección sigue
         siendo 100% de ADR-094
+- [x] **Versión visible en las 3 apps (ADR-096)** — reutiliza
+      `__APP_BUILD_ID__` de ADR-094, sin cambios de backend:
+  - [x] `AppVersionLabel` compartido en `packages/ui` (prop `buildId`
+        + prop `tone`: `muted` `--ink-300` / `faint` `--ink-100`)
+  - [x] `apps/parent`: al final de `PortalProfile.tsx`
+  - [x] `apps/portal`: al final de `Profile.tsx` (perfil de usuario,
+        no configuración de institución)
+  - [x] `apps/board`: esquina inferior izquierda de `Home.tsx` (fija,
+        `ModeSwitcher` ocupa la derecha), casi invisible (`--ink-100`)
+        — el tablero lo ve el público, no solo personal
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de

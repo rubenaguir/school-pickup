@@ -7491,3 +7491,39 @@ resuelto de punta a punta.
   a mano).
 - ADR-063 pt.1 (precache de solo el app-shell, sin runtime caching de
   la API — tampoco cambia).
+
+## ADR-096 — Versión visible en las 3 apps, reutilizando `__APP_BUILD_ID__` de ADR-094
+
+**Contexto.** Pedido directo: poder confirmar qué versión tiene
+instalada cada app, sin depender de adivinar por comportamiento. El
+dato ya existe — `__APP_BUILD_ID__`, inyectado en build por
+`buildIdPlugin` (ADR-094) — solo faltaba un lugar donde mostrarlo.
+Ninguna pantalla nueva del lado del backend.
+
+**Decisión.**
+
+1. **Componente compartido** en `packages/ui` (ej.
+   `AppVersionLabel`), texto pequeño tipo `v{buildId}`, reutilizado
+   por las 3 apps — mismo dato, sin duplicar la lectura de
+   `__APP_BUILD_ID__` en cada una.
+2. **`apps/parent`**: al final de `PortalProfile.tsx` ("Perfil"), en
+   el flujo normal de contenido. **`apps/portal`**: al final de
+   `Profile.tsx` (perfil del usuario — lo usan tanto personal de
+   institución como super-admin, no la pantalla de configuración de
+   institución). Mismo tono visual que el resto del texto secundario
+   de esas pantallas (`--ink-300`, "muted labels").
+3. **`apps/board`**: sin pantalla de perfil, nadie navega nada en un
+   kiosco. Confirmado con el humano que el tablero lo ve el público
+   (padres/alumnos en la puerta), no solo personal — la etiqueta va
+   en una esquina de la pantalla principal, deliberadamente casi
+   invisible (`--ink-100`, "icon idle", el tono más tenue de la
+   escala), pensada para quien la busca a propósito (soporte/debug),
+   no para el ojo casual de un padre o alumno.
+
+**Consecuencias.** Ningún cambio de datos ni de backend — solo
+consume lo que ADR-094 ya expone. Sin cambios de comportamiento.
+
+## Referencias
+
+- ADR-094 (`__APP_BUILD_ID__`/`buildIdPlugin`, el dato que se
+  reutiliza aquí sin cambios).
