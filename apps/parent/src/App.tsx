@@ -25,6 +25,8 @@ import { SelectInstitution } from './screens/SelectInstitution';
 import { Tracking } from './screens/Tracking';
 import { VerifyEmail } from './screens/VerifyEmail';
 
+// Prueba temporal de actualización (ADR-097) — se puede revertir
+// después de confirmar el flujo.
 export function App() {
   return (
     <BrowserRouter>
