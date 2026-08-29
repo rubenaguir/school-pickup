@@ -77,14 +77,25 @@ posibles de la pantalla, y acciones disponibles en cada estado.
 
 ## Estado actual
 
-- **`entities/`** — 14 archivos, completo (las 14 entidades del dominio).
-- **`features/`** — 23 archivos, completo. Organizados en 4 vertical slices:
-  auth/enrollment (001–007), configuración de institución (008–013),
-  vehículos/tutores autorizados (014–017) y flujo de `pickup_request`
-  (018–023).
-- **`api-contracts/`** — 12 archivos, completo.
-- **`ui-screens/`** — vacía (con `.gitkeep`): pendiente de los tokens del
-  design system antes de poder especificarse. Ver `docs/plan-implementacion.md`.
+- **`entities/`** — 17 archivos, completo (las 17 entidades del dominio;
+  14 originales + `institution_group`/`delivery_point_group`/
+  `push_subscription`, agregadas en Fase 10).
+- **`features/`** — 30 archivos, completo. Los 23 originales (4 vertical
+  slices: auth/enrollment 001–007, configuración de institución 008–013,
+  vehículos/tutores autorizados 014–017, flujo de `pickup_request`
+  018–023) más 7 agregados en fases posteriores: métricas/aprobación de
+  super-admin (024–025), perfil de tutor y reportes (026–027),
+  notificación push, edición de grupo y baja de enrollment (028–030).
+- **`api-contracts/`** — 25 archivos, completo.
+- **`ui-screens/`** — vacía (con `.gitkeep`). **Gap real, no solo
+  pendiente de bloqueo.** La justificación original ("pendiente de los
+  tokens del design system") ya no aplica — esos tokens existen desde
+  ADR-036, y las pantallas "hero" que este tipo de spec debía cubrir
+  (tablero de institución, consola de puerta, "Camino A" del padre) ya
+  se construyeron (Fase 6, 8, 9, 10). Nunca se volvió a este tipo de spec
+  una vez desbloqueado — pendiente de decisión: escribirlas
+  retroactivamente o descartar explícitamente este tipo de spec para el
+  proyecto. Ver `docs/plan-implementacion.md`.
 
 ## Orden de migración
 
@@ -107,6 +118,17 @@ de entidades que ya aparecen antes en la lista.
 12. `dismissal_windows` — depende de `institutions`
 13. `dismissal_exceptions` — depende de `institutions`
 14. `audit_log` — depende de `users` (nullable)
+
+Orden anterior: las 14 tablas de la migración inicial (`InitSchema`). Tres
+tablas más se agregaron después, en migraciones propias de Fase 10, sin
+reordenar lo anterior:
+
+15. `push_subscriptions` — depende de `users` (ADR-066)
+16. `institution_groups` — depende de `institutions` (ADR-084)
+17. `delivery_point_groups` — depende de `delivery_points`,
+    `institution_groups` (ADR-084); la misma migración también elimina
+    `enrollments.grade_or_group` y `delivery_points.assigned_groups` y
+    agrega `enrollments.group_id`
 
 ## Referencias cruzadas
 

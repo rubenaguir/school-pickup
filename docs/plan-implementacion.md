@@ -63,13 +63,18 @@ endpoint o invariante se implemente sin estar en su spec, y que toda
       protección append-only de `audit_log`, consolidación de
       `audit_log.action` a `student_guardian.*`
 
-### Pendiente explícito para un slice futuro (no bloquea Fase 2)
+### Pendiente explícito para un slice futuro (no bloquea Fase 2) — ✅ resuelto
 
-- [ ] **Consola de super-admin — aprobar/suspender instituciones.** No existen
+- [x] **Consola de super-admin — aprobar/suspender instituciones.** No existían
       features para `institution.approved`/`institution.suspended` pese a ser
       acciones auditables ya previstas (ADR-018 punto 1). Gap de cobertura,
-      no contradicción — se especifica junto con el resto de la consola de
-      super-admin. Ver ADR-026 punto 6.
+      no contradicción — se especificó junto con el resto de la consola de
+      super-admin. Ver ADR-026 punto 6. **Resuelto — ADR-040,
+      `specs/features/025-aprobacion-suspension-institucion.md`,
+      `institution-status.controller.ts` (`PATCH :id/approve`/`:id/suspend`).
+      Encontrado sin marcar aquí durante la auditoría exhaustiva de esta
+      sesión — el ítem ya se daba por resuelto en la tabla de "Decisiones
+      pendientes" más abajo, pero no aquí.**
 
 ## Fase 2 — Fundamentos de código compartido (`packages/shared`) ✅ completo
 
@@ -288,7 +293,7 @@ manual OR (tutor dueño / institution_member) ya documentado en
 nueva decisión de arquitectura, sin ADR nuevo. Hallazgo 2 (comentario
 obsoleto en migración 401) corregido.
 
-## Fase 7 — Frontend: `apps/portal` — reabierta tras auditoría contra el design system real
+## Fase 7 — Frontend: `apps/portal` — reabierta tras auditoría contra el design system real ✅ completo
 
 - [x] Resolver tokens del design system antes de esta fase — el proyecto
       "CasiLlego Design System" (`claude.ai/design/p/cd01f4a5-739d-4e7b-abed-65176746dc0d`)
@@ -300,7 +305,7 @@ obsoleto en migración 401) corregido.
       completas y verificadas contra el backend real
 - [x] Vistas de super-admin (Capa 3h) y de tutor (Capas 3i–3n) —
       funcionalmente completas
-- [ ] **Reabierto (ADR-072): el propio checklist original de esta fase ya
+- [x] **Reabierto (ADR-072): el propio checklist original de esta fase ya
       señalaba "pendiente construir las pantallas reales de
       `ui_kits/portal-admin`" (ítem de arriba) — la fase se cerró de todas
       formas sin resolverlo, mismo patrón de fondo que se encontró y
@@ -312,12 +317,12 @@ obsoleto en migración 401) corregido.
       pantalla de Dashboard — `HOME_PATH` es un alias literal de la
       bandeja de aprobación. Ver también el mismo patrón en la Consola de
       puerta (kit `puerta-consola`, layout de dos paneles vs. tarjeta
-      centrada actual).
-- [ ] **Fase A (ADR-072, en curso)** — shell de navegación del rol
+      centrada actual). Resuelto por las Fases A/B/C de abajo.
+- [x] **Fase A (ADR-072)** — shell de navegación del rol
       Institución + Dashboard real:
-  - [ ] `InstitutionShell`: sidebar 250px + header, envolviendo las 7
+  - [x] `InstitutionShell`: sidebar 250px + header, envolviendo las 7
         pantallas de institución (Dashboard nuevo incluido)
-  - [ ] Dashboard: 3 tarjetas KPI (En camino/En puerta/Entregados, sin
+  - [x] Dashboard: 3 tarjetas KPI (En camino/En puerta/Entregados, sin
         Esperados ni %), "Por nivel" como conteo simple, "Requiere
         atención" con datos fijos (a poblar después), tabla de actividad
         en vivo reutilizando el feed `view=monitor` de Carril (ADR-071)
@@ -331,7 +336,7 @@ obsoleto en migración 401) corregido.
   **Fase A completa** — auditada dos veces (implementación inicial +
   corrección de persistencia del conteo de entregados), `npm run check`
   en verde (941 tests).
-- [ ] **Fase B (ADR-073, en curso)** — Consola de puerta: layout de dos
+- [x] **Fase B (ADR-073)** — Consola de puerta: layout de dos
       paneles fiel al kit `puerta-consola` (hoy tarjeta centrada
       `max-width: 820px`), más "Vocear" como evento cruzado hacia
       `apps/board`:
@@ -360,41 +365,53 @@ obsoleto en migración 401) corregido.
   **Fase B completa** — auditada en las 3 partes (backend, `apps/board`,
   `apps/portal`), ciclo completo verificado en vivo (consola → vocear →
   tablero suena), `npm run check` en verde (959 tests).
-- [ ] **Fase C (ADR-074, en curso)** — shell de navegación del rol
+- [x] **Fase C (ADR-074)** — shell de navegación del rol
       Operador/OPS envolviendo `InstitutionApproval`/`GlobalMetrics`
       existentes:
-  - [ ] `OpsShell` nuevo (mismo patrón que `InstitutionShell`, ADR-072),
-        2 ítems de navegación (Resumen/Instituciones) — no los 4 del kit,
+  - [x] `OpsShell` nuevo (mismo patrón que `InstitutionShell`, ADR-072),
+        3 ítems de navegación (Resumen/Instituciones/Perfil, el tercero
+        agregado después por ADR-098) — no los 4 del kit,
         "Usuarios"/"Configuración" ni siquiera se muestran deshabilitados
         (diferido indefinidamente, sin fecha, ADR-074 punto 1)
-  - [ ] `AdminNav.tsx` eliminado — su razón original ("sin shell, solo
+  - [x] `AdminNav.tsx` eliminado — su razón original ("sin shell, solo
         dos destinos") se tomó antes de importar el design system real
-  - [ ] `GlobalMetrics.tsx` reagrupado al layout del kit — 5 de 6 campos
+  - [x] `GlobalMetrics.tsx` reagrupado al layout del kit — 5 de 6 campos
         ya eran reales, solo cambia el arreglo visual; nuevo
         `deliveriesByDay` en `AdminMetricsResponse` (único dato
         genuinamente nuevo, mismo patrón que `institution-reports`, sin
         filtro de institución); chip de variación mensual de
         "Instituciones activas" omitido (sin histórico agregado que lo
         respalde)
-  - [ ] `InstitutionApproval.tsx`: solo se le quita el `<main>` de página
+  - [x] `InstitutionApproval.tsx`: solo se le quita el `<main>` de página
         completa, su contenido no se rediseña (mismo criterio que
         Personnel/Reports en Fase A)
-- [ ] "Usuarios" y "Configuración" del rol Operador (secciones del kit
-      OPS) — **diferido indefinidamente, no es un pendiente de esta
-      reapertura.** Confirmado con el humano: el concepto de roles ya
-      vive donde importa (`Personnel.tsx`, roles a nivel institución); la
-      configuración global que el kit imaginaba ya está resuelta de otra
-      forma (puntos de entrega y perfil de institución por separado,
-      notificaciones que cada tutor controla en `apps/parent`). Requeriría
-      además modelo de roles nuevo para el equipo interno de CasiLlego
-      (hoy `is_super_admin` es un booleano simple) — funcionalidad de
-      producto nueva, no una corrección visual. Mismo criterio que el QR
-      (ADR-070): se documenta, no se construye especulativamente.
 
-**No completa.** El trabajo funcional de Fase 7 (pantallas, plomería,
-verificación contra backend) se conserva — lo que se rehace es la capa de
-navegación/layout que nunca se construyó pese a estar señalada desde el
-cierre original de la fase.
+  **Fase C completa** — encontrada sin marcar durante la auditoría
+  exhaustiva de esta sesión: el código real (`OpsShell.tsx`,
+  `GlobalMetrics.tsx`, `InstitutionApproval.tsx`, ausencia de
+  `AdminNav.tsx`) ya reflejaba el diseño completo, pero esta sección y el
+  cierre de Fase 7 nunca se actualizaron para decirlo.
+- ~~"Usuarios" y "Configuración" del rol Operador (secciones del kit
+  OPS)~~ — **diferido indefinidamente, no es un pendiente de esta
+  reapertura.** Confirmado con el humano: el concepto de roles ya
+  vive donde importa (`Personnel.tsx`, roles a nivel institución); la
+  configuración global que el kit imaginaba ya está resuelta de otra
+  forma (puntos de entrega y perfil de institución por separado,
+  notificaciones que cada tutor controla en `apps/parent`). Requeriría
+  además modelo de roles nuevo para el equipo interno de CasiLlego
+  (hoy `is_super_admin` es un booleano simple) — funcionalidad de
+  producto nueva, no una corrección visual. Mismo criterio que el QR
+  (ADR-070): se documenta, no se construye especulativamente.
+
+**Completa.** Fase A, B y C (ADR-072/073/074) terminadas y verificadas
+contra el código real. El trabajo funcional original de Fase 7
+(pantallas, plomería, verificación contra backend) se conservó tal cual;
+lo que se rehizo fue la capa de navegación/layout señalada como pendiente
+desde el cierre original de la fase. **Corrección de esta auditoría:**
+esta sección decía "No completa." pese a que las 3 sub-fases ya estaban
+terminadas — verificado línea por línea contra `OpsShell.tsx`,
+`Dashboard.tsx`, `GlobalMetrics.tsx`, `InstitutionApproval.tsx` y la
+ausencia de `AdminNav.tsx` en el repo real.
 
 ## Fase 8 — Frontend: `apps/parent` (PWA) ✅ completo
 
@@ -542,7 +559,7 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
 
 ## Fase 10 — Pulido y defensa de tesis
 
-- [ ] **Extracción del patrón "canal WS con snapshot REST + deltas"
+- [x] **Extracción del patrón "canal WS con snapshot REST + deltas"
       (ADR-075)** — 3 pasos de riesgo creciente, verificados entre cada
       uno:
   - [x] Paso 1: piezas puras (`reconnectDelayMs`, `fatalCloseReason`,
@@ -554,17 +571,20 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         `asApiError` promovida de paso (17 duplicados detectados, solo
         este consumidor migrado, los otros 16 quedan en Backlog técnico
         aparte)
-  - [ ] Paso 3 (alcance corregido tras comparar el código real de los 4
+  - [x] Paso 3 (alcance corregido tras comparar el código real de los 4
         restantes): migrar **solo 2**, no los 4 —
         `useInstitutionBoardMonitor` de Carril (`apps/board`) y
         `useTrackingPickupRequest` (`apps/parent`, objeto único, no
         arreglo — la prueba de que la abstracción no asumió por
-        accidente que siempre hay una lista). `useInstitutionBoard`
-        (tablero público, multiplexa `kind: 'row'`/`kind: 'announce'`) y
-        `useInstitutionBoardMonitor` del Dashboard (segundo sub-canal
-        independiente de `delivered-today`) **se quedan sin migrar, a
-        propósito** — forzarlos al contrato actual del hook genérico
-        significaría ensuciarlo con conceptos que solo ellos necesitan
+        accidente que siempre hay una lista). Ambos confirmados usando
+        `useRealtimeChannel` en el código real (encontrado sin marcar
+        aquí durante la auditoría exhaustiva de esta sesión).
+        `useInstitutionBoard` (tablero público, multiplexa
+        `kind: 'row'`/`kind: 'announce'`) y `useInstitutionBoardMonitor`
+        del Dashboard (segundo sub-canal independiente de
+        `delivered-today`) **se quedan sin migrar, a propósito** —
+        forzarlos al contrato actual del hook genérico significaría
+        ensuciarlo con conceptos que solo ellos necesitan
 - [x] **Tiempo real para bandejas de aprobación (ADR-087)** — extiende
       `useRealtimeChannel`/`realtime-channel.ts` (ADR-075) a 2 pares de
       pantallas que hoy son REST-carga-única sin refresco:
@@ -582,10 +602,13 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
   - [x] Dos gateways nuevos en `apps/api`, mismo patrón que
         `DeliveryPointQueueGateway` (bridge MQTT↔WS, suscripción
         wildcard única por proceso)
-- [ ] **Cancelar/dar de baja una asociación alumno-institución
+- [x] **Cancelar/dar de baja una asociación alumno-institución
       (ADR-088)** — surgió al probar ADR-087 manualmente:
-  - [ ] Migración: valor `withdrawn` en `enrollments_status_enum` +
-        columnas `withdrawn_at`/`withdrawn_by_user_id`
+  - [x] Migración: valor `withdrawn` en `enrollments_status_enum` +
+        columnas `withdrawn_at`/`withdrawn_by_user_id` —
+        `1787725314674-EnrollmentWithdrawn.ts` (confirmada en el repo
+        real durante la auditoría exhaustiva de esta sesión, sin marcar
+        aquí)
   - [x] `EnrollmentsController`: `DELETE :id` (cancelar `pending`,
         solo el tutor propietario, borra la fila de verdad — nunca
         choca con la FK de `pickup_requests` porque esa solo referencia
@@ -679,7 +702,7 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
         anuncio manual del gate console (sin cortar lo que suena);
         `tts.ts` queda como helper puro de texto; test de orden con
         ítem prioritario incluido
-- [ ] **Notificación de actualización disponible, 3 apps (ADR-094)**
+- [x] **Notificación de actualización disponible, 3 apps (ADR-094)**
       — sin service worker nuevo, reutiliza el timer de ADR-091:
   - [x] Identificador de versión por build + `/version.json` — plugin
         Vite compartido (`@casillego/ui/vite-build-id`, `buildIdPlugin`)
@@ -729,49 +752,102 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
   - [x] `apps/board`: esquina inferior izquierda de `Home.tsx` (fija,
         `ModeSwitcher` ocupa la derecha), casi invisible (`--ink-100`)
         — el tablero lo ve el público, no solo personal
-- [ ] **"Actualizar ahora" no recargaba en `apps/parent` (ADR-097)** —
+- [x] **"Actualizar ahora" no recargaba en `apps/parent` (ADR-097)** —
       dos relojes de detección (ADR-094 vs. el chequeo nativo del
       navegador) nunca se sincronizaron:
-  - [ ] `service-worker.ts`: captura `registration` vía
+  - [x] `service-worker.ts`: captura `registration` vía
         `onRegisteredSW`, conecta `onNeedRefresh`
-  - [ ] `applyPendingUpdate()`: si no hay confirmación del navegador
+  - [x] `applyPendingUpdate()`: si no hay confirmación del navegador
         todavía, fuerza `registration.update()`, espera con tope de
         tiempo corto antes de `updateSW(true)`, cae a
         `window.location.reload()` si se agota el tiempo
-  - [ ] ADR-094 (detección, criterio de momento ideal) sin cambios
-- [ ] **Separar navegación real de identidad/sesión en los 3 shells
+  - [x] ADR-094 (detección, criterio de momento ideal) sin cambios
+- [x] **Separar navegación real de identidad/sesión en los 3 shells
       (ADR-098)** — "Perfil"/"App móvil" amontonados en el pie de
       sidebar junto a avatar/nombre/rol/cerrar sesión, `/profile` sin
       shell (`Profile.tsx` se renderiza suelto, sin sidebar ni topbar):
-  - [ ] `apps/portal/src/App.tsx`: `PROFILE_PATH` deja de ser hijo
+  - [x] `apps/portal/src/App.tsx`: `PROFILE_PATH` deja de ser hijo
         directo de `AuthenticatedLayout`; se registra dentro del árbol
         de `InstitutionShell` y, por separado, dentro del árbol de
         `OpsShell` — mismo componente `<Profile />` en ambas
-  - [ ] `Profile.tsx`: JSX raíz pasa de `<main>` propio (fondo/padding
+  - [x] `Profile.tsx`: JSX raíz pasa de `<main>` propio (fondo/padding
         propios) al patrón de `<div>` simple que ya usa
         `InstitutionProfile.tsx` para pantallas dentro de un shell
-  - [ ] `InstitutionShell.tsx`/`OpsShell.tsx`: "Perfil" se agrega al
+  - [x] `InstitutionShell.tsx`/`OpsShell.tsx`: "Perfil" se agrega al
         arreglo `NAV` (10º ítem tras "Reportes" / 3er ítem tras
         "Instituciones"); el pie de sidebar se recorta a solo
         avatar+nombre+rol+"Cerrar sesión"
-  - [ ] `apps/portal/src/institution/icons.tsx`: ícono `'user'` nuevo
+  - [x] `apps/portal/src/institution/icons.tsx`: ícono `'user'` nuevo
         (transcrito del mismo path que ya usa
         `apps/parent/src/portal-web/icons.tsx`)
-  - [ ] `apps/parent/src/portal-web/TutorShell.tsx`: "App móvil" se
+  - [x] `apps/parent/src/portal-web/TutorShell.tsx`: "App móvil" se
         mueve del bloque de pie a un `NavItem` más, debajo de "Perfil"
         (fuera del arreglo `NAV` en sí, sin estado activo); pie
         recortado igual que los otros dos shells
-- [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
-      identificadas en `docs/arquitectura.md`
-- [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de
-      `location_updates` (ADR-018)
+- [x] Revisión de cobertura de `audit_log` vs. acciones sensibles
+      identificadas en `docs/arquitectura.md` — hecha en la auditoría
+      exhaustiva de esta sesión: `CLAUDE.md` define "acción sensible"
+      como aprobaciones + alta/baja de tutores; las 16 acciones distintas
+      que sí se registran hoy (`enrollment.*`, `institution.*`,
+      `institution_member.*`, `student_guardian.*`,
+      `pickup_request.delivery_code_mismatched`) cubren esa definición
+      completa. Sin gap encontrado.
+- [ ] **Aviso de privacidad (LFPDPPP) y consentimiento explícito — gap
+      real confirmado en la auditoría exhaustiva de esta sesión, el más
+      importante encontrado.** `docs/arquitectura.md` lo declara
+      principio de diseño obligatorio ("datos de menores + ubicación...
+      Aviso de privacidad y consentimiento explícitos"), pero no existe
+      ningún artefacto en las 3 apps — verificado por búsqueda exhaustiva
+      (`consent`, `acepto`, `términos`, `privacidad`, `privacy`) sin
+      resultados. Reflejaría también la política de retención de
+      `location_updates` (ADR-018).
 - [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
       documentar explícitamente por qué se deja fuera del alcance final
+- [ ] **2 ADRs retroactivos de infraestructura, confirmados aún
+      pendientes en esta auditoría** — ADR-010 sigue describiendo "DNS en
+      Akky" y "reverse proxy Caddy", ambos falsos en producción hoy (DNS
+      en Linode, nginx). Sin ADR posterior que lo corrija.
+- [ ] `specs/ui-screens/` sigue vacía (ver `specs/README.md`) — gap real
+      de metodología SDD, no solo bloqueo resuelto: las pantallas "hero"
+      que debía cubrir (tablero, consola de puerta, "Camino A") ya se
+      construyeron sin la spec previa. Decisión pendiente: escribirlas
+      retroactivamente o descartar este tipo de spec explícitamente.
 - [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md`
 - [ ] Pasada de limpieza de prosa en `specs/` — la corrección de nomenclatura
       de tablas (ADR-027, singular→plural) dejó algunas oraciones en español
       con concordancia gramatical rota (ej. "un `users` invitado..."); no
       afecta funcionalidad ni trazabilidad, es puramente de redacción
+
+### Auditoría exhaustiva de documentación (esta sesión) ✅ completo
+
+A petición del humano ("qué nos está haciendo falta para terminar el
+proyecto"), se reclonó el repo real y se verificó línea por línea todo
+`plan-implementacion.md`, `decisiones.md`, `specs/` y `arquitectura.md`
+contra el código real — no contra lo que cada documento afirmaba.
+Resultado: el proyecto estaba bastante más avanzado que lo que la
+documentación reflejaba. Encontrados y corregidos 8 puntos marcados como
+pendientes (arriba, en Fase 1/7/10) que ya estaban implementados y
+verificados en código real; solo 2 gaps genuinos de producto/código
+salieron a la luz (aviso de privacidad, `specs/ui-screens/`), más los 2
+ADRs retroactivos de infraestructura ya conocidos.
+
+- [x] Checkboxes corregidos en este archivo (Fase 1, Fase 7 completa,
+      Fase 10: Paso 3 de ADR-075, ADR-088, ADR-094, ADR-097, ADR-098) y
+      tabla de "Decisiones pendientes" (`MapsProvider` → ✅ Resuelto,
+      ADR-061)
+- [x] `specs/README.md` § "Estado actual": conteos reales (17
+      entities/30 features/25 api-contracts, antes 14/23/12) y
+      descripción honesta del gap de `ui-screens/`
+- [x] `docs/modelo-datos.md`: agregadas las 3 entidades faltantes
+      (`institution_groups`, `delivery_point_groups`,
+      `push_subscriptions`) — texto, tablas y diagrama ERD; corregidas
+      las referencias obsoletas a `assigned_groups`/`grade_or_group`
+      (columnas eliminadas por ADR-084, reemplazadas por `group_id`/
+      `delivery_point_groups`) en las secciones de `delivery_points`,
+      `enrollments` y `pickup_requests`
+- [x] `specs/entities/push_subscription.md` escrita — única de las 17
+      entidades reales sin su spec dedicada (ADR-066 la documentó inline
+      en el ADR, nunca se promovió a spec propia)
 
 ---
 
@@ -779,7 +855,7 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
 
 | Pendiente | Bloquea | Estado |
 |---|---|---|
-| Proveedor concreto de `MapsProvider` (Google vs. Mapbox) | Fase 6 | Abierto |
+| ~~Proveedor concreto de `MapsProvider` (Google vs. Mapbox)~~ | Fase 6 | ✅ Resuelto — ADR-061, `MapboxMapsProvider` (`apps/worker/src/maps/mapbox-maps.provider.ts`), en producción |
 | ~~Features de aprobación/suspensión de institución (super-admin)~~ | Fase 7 (vistas de super-admin) | ✅ Resuelto — ADR-040, `specs/features/025-aprobacion-suspension-institucion.md` |
 | ~~Endpoint de búsqueda de instituciones por nombre~~ | Fase 7 | ✅ Resuelto — ADR-037, `GET /institutions?search=...` |
 | ~~Pantalla de Reportes~~ | Fase 7 | ✅ Resuelto — ADR-060, `specs/features/027-reportes-institucion.md` |

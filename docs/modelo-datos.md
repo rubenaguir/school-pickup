@@ -5,7 +5,9 @@
 
 ## Visión general
 
-Catorce entidades cubren el dominio. Los puntos clave que reflejan las decisiones:
+Diecisiete entidades cubren el dominio (las 14 originales + `institution_group`,
+`delivery_point_group` y `push_subscription`, agregadas en Fase 10). Los puntos
+clave que reflejan las decisiones:
 
 - `institution` (no "school") soporta multi-institución por alumno.
 - `student_guardian` permite varios tutores autorizados por alumno.
@@ -15,6 +17,12 @@ Catorce entidades cubren el dominio. Los puntos clave que reflejan las decisione
   institución (ej. "Puerta principal", "Puerta vehicular"). La asignación de
   cada `pickup_request` a un punto es automática y por grupo/nivel, no
   elegible por el tutor — ver ADR-012.
+- `institution_group` es el catálogo curado de grupos/niveles por
+  institución (ej. "1A", "3B") que reemplazó el texto libre original de
+  `enrollments.grade_or_group`/`delivery_points.assigned_groups`;
+  `delivery_point_group` es la tabla de relación muchos-a-muchos entre
+  `delivery_point` e `institution_group` que sustituyó a
+  `assigned_groups` — ver ADR-084.
 - `dismissal_exception` sobreescribe puntualmente el horario de
   `dismissal_window` (ej. "Fin de cursos") — ver ADR-015.
 - `pickup_request_status_history` registra cada transición de estado de un
@@ -22,6 +30,9 @@ Catorce entidades cubren el dominio. Los puntos clave que reflejan las decisione
 - `vehicle` es la lista reutilizable de vehículos del tutor en su perfil;
   `pickup_request` guarda un snapshot denormalizado al momento del viaje —
   ver ADR-014.
+- `push_subscription` es la suscripción Web Push (VAPID) de un
+  dispositivo/navegador de un `user`, usada hoy solo para notificar a los
+  demás tutores autorizados cuando otro ya recogió al alumno — ver ADR-066.
 - Campos geográficos con PostGIS (`geography(Point, 4326)`).
 
 ## Entidades
@@ -50,6 +61,24 @@ Cuenta de autenticación para todos los roles.
 > El "inicio con huella" del perfil es autenticación biométrica de dispositivo
 > (WebAuthn/plataforma): vive del lado cliente y no tiene campo correspondiente
 > en `users`. Ver ADR-016.
+
+### `push_subscriptions`
+Suscripción Web Push (VAPID) de un dispositivo/navegador de un `users`, agregada
+en Fase 10 para notificar a los demás tutores autorizados cuando otro ya
+recogió al alumno. Un `users` puede tener varias — una por dispositivo. Ver
+ADR-066.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | uuid (PK) | |
+| `user_id` | uuid (FK) | `ON DELETE CASCADE` |
+| `endpoint` | text | URL del endpoint push del navegador |
+| `p256dh_key` | varchar | clave pública de cifrado de la suscripción |
+| `auth_key` | varchar | secreto de autenticación de la suscripción |
+| `created_at` | timestamptz | |
+
+Restricción: único `(user_id, endpoint)` — `POST /push-subscriptions` hace
+upsert sobre este par en vez de fallar ante el duplicado. Ver ADR-066.
 
 ### `institutions`
 Plantel: escuela o actividad extracurricular.
@@ -104,15 +133,48 @@ vehicular").
 | `name` | varchar | |
 | `description` | varchar | nullable (ej. "Av. Universidad · operador José Ramírez") |
 | `operator_user_id` | uuid (FK) | nullable — miembro de la institución asignado |
-| `assigned_groups` | varchar[] | nullable — grupos o niveles que llegan por este punto (ej. `["Preescolar"]` o `["3°B", "4°A"]`). Base para la asignación automática de `pickup_requests.delivery_point_id`. Ver ADR-012 |
 | `status` | enum | `active`, `inactive` |
 | `created_at` / `updated_at` | timestamptz | |
 
 > La asignación alumno–punto de entrega es a nivel institucional/estructural
 > (por grupo o nivel), no por padre individual. Al crear un `pickup_request`,
-> se resuelve matcheando `enrollments.grade_or_group` contra
-> `assigned_groups`. Un tutor no puede cambiar el punto de entrega de su
-> recogida específica. Ver ADR-012.
+> se resuelve matcheando `enrollments.group_id` contra los grupos vinculados
+> a cada punto en `delivery_point_groups`. Un tutor no puede cambiar el punto
+> de entrega de su recogida específica. Ver ADR-012.
+>
+> **Cambio de mecanismo (ADR-084):** originalmente esta relación vivía como
+> `assigned_groups` (`varchar[]`, texto libre) directamente en esta tabla,
+> matcheada contra `enrollments.grade_or_group`. Esa columna ya no existe
+> (eliminada en la migración `InstitutionGroupsCatalog`) — el catálogo curado
+> `institution_groups` y la tabla de relación `delivery_point_groups` la
+> reemplazan por completo. Ver esas dos secciones más abajo.
+
+### `institution_groups`
+Catálogo curado de grupos/niveles por institución (ej. "1A", "3B"), agregado
+en Fase 10 para reemplazar el texto libre original de
+`enrollments.grade_or_group`/`delivery_points.assigned_groups`. Ver ADR-084.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | uuid (PK) | |
+| `institution_id` | uuid (FK) | |
+| `name` | varchar | recortado (`trim`) antes de guardar |
+| `created_at` | timestamptz | |
+
+Restricción: índice único funcional `(institution_id, lower(name))` —
+comparación case-insensitive a propósito. Ver ADR-084.
+
+### `delivery_point_groups`
+Tabla de relación muchos-a-muchos entre `delivery_points` e
+`institution_groups`: qué grupos llegan por cada punto de entrega. Reemplaza
+`delivery_points.assigned_groups`. Sin columnas propias más allá de las dos
+FK — mismo criterio que `student_guardians`, pero sin metadatos de la
+relación. Ver ADR-084.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `delivery_point_id` | uuid (PK compuesta, FK) | |
+| `group_id` | uuid (PK compuesta, FK → `institution_groups.id`) | |
 
 ### `students`
 
@@ -176,13 +238,15 @@ Asociación alumno ↔ institución con aprobación.
 | `id` | uuid (PK) | |
 | `student_id` | uuid (FK) | |
 | `institution_id` | uuid (FK) | |
-| `status` | enum | `pending`, `approved`, `rejected` |
-| `grade_or_group` | varchar | nullable (contexto escolar). Base para asignar `pickup_requests.delivery_point_id` — ver ADR-012 |
+| `status` | enum | `pending`, `approved`, `rejected`, `withdrawn` (ADR-088) |
+| `group_id` | uuid (FK → `institution_groups.id`) | nullable. Base para asignar `pickup_requests.delivery_point_id` — ver ADR-012, ADR-084. Reemplaza el `grade_or_group` original (texto libre, columna eliminada) |
 | `enrollment_code` | varchar | único — folio/matrícula visible en UI (ej. "A-10428"). Ver ADR-016 |
 | `requested_by_user_id` | uuid (FK) | tutor solicitante |
 | `reviewed_by_user_id` | uuid (FK) | miembro de la institución, nullable |
 | `requested_at` | timestamptz | |
 | `reviewed_at` | timestamptz | nullable |
+| `withdrawn_at` | timestamptz | nullable — momento de la baja de un `approved`. Ver ADR-088 |
+| `withdrawn_by_user_id` | uuid (FK) | nullable — tutor o miembro de institución que dio de baja. Ver ADR-088 |
 
 Restricción: índice único parcial `(student_id, institution_id) WHERE status IN
 ('pending', 'approved')` — excluye el estado terminal `rejected`, de modo que una
@@ -203,7 +267,7 @@ Evento central: "voy en camino".
 | `enrollment_id` | uuid (FK) | vincula alumno + institución aprobada |
 | `institution_id` | uuid (FK) | denormalizado desde `enrollment.institution_id` al crear el registro; inmutable después. Evita el join `pickup_request → enrollment → institution` en consultas del tablero y al resolver el topic MQTT. Ver ADR-018 |
 | `guardian_user_id` | uuid (FK) | tutor que va en camino |
-| `delivery_point_id` | uuid (FK) | nullable — punto de entrega asignado a este viaje. Resuelto automáticamente al crear el `pickup_request` matcheando `enrollments.grade_or_group` contra `delivery_points.assigned_groups`. Nullable para instituciones con un solo punto de entrega o cuando no hay match. Ver ADR-012 |
+| `delivery_point_id` | uuid (FK) | nullable — punto de entrega asignado a este viaje. Resuelto automáticamente al crear el `pickup_request` matcheando `enrollments.group_id` contra `delivery_point_groups`. Nullable para instituciones con un solo punto de entrega o cuando no hay match. Ver ADR-012, ADR-084 |
 | `status` | enum | `en_route`, `approaching`, `arriving`, `arrived`, `delivered`, `cancelled` |
 | `started_at` | timestamptz | |
 | `estimated_arrival_at` | timestamptz | nullable |
@@ -363,6 +427,11 @@ erDiagram
   institutions ||--o{ dismissal_windows : defines
   institutions ||--o{ dismissal_exceptions : overrides
   users ||--o{ audit_log : actor
+  institutions ||--o{ institution_groups : defines
+  institution_groups ||--o{ enrollments : groups
+  delivery_points ||--o{ delivery_point_groups : routes_via
+  institution_groups ||--o{ delivery_point_groups : routed_by
+  users ||--o{ push_subscriptions : subscribes
 
   users {
     uuid id PK
@@ -388,8 +457,21 @@ erDiagram
     uuid institution_id FK
     string name
     uuid operator_user_id FK
-    string_array assigned_groups
     string status
+  }
+  institution_groups {
+    uuid id PK
+    uuid institution_id FK
+    string name
+  }
+  delivery_point_groups {
+    uuid delivery_point_id PK_FK
+    uuid group_id PK_FK
+  }
+  push_subscriptions {
+    uuid id PK
+    uuid user_id FK
+    string endpoint
   }
   students {
     uuid id PK
@@ -413,6 +495,7 @@ erDiagram
     uuid id PK
     uuid student_id FK
     uuid institution_id FK
+    uuid group_id FK
     string status
     string enrollment_code
   }
