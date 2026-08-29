@@ -18,6 +18,14 @@ export const VERIFY_EMAIL_PATH = '/verificar-correo';
 export const ACCEPT_INVITATION_PATH = '/aceptar-invitacion';
 
 /**
+ * Aviso de privacidad integral (ADR-099), enlazado desde el checkbox de
+ * `TutorRegisterForm` y desde el pie de `TutorShell`/`PortalProfile`. Fuera
+ * de `ProtectedRoute`: se abre antes de tener sesión, durante el registro,
+ * en pestaña nueva.
+ */
+export const PRIVACY_NOTICE_PATH = '/privacy';
+
+/**
  * "Inicio / Mis hijos" (docs/design-brief.md, "App del padre"): list of the
  * tutor's students with the dominant "¡Ya voy!" action per student. Where a
  * signed-in user lands.

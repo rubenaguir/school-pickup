@@ -12,7 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
-import { EMAIL_PROVIDER, type EmailProvider } from '@casillego/shared';
+import { EMAIL_PROVIDER, PRIVACY_NOTICE_VERSION, type EmailProvider } from '@casillego/shared';
 import { User, Institution, InstitutionMember } from '@casillego/shared/entities';
 import { ACCESS_JWT_SERVICE, REFRESH_JWT_SERVICE } from './jwt.tokens';
 import { ActivationTokenService } from './activation-token.service';
@@ -76,7 +76,12 @@ export class AuthService {
         if (!passwordMatches || existingUser.status === 'suspended') {
           throw new ConflictException(EMAIL_ALREADY_REGISTERED);
         }
-        user = existingUser;
+        // ADR-099: a genuine consent event is happening in this submission
+        // regardless of reuse — written even if the reused account already
+        // had a value.
+        existingUser.privacyAcceptedAt = new Date();
+        existingUser.privacyNoticeVersion = PRIVACY_NOTICE_VERSION;
+        user = await usersRepo.save(existingUser);
         isNewUser = false;
       } else {
         try {
@@ -88,6 +93,8 @@ export class AuthService {
               phone: dto.admin.phone,
               status: 'invited',
               isSuperAdmin: false,
+              privacyAcceptedAt: new Date(),
+              privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
             }),
           );
         } catch (error) {
@@ -180,6 +187,8 @@ export class AuthService {
             phone: dto.phone,
             status: 'invited',
             isSuperAdmin: false,
+            privacyAcceptedAt: new Date(),
+            privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
           }),
         );
       } catch (error) {

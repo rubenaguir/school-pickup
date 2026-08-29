@@ -58,6 +58,15 @@ export class User {
   @Column({ name: 'notify_product_news', type: 'boolean', default: false })
   notifyProductNews!: boolean;
 
+  // Nullable: NULL for every account created before ADR-099 (permanently, by
+  // design — no retroactive mechanism) and set on the same INSERT/UPDATE that
+  // creates or reuses a `users` row for every registration since.
+  @Column({ name: 'privacy_accepted_at', type: 'timestamptz', nullable: true })
+  privacyAcceptedAt!: Date | null;
+
+  @Column({ name: 'privacy_notice_version', type: 'varchar', length: 20, nullable: true })
+  privacyNoticeVersion!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

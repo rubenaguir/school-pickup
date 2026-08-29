@@ -114,12 +114,13 @@ const institutionDto = {
     password: 'super-secret-1',
     fullName: 'Admin Uno',
     phone: null,
+    acceptedPrivacyNotice: true as const,
   },
 };
 
 describe('AuthService.registerInstitution', () => {
   it('creates institution + invited admin user + admin membership, and sends a verification email', async () => {
-    const { service, membersRepo, emailProvider } = buildAuthService();
+    const { service, membersRepo, managerUsersRepo, emailProvider } = buildAuthService();
 
     const result = await service.registerInstitution(institutionDto);
 
@@ -127,6 +128,13 @@ describe('AuthService.registerInstitution', () => {
     expect(result.institution.joinCode).toMatch(/^CSB-\d{4}$/);
     expect(result.user).toMatchObject({ email: 'admin@example.com', status: 'invited' });
     expect(membersRepo.save).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin' }));
+    // ADR-099: consent is written on the same INSERT that creates the admin.
+    expect(managerUsersRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privacyAcceptedAt: expect.any(Date) as Date,
+        privacyNoticeVersion: '2026-08',
+      }),
+    );
     expect(emailProvider.send).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'email_verification',
@@ -169,7 +177,15 @@ describe('AuthService.registerInstitution', () => {
     const result = await service.registerInstitution(institutionDto);
 
     expect(result.user).toMatchObject({ id: 'existing-1', status: 'active' });
-    expect(managerUsersRepo.save).not.toHaveBeenCalled();
+    // ADR-099: a genuine consent event happens on this submission regardless
+    // of reuse — written on the reused account even though it's not a new row.
+    expect(managerUsersRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'existing-1',
+        privacyAcceptedAt: expect.any(Date) as Date,
+        privacyNoticeVersion: '2026-08',
+      }),
+    );
     expect(emailProvider.send).not.toHaveBeenCalled();
   });
 
@@ -196,18 +212,25 @@ describe('AuthService.registerGuardian', () => {
     password: 'super-secret-1',
     fullName: 'Tutor Uno',
     phone: null,
+    acceptedPrivacyNotice: true as const,
   };
 
   it('creates an invited user and sends a verification email', async () => {
+    const save = vi.fn((entity: Partial<User>) => Promise.resolve({ id: 'guardian-1', ...entity }));
     const { service, emailProvider } = buildAuthService({
-      managerUsersRepo: {
-        save: vi.fn((entity: Partial<User>) => Promise.resolve({ id: 'guardian-1', ...entity })),
-      },
+      managerUsersRepo: { save },
     });
 
     const result = await service.registerGuardian(guardianDto);
 
     expect(result.user).toMatchObject({ email: 'tutor@example.com', status: 'invited' });
+    // ADR-099: consent is written on the same INSERT that creates the user.
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privacyAcceptedAt: expect.any(Date) as Date,
+        privacyNoticeVersion: '2026-08',
+      }),
+    );
     expect(emailProvider.send).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'email_verification',

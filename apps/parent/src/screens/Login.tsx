@@ -1,12 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { BrandPanel, Button } from '@casillego/ui';
 import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { loginErrorMessage, registerGuardianErrorMessage } from '../auth/auth-error-messages';
 import { guardianRegistrationValidationError } from '../auth/register-guardian-rules';
-import { HOME_PATH } from '../routes/paths';
+import { HOME_PATH, PRIVACY_NOTICE_PATH } from '../routes/paths';
 
 const LABEL_STYLE = { fontSize: 13, fontWeight: 600, color: 'var(--ink-600)' } as const;
 
@@ -228,6 +228,7 @@ function TutorRegisterForm({ onBack }: { onBack: () => void }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedPrivacyNotice, setAcceptedPrivacyNotice] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -250,7 +251,13 @@ function TutorRegisterForm({ onBack }: { onBack: () => void }) {
     try {
       const response = await apiClient.post<RegisterGuardianResponse>(
         '/auth/register/guardian',
-        { email, password, fullName, phone: phone.trim() === '' ? null : phone },
+        {
+          email,
+          password,
+          fullName,
+          phone: phone.trim() === '' ? null : phone,
+          acceptedPrivacyNotice: true,
+        },
         { skipAuth: true },
       );
       setRegisteredEmail(response.user.email);
@@ -444,6 +451,39 @@ function TutorRegisterForm({ onBack }: { onBack: () => void }) {
             </span>
           </div>
         )}
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 9,
+            fontSize: 13,
+            color: 'var(--ink-400)',
+            lineHeight: 1.45,
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            required
+            checked={acceptedPrivacyNotice}
+            onChange={(event) => setAcceptedPrivacyNotice(event.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            He leído y acepto el{' '}
+            <Link
+              to={PRIVACY_NOTICE_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--brand)', fontWeight: 700 }}
+            >
+              aviso de privacidad
+            </Link>{' '}
+            de CasiLlego. Entiendo que se recolectan datos de mis hijos y su ubicación durante la
+            ventana de recogida.
+          </span>
+        </label>
 
         <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
           {submitting ? 'Creando cuenta…' : 'Crear cuenta'}

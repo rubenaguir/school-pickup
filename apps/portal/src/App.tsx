@@ -18,6 +18,7 @@ import {
   LOGIN_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
+  PRIVACY_NOTICE_PATH,
   PROFILE_PATH,
   REPORTS_PATH,
   VERIFY_EMAIL_PATH,
@@ -36,6 +37,7 @@ import { Login } from './screens/Login';
 import { OpsShell } from './admin/OpsShell';
 import { PendingEnrollments } from './screens/PendingEnrollments';
 import { Personnel } from './screens/Personnel';
+import { PrivacyNotice } from './screens/PrivacyNotice';
 import { Profile } from './screens/Profile';
 import { Reports } from './screens/Reports';
 import { Students } from './screens/Students';
@@ -50,6 +52,7 @@ export function App() {
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
           <Route path={ACCEPT_INVITATION_PATH} element={<AcceptInvitation />} />
+          <Route path={PRIVACY_NOTICE_PATH} element={<PrivacyNotice />} />
           <Route element={<AuthenticatedLayout />}>
             <Route element={<InstitutionGate />}>
               {/* GateConsole stays outside the shell: it is a separate kiosk

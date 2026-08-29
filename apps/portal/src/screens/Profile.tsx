@@ -15,6 +15,7 @@ import {
 } from '../profile/useProfile';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
+import { PRIVACY_NOTICE_PATH } from '../routes/paths';
 
 const EYEBROW_STYLE = {
   fontSize: 'var(--text-2xs)',
@@ -465,7 +466,17 @@ export function Profile() {
             clearChangeError={clearChangePasswordError}
             onChangePassword={changePassword}
           />
-          <AppVersionLabel buildId={__APP_BUILD_ID__} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <AppVersionLabel buildId={__APP_BUILD_ID__} />
+            <a
+              href={PRIVACY_NOTICE_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-300)' }}
+            >
+              Aviso de privacidad
+            </a>
+          </div>
         </>
       )}
     </div>

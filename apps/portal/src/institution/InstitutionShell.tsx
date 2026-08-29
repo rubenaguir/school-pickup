@@ -16,6 +16,7 @@ import {
   INSTITUTION_PROFILE_PATH,
   PENDING_ENROLLMENTS_PATH,
   PERSONNEL_PATH,
+  PRIVACY_NOTICE_PATH,
   PROFILE_PATH,
   REPORTS_PATH,
 } from '../routes/paths';
@@ -233,6 +234,14 @@ export function InstitutionShell() {
           >
             Cerrar sesión
           </span>
+          <a
+            href={PRIVACY_NOTICE_PATH}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}
+          >
+            Aviso de privacidad
+          </a>
         </div>
       </aside>
 

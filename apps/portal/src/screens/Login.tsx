@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import { Navigate, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 import { BrandPanel, Button, EmptyState, GeofenceMap, SegmentedTabs } from '@casillego/ui';
 import type { LatLng } from '@casillego/ui';
 import {
@@ -16,7 +16,7 @@ import { institutionRegistrationValidationError } from '../auth/register-institu
 import { resolveLoginOutcome } from '../auth/login-outcome';
 import { Alert } from '../components/Alert';
 import { Field, INPUT_STYLE } from '../components/Field';
-import { ADMIN_INSTITUTIONS_PATH, HOME_PATH } from '../routes/paths';
+import { ADMIN_INSTITUTIONS_PATH, HOME_PATH, PRIVACY_NOTICE_PATH } from '../routes/paths';
 
 type Step = 'login' | 'choose' | 'escuela';
 
@@ -430,6 +430,7 @@ function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [revealed, setRevealed] = useState(false);
+  const [acceptedPrivacyNotice, setAcceptedPrivacyNotice] = useState(false);
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -474,6 +475,7 @@ function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
             password,
             fullName,
             phone: phone.trim() === '' ? null : phone,
+            acceptedPrivacyNotice: true,
           },
         },
         { skipAuth: true },
@@ -683,6 +685,39 @@ function RegisterInstitutionForm({ onBack }: { onBack: () => void }) {
 
         {validationError && <Alert message={validationError} code="INVALID_PAYLOAD" />}
         {error && <Alert message={registerInstitutionErrorMessage(error.code)} code={error.code} />}
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 9,
+            fontSize: 13,
+            color: 'var(--ink-400)',
+            lineHeight: 1.45,
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            required
+            checked={acceptedPrivacyNotice}
+            onChange={(event) => setAcceptedPrivacyNotice(event.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            He leído y acepto el{' '}
+            <Link
+              to={PRIVACY_NOTICE_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--brand)', fontWeight: 700 }}
+            >
+              aviso de privacidad
+            </Link>{' '}
+            de CasiLlego. Entiendo que se recolectan datos de mis hijos y su ubicación durante la
+            ventana de recogida.
+          </span>
+        </label>
 
         <Button variant="primary" size="lg" full type="submit" disabled={submitting}>
           {submitting ? 'Registrando…' : 'Registrar institución'}

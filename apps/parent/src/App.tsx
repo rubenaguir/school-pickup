@@ -6,6 +6,7 @@ import {
   ACCEPT_INVITATION_PATH,
   HOME_PATH,
   LOGIN_PATH,
+  PRIVACY_NOTICE_PATH,
   SELECT_INSTITUTION_PATH,
   TRACKING_PATH,
   TUTOR_PORTAL_ASSOCIATE_PATH,
@@ -21,6 +22,7 @@ import { TutorShell } from './portal-web/TutorShell';
 import { AcceptInvitation } from './screens/AcceptInvitation';
 import { Home } from './screens/Home';
 import { Login } from './screens/Login';
+import { PrivacyNotice } from './screens/PrivacyNotice';
 import { SelectInstitution } from './screens/SelectInstitution';
 import { Tracking } from './screens/Tracking';
 import { VerifyEmail } from './screens/VerifyEmail';
@@ -36,6 +38,7 @@ export function App() {
           <Route path={LOGIN_PATH} element={<Login />} />
           <Route path={VERIFY_EMAIL_PATH} element={<VerifyEmail />} />
           <Route path={ACCEPT_INVITATION_PATH} element={<AcceptInvitation />} />
+          <Route path={PRIVACY_NOTICE_PATH} element={<PrivacyNotice />} />
           <Route element={<ProtectedRoute />}>
             <Route path={HOME_PATH} element={<Home />} />
             <Route path={SELECT_INSTITUTION_PATH} element={<SelectInstitution />} />

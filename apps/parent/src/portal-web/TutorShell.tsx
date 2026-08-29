@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { setSurface } from '../surface/surface';
 import {
   HOME_PATH,
+  PRIVACY_NOTICE_PATH,
   TUTOR_PORTAL_ASSOCIATE_PATH,
   TUTOR_PORTAL_GUARDIANS_PATH,
   TUTOR_PORTAL_PROFILE_PATH,
@@ -212,6 +213,14 @@ export function TutorShell() {
           >
             Cerrar sesión
           </span>
+          <a
+            href={PRIVACY_NOTICE_PATH}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}
+          >
+            Aviso de privacidad
+          </a>
         </div>
       </aside>
 

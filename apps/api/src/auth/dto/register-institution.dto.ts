@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  Equals,
   IsIn,
   IsLatitude,
   IsLongitude,
@@ -62,6 +63,11 @@ class AdminPayloadDto {
   @IsOptional()
   @IsString()
   phone!: string | null;
+
+  // ADR-099: must be exactly `true`, not merely truthy — absent or `false`
+  // falls into the existing 400 INVALID_PAYLOAD, no new error code.
+  @Equals(true)
+  acceptedPrivacyNotice!: true;
 }
 
 export class RegisterInstitutionDto {

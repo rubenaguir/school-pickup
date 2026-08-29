@@ -11,6 +11,7 @@ export { Button } from './Button';
 export type { ButtonProps } from './Button';
 export { Card } from './Card';
 export type { CardProps } from './Card';
+export { PrivacyNoticeContent } from './PrivacyNoticeContent';
 export { SegmentedTabs } from './SegmentedTabs';
 export type { SegmentedTabsProps } from './SegmentedTabs';
 export { Toggle } from './Toggle';

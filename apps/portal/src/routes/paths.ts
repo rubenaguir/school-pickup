@@ -18,6 +18,14 @@ export const VERIFY_EMAIL_PATH = '/verificar-correo';
 export const ACCEPT_INVITATION_PATH = '/aceptar-invitacion';
 
 /**
+ * Aviso de privacidad integral (ADR-099), enlazado desde el checkbox de
+ * `RegisterInstitutionForm` y desde el pie de los shells/Perfil. Fuera de
+ * `AuthenticatedLayout`: se abre antes de tener sesión, durante el registro,
+ * en pestaña nueva.
+ */
+export const PRIVACY_NOTICE_PATH = '/privacy';
+
+/**
  * Dashboard of the Institución role (ADR-072) — real-time KPI cards plus the
  * live activity table, inside `InstitutionShell`. Where a signed-in
  * institution member lands now that a real landing screen exists.

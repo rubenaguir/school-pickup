@@ -5,7 +5,12 @@ import { useAuth } from '../auth/AuthContext';
 import { useProfile } from '../profile/useProfile';
 import { Icon, type IconName } from '../institution/icons';
 import { useAdminMetrics } from './useAdminMetrics';
-import { ADMIN_INSTITUTIONS_PATH, ADMIN_METRICS_PATH, PROFILE_PATH } from '../routes/paths';
+import {
+  ADMIN_INSTITUTIONS_PATH,
+  ADMIN_METRICS_PATH,
+  PRIVACY_NOTICE_PATH,
+  PROFILE_PATH,
+} from '../routes/paths';
 
 interface NavEntry {
   path: string;
@@ -228,6 +233,14 @@ export function OpsShell() {
           >
             Cerrar sesión
           </span>
+          <a
+            href={PRIVACY_NOTICE_PATH}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}
+          >
+            Aviso de privacidad
+          </a>
         </div>
       </aside>
 

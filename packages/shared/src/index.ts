@@ -42,6 +42,7 @@ export * from './student-guardian-labels';
 export * from './ports';
 export * from './adapters/node-mqtt-client';
 export * from './api-client';
+export * from './privacy-notice-version';
 
 /**
  * `applyPickupRequestTransition` (status update + history row) is NOT
