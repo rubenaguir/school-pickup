@@ -2,8 +2,9 @@
 
 Recurso de autenticación y registro. Cubre las features
 `specs/features/001-registro-institucion.md`,
-`specs/features/002-registro-tutor.md`, `specs/features/003-login.md` y
-`specs/features/007-verificacion-correo.md`.
+`specs/features/002-registro-tutor.md`, `specs/features/003-login.md`,
+`specs/features/007-verificacion-correo.md` y
+`specs/features/031-aviso-privacidad-consentimiento.md`.
 
 ## Autenticación de los endpoints de este documento
 
@@ -47,13 +48,16 @@ Registra una institución junto con su primer administrador. Ver feature 001.
     "email": "string",
     "password": "string",
     "fullName": "string",
-    "phone": "string | null"
+    "phone": "string | null",
+    "acceptedPrivacyNotice": "true"
   }
 }
 ```
 
-`joinCode` no se envía en el request: se autogenera en el servidor (ADR-019,
-punto 1).
+`acceptedPrivacyNotice` (ADR-099) debe ser exactamente `true` — no un
+booleano cualquiera; `false`, ausente, o cualquier otro valor responde
+`400 INVALID_PAYLOAD`. Ver Errores. `joinCode` no se envía en el request:
+se autogenera en el servidor (ADR-019, punto 1).
 
 **Response 201**
 ```json
@@ -76,13 +80,17 @@ cuenta se reutiliza: se crea la `institution` y el `institution_member`
 que en el caso de alta nueva, sin enviar un nuevo correo de verificación (la
 contraseña correcta ya prueba posesión de la cuenta). Si `admin.email` ya
 existe pero `admin.password` **no** coincide, la operación falla con 409
-(ver tabla de errores).
+(ver tabla de errores). `acceptedPrivacyNotice: true` sigue siendo
+obligatorio en este camino también (ADR-099): el servicio actualiza
+`privacy_accepted_at`/`privacy_notice_version` sobre el `users` existente
+sin importar si ya tenía valor — es un evento de consentimiento genuino
+ocurriendo en este momento, no se omite por reutilización de cuenta.
 
 **Errores**
 | Código | `code` | Caso |
 |---|---|---|
 | 409 | `EMAIL_ALREADY_REGISTERED` | `email` del administrador ya registrado con una contraseña distinta a la enviada |
-| 400 | `INVALID_PAYLOAD` | payload inválido (campos requeridos faltantes, `type` fuera del enum) |
+| 400 | `INVALID_PAYLOAD` | payload inválido (campos requeridos faltantes, `type` fuera del enum, `acceptedPrivacyNotice` ausente o distinto de `true` — ADR-099) |
 
 ## `POST /auth/register/guardian`
 
@@ -94,9 +102,13 @@ Registra un tutor. Ver feature 002.
   "email": "string",
   "password": "string",
   "fullName": "string",
-  "phone": "string | null"
+  "phone": "string | null",
+  "acceptedPrivacyNotice": "true"
 }
 ```
+
+`acceptedPrivacyNotice` (ADR-099) debe ser exactamente `true` — ausente,
+`false` o cualquier otro valor responde `400 INVALID_PAYLOAD`.
 
 **Response 201**
 ```json
@@ -112,7 +124,7 @@ verificación (ver `POST /auth/verify-email` abajo).
 | Código | `code` | Caso |
 |---|---|---|
 | 409 | `EMAIL_ALREADY_REGISTERED` | `email` ya registrado |
-| 400 | `INVALID_PAYLOAD` | payload inválido |
+| 400 | `INVALID_PAYLOAD` | payload inválido (incluye `acceptedPrivacyNotice` ausente o distinto de `true`, ADR-099) |
 
 ## `POST /auth/login`
 

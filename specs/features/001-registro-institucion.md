@@ -131,6 +131,9 @@ No aplica: este feature no publica ni consume ningún topic MQTT.
 - `specs/entities/institution.md`, `specs/entities/institution_member.md`,
   `specs/entities/user.md`.
 - `specs/features/007-verificacion-correo.md`.
+- `specs/features/031-aviso-privacidad-consentimiento.md` (ADR-099,
+  `admin.acceptedPrivacyNotice` obligatorio en este endpoint desde esa
+  fecha — no aplica a cuentas creadas antes).
 
 ## Preguntas abiertas
 

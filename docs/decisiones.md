@@ -7715,3 +7715,114 @@ sesión pura en los 3 shells, junto con el avatar/nombre/rol.
   dentro de `Profile.tsx` — quedan sin cambio).
 - ADR-090 (colapso responsive de sidebar en los 3 shells, sin cambios
   de este ADR).
+
+## ADR-099 — Aviso de privacidad y consentimiento explícito en registro (LFPDPPP)
+
+**Contexto.** `docs/arquitectura.md` declara desde el inicio del proyecto,
+como principio de diseño obligatorio, que al manejarse datos de
+**menores** + **ubicación** debe existir "aviso de privacidad y
+consentimiento explícitos". Nunca se implementó — encontrado como gap en
+la auditoría exhaustiva de Fase 10 (a petición del humano, "qué nos está
+haciendo falta para terminar el proyecto"): búsqueda exhaustiva en las 3
+apps (`consent`, `acepto`, `términos`, `privacidad`, `privacy`) sin
+ningún resultado, ni pantalla, ni checkbox, ni texto legal en ningún
+lado. De los gaps reales encontrados en esa auditoría, es el único con
+riesgo de producto/legal genuino — los otros dos (ADRs retroactivos de
+infraestructura, `specs/ui-screens/` vacía) son puramente de
+trazabilidad documental.
+
+Verificado contra el código real: ni `RegisterGuardianDto` ni
+`RegisterInstitutionDto` (`apps/api/src/auth/dto/`) tienen campo alguno
+de consentimiento; ni `TutorRegisterForm`
+(`apps/parent/src/screens/Login.tsx`) ni `RegisterInstitutionForm`
+(`apps/portal/src/screens/Login.tsx`) tienen checkbox ni enlace legal
+antes de su botón "Crear cuenta"; `users` no tiene ninguna columna
+relacionada.
+
+**Decisión.**
+
+### 1. Alcance: solo registros nuevos de aquí en adelante
+
+Confirmado con el humano — **no hay ningún mecanismo retroactivo** para
+las cuentas que ya existen en producción hoy, ni bloqueante en su
+próximo login ni recordatorio pasivo. No es deuda técnica pendiente, es
+una decisión de producto explícita: dado el volumen real de cuentas en
+este momento, el costo de construir un flujo retroactivo (interstitial
+de bloqueo, o similar) no se justifica todavía. Puede reabrirse en el
+futuro si el volumen de cuentas activas creadas antes de este ADR se
+vuelve significativo.
+
+### 2. Contenido: fuente única compartida, versionado como texto libre
+
+El aviso vive en `docs/aviso-privacidad.md` — versionado en git como
+cualquier otro documento del proyecto, no en base de datos. Cambiar el
+texto en el futuro no requiere migración de esquema, solo actualizar ese
+archivo e incrementar la constante `PRIVACY_NOTICE_VERSION` en el código
+(valor inicial `"2026-08"`). Mismo criterio de versión como string libre
+que ya usa `audit_log.action` (ADR-018 punto 9) — sin enum cerrado de
+Postgres.
+
+Contenido único compartido entre `apps/portal` y `apps/parent` (ambas
+apps recolectan datos del mismo sistema, no tiene sentido tener dos
+textos que puedan desincronizarse). Vive como constante embebida en
+`packages/ui` — decisión de implementación de Claude Code, no
+`packages/shared` (que es framework-free; el aviso solo lo consumen
+componentes React). `apps/board` no lo necesita — no registra a nadie.
+
+**Redactado por Claude, revisado y confirmado por Rubén Aguirre** — no
+sustituye una revisión legal formal si el proyecto pasa a operar con
+instituciones reales fuera de un entorno de prueba/tesis; para el
+alcance actual (tesis, pilotos) el borrador razonado se consideró
+suficiente. Responsable identificado: Rubén Aguirre, Ciudad de México;
+contacto para derechos ARCO: `privacidad@casillego.com.mx` (buzón nuevo
+por crear, distinto de `no-reply@mail.casillego.com.mx` que es
+transaccional y sin revisión humana).
+
+### 3. Mecanismo de aceptación: 2 columnas nuevas en `users`
+
+`privacy_accepted_at` (timestamptz, nullable) + `privacy_notice_version`
+(varchar(20), nullable). Nullable porque coexisten dos poblaciones en la
+misma tabla: cuentas viejas (siempre `NULL`, permanentemente, por el
+punto 1) y cuentas nuevas (obligatorio, nunca `NULL`). No se modela como
+entidad propia — dos columnas bastan, mismo criterio minimalista que el
+resto del proyecto (no construir especulativamente sin necesidad
+demostrada, ADR-070/074).
+
+`RegisterGuardianDto`/`RegisterInstitutionDto.admin` ganan
+`acceptedPrivacyNotice: boolean`, validado con `@Equals(true)` de
+`class-validator` (debe ser exactamente `true`, no cualquier booleano) —
+ausente o `false` cae en el `400 INVALID_PAYLOAD` ya existente del
+proyecto (con `details`, mismo mecanismo de siempre, sin código de error
+nuevo). Checkbox `required` en ambos formularios, justo antes del botón
+"Crear cuenta", con enlace inline al aviso integral (modal, sin sacar al
+usuario del formulario). En el caso de reutilización de cuenta existente
+(ADR-028 punto 2), el consentimiento se escribe igual sobre el `users`
+reutilizado — es un evento real ocurriendo en ese envío, no se omite.
+
+### 4. Acceso persistente después del registro
+
+Enlace fijo para releer el aviso en cualquier momento — mismo lugar que
+"Cerrar sesión" en el pie de los 3 shells que ADR-098 dejó limpio, y al
+final de las pantallas de Perfil (mismo patrón que `AppVersionLabel`,
+ADR-096).
+
+**Consecuencias.** Sin impacto para las cuentas existentes — ningún
+comportamiento suyo cambia. Dos campos nuevos obligatorios en 2
+formularios de registro (institución, tutor); si el checkbox no se
+marca, el registro no procede. Contenido legal versionado en texto
+plano dentro del repo, no en base de datos — actualizarlo en el futuro
+es un cambio de código simple, sin migración.
+
+## Referencias
+
+- `docs/arquitectura.md` § "Privacidad y marco legal (LFPDPPP)" — el
+  principio de diseño que este ADR finalmente implementa.
+- ADR-018 punto 8 (retención de 90 días de `location_updates`,
+  referenciada en el contenido del aviso).
+- ADR-028 punto 2 (reutilización de cuenta existente en registro de
+  institución, caso que este ADR también cubre).
+- ADR-096 (`AppVersionLabel`, patrón de enlace persistente en Perfil).
+- ADR-098 (pie de los 3 shells, dónde vive el enlace al aviso).
+- `docs/aviso-privacidad.md`,
+  `specs/features/031-aviso-privacidad-consentimiento.md`,
+  `specs/entities/user.md`.

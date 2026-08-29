@@ -792,15 +792,28 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
       `institution_member.*`, `student_guardian.*`,
       `pickup_request.delivery_code_mismatched`) cubren esa definición
       completa. Sin gap encontrado.
-- [ ] **Aviso de privacidad (LFPDPPP) y consentimiento explícito — gap
+- [ ] **Aviso de privacidad y consentimiento explícito (ADR-099)** — gap
       real confirmado en la auditoría exhaustiva de esta sesión, el más
-      importante encontrado.** `docs/arquitectura.md` lo declara
-      principio de diseño obligatorio ("datos de menores + ubicación...
-      Aviso de privacidad y consentimiento explícitos"), pero no existe
-      ningún artefacto en las 3 apps — verificado por búsqueda exhaustiva
-      (`consent`, `acepto`, `términos`, `privacidad`, `privacy`) sin
-      resultados. Reflejaría también la política de retención de
-      `location_updates` (ADR-018).
+      importante encontrado; diseño ya confirmado con el humano, listo
+      para implementar:
+  - [ ] `docs/aviso-privacidad.md`: contenido final (texto corto +
+        integral), ya escrito y revisado
+  - [ ] `users`: columnas `privacy_accepted_at`/`privacy_notice_version`
+        (nullable, ver `specs/entities/user.md`) — solo se completan en
+        registros nuevos, ninguna cuenta existente se toca
+  - [ ] `RegisterGuardianDto`/`RegisterInstitutionDto.admin`:
+        `acceptedPrivacyNotice` con `@Equals(true)`, cae en el
+        `400 INVALID_PAYLOAD` ya existente si falta o es `false`
+  - [ ] Checkbox obligatorio + enlace al aviso integral (modal) antes del
+        botón "Crear cuenta" en `TutorRegisterForm`
+        (`apps/parent/src/screens/Login.tsx`) y
+        `RegisterInstitutionForm` (`apps/portal/src/screens/Login.tsx`)
+  - [ ] Contenido embebido como constante compartida en `packages/ui`,
+        consumido por `apps/portal`/`apps/parent`; `apps/board` no lo
+        necesita
+  - [ ] Enlace persistente para releer el aviso: pie de los 3 shells
+        (junto a "Cerrar sesión", ADR-098) y final de las pantallas de
+        Perfil (patrón `AppVersionLabel`, ADR-096)
 - [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
       documentar explícitamente por qué se deja fuera del alcance final
 - [ ] **2 ADRs retroactivos de infraestructura, confirmados aún

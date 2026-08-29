@@ -77,6 +77,9 @@ No aplica.
 - ADR-019 (`users.status = invited` en auto-registro hasta verificar correo).
 - `specs/entities/user.md`.
 - `specs/features/007-verificacion-correo.md`.
+- `specs/features/031-aviso-privacidad-consentimiento.md` (ADR-099,
+  `acceptedPrivacyNotice` obligatorio en este endpoint desde esa fecha —
+  no aplica a cuentas creadas antes).
 
 ## Preguntas abiertas
 
