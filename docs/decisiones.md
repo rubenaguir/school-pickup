@@ -7527,3 +7527,75 @@ consume lo que ADR-094 ya expone. Sin cambios de comportamiento.
 
 - ADR-094 (`__APP_BUILD_ID__`/`buildIdPlugin`, el dato que se
   reutiliza aquí sin cambios).
+
+## ADR-097 — "Actualizar ahora" no recargaba: dos relojes de detección de versión nunca se sincronizaron
+
+**Contexto.** Reportado por un usuario tras ADR-095/096: el banner de
+actualización apareció, le dio clic a "Actualizar ahora", y la
+pantalla no recargó — tuvo que cerrar la app por completo y reabrirla
+para recibir la versión nueva.
+
+Investigado directamente en el código real instalado
+(`node_modules/vite-plugin-pwa@1.3.0/dist/client/build/register.js`,
+no solo la documentación): `updateServiceWorker` (lo que exponemos
+como `updateSW`) **no recarga la página por sí solo** — solo manda el
+mensaje `SKIP_WAITING`. Quien recarga es un listener del evento
+`'controlling'` que la librería arma interna y automáticamente, pero
+**únicamente dentro de `showSkipWaitingPrompt()`**, que a su vez solo
+se dispara cuando el propio chequeo del navegador (`wb.addEventListener
+('waiting', ...)`, el mecanismo nativo de `ServiceWorkerRegistration`
+que revisa si `sw.js` cambió) detecta una versión nueva por su cuenta
+— con su propio calendario interno del navegador, no relacionado a
+nada de este proyecto. `setupServiceWorker()` (ADR-095) nunca conectó
+el callback `onNeedRefresh`, que es donde ese armado ocurre.
+
+El problema de fondo: **dos relojes de detección corriendo sin
+coordinarse.** ADR-094 compara `__APP_BUILD_ID__` contra
+`/version.json` cada 5 min (rápido, y el que efectivamente mostró el
+banner). El navegador revisa `sw.js` por su cuenta, en un calendario
+propio mucho menos predecible. Si se hace clic en "Actualizar ahora"
+antes de que el segundo reloj haya alcanzado al primero, la señal de
+`SKIP_WAITING` se manda, pero el listener que recargaría la pantalla
+nunca se armó — el clic no hace nada visible.
+
+**Decisión.**
+
+1. `setupServiceWorker()` (`apps/parent/src/update/service-worker.ts`)
+   captura también el `ServiceWorkerRegistration` real (vía
+   `onRegisteredSW`, ya disponible en las opciones de `registerSW`) y
+   conecta `onNeedRefresh` para saber con certeza cuándo el navegador
+   ya confirmó una versión nueva lista (y, como efecto colateral
+   correcto de conectar ese callback, es también cuándo la propia
+   librería arma su listener de recarga).
+2. `applyPendingUpdate()` deja de asumir que ya hay una versión lista
+   solo porque ADR-094 lo dice. Al hacer clic: si el navegador aún no
+   confirmó nada, se fuerza `registration.update()` (el chequeo
+   inmediato, en vez de esperar el calendario propio del navegador), y
+   se espera (con un tope de tiempo corto) a que `onNeedRefresh`
+   dispare antes de mandar `updateSW(true)`. Si aun así se agota el
+   tiempo sin confirmación, se cae a un `window.location.reload()`
+   simple — mejor eso que un botón que visiblemente no hace nada,
+   aunque en ese caso extremo no hay garantía de tomar la versión más
+   nueva en el primer intento.
+3. La detección en sí (ADR-094, el banner, el criterio de "no
+   interrumpir una recogida activa") no cambia — este ADR corrige
+   únicamente la mecánica de activación una vez que la persona ya
+   confirmó que quiere actualizar.
+
+**Consecuencias.** "Actualizar ahora" pasa de ser "probablemente
+funcione, dependiendo de qué tan rápido haya sido el chequeo interno
+del navegador" a "siempre fuerza el chequeo en el momento del clic" —
+determinístico, no depende de la suerte de cuándo cayó el calendario
+interno del navegador. Cualquier PWA que ya haya recibido ADR-095 (no
+solo instalaciones nuevas) hereda la corrección en el próximo
+`sw.js` que reciba.
+
+## Referencias
+
+- ADR-095 (el service worker que esta corrección arregla — no lo
+  reemplaza, corrige la mecánica de activación).
+- ADR-094 (detección independiente vía `/version.json` — sigue siendo
+  la única fuente de "hay una actualización", sin cambios).
+- `node_modules/vite-plugin-pwa/dist/client/build/register.js` (código
+  fuente real de la versión instalada — la referencia que reveló el
+  problema, no la documentación pública del paquete).

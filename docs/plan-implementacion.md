@@ -729,6 +729,16 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
   - [x] `apps/board`: esquina inferior izquierda de `Home.tsx` (fija,
         `ModeSwitcher` ocupa la derecha), casi invisible (`--ink-100`)
         — el tablero lo ve el público, no solo personal
+- [ ] **"Actualizar ahora" no recargaba en `apps/parent` (ADR-097)** —
+      dos relojes de detección (ADR-094 vs. el chequeo nativo del
+      navegador) nunca se sincronizaron:
+  - [ ] `service-worker.ts`: captura `registration` vía
+        `onRegisteredSW`, conecta `onNeedRefresh`
+  - [ ] `applyPendingUpdate()`: si no hay confirmación del navegador
+        todavía, fuerza `registration.update()`, espera con tope de
+        tiempo corto antes de `updateSW(true)`, cae a
+        `window.location.reload()` si se agota el tiempo
+  - [ ] ADR-094 (detección, criterio de momento ideal) sin cambios
 - [ ] Revisión de cobertura de `audit_log` vs. acciones sensibles
       identificadas en `docs/arquitectura.md`
 - [ ] Aviso de privacidad (LFPDPPP) reflejando la política de retención de
