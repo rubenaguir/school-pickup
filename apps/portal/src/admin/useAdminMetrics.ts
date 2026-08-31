@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 
 /** Shape of GET /admin/metrics (specs/api-contracts/admin-metrics.md). No entity to reuse — defined fresh. */
@@ -36,12 +36,6 @@ export interface AdminMetricsValue {
   metrics: AdminMetrics | null;
   error: ApiError | null;
   reload: () => void;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /** Loads the platform-wide metrics panel for the super-admin. Read-only, no mutations. */

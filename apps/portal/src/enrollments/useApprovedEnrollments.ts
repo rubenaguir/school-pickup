@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import type { PendingEnrollment } from './usePendingEnrollments';
 
@@ -28,12 +28,6 @@ function fetchApproved(institutionId: string): Promise<ApprovedEnrollmentsRespon
   return apiClient.get<ApprovedEnrollmentsResponse>(
     `/enrollments?status=approved&institutionId=${encodeURIComponent(institutionId)}`,
   );
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**

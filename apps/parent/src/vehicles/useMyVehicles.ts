@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 
 /** One row of GET /vehicles (specs/api-contracts/vehicles.md). */
@@ -43,12 +43,6 @@ export interface MyVehiclesValue {
 
 interface MyVehiclesResponse {
   vehicles: MyVehicle[];
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**

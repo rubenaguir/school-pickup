@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Card } from '@casillego/ui';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
 import type { InstitutionType } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import { useMyEnrollments, type MyEnrollment } from '../enrollments/useMyEnrollments';
@@ -33,12 +33,6 @@ interface CreateEnrollmentResponse {
   studentId: string;
   institutionId: string;
   status: 'pending';
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 interface SearchState {

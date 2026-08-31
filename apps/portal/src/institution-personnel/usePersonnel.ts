@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import type { InstitutionMemberRole } from '@casillego/shared';
 import { apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -70,12 +70,6 @@ export interface PersonnelValue {
   /** Id of the row whose write is in flight, if any. */
   busyId: string | null;
   rowError: PersonnelRowError | null;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**

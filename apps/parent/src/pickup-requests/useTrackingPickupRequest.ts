@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE, readAccessToken } from '@casillego/shared';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
 import type { ArrivalMode, PickupRequestStatus } from '@casillego/shared';
 import { useRealtimeChannel } from '@casillego/ui';
 import { apiClient, apiBaseUrl, tokenStorage } from '../api/client';
@@ -76,12 +76,6 @@ export interface TrackingValue {
   cancel: () => void;
   actionBusy: boolean;
   actionError: TrackingActionError | null;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 function isTrackingStatus(value: unknown): value is PickupRequestStatus {

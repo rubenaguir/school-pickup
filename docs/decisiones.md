@@ -7963,3 +7963,93 @@ salvo que se revierta explícitamente esta decisión con su propio ADR.
   documentar una decisión de no construir/no escribir, en vez de dejarlo
   pendiente.
 - `specs/README.md`.
+
+## ADR-102 — Cierre de 4 ítems mecánicos del backlog técnico: `rimraf`, `sideEffects:false`, `@eslint-react/eslint-plugin`, deduplicación de `asApiError`
+
+**Contexto.** A petición del humano de cerrar el backlog técnico
+documentado en `docs/plan-implementacion.md` uno por uno, se separaron
+los 12 ítems en 3 categorías: mecánicos sin decisión de producto (este
+ADR), decisiones ya tomadas con condición de reapertura no cumplida
+(sin cambios), y la revocación de refresh token (feature real, ADR
+propio pendiente). Los 4 puntos de este ADR se investigaron y
+**probaron de verdad** contra el repo real antes de escribir esta
+decisión — no son cambios especulativos.
+
+**Decisión.**
+
+### 1. `npm run clean` — `rimraf` como devDependency de `packages/shared`
+
+Verificado: de los 6 workspaces, **solo `packages/shared`** tiene un
+script `clean` (`rimraf dist`) — la nota original del backlog
+("verificar los 6 workspaces") sobreestimaba el alcance real. Se agrega
+`rimraf` como devDependency de `packages/shared` únicamente.
+
+### 2. `packages/shared`: `sideEffects: false`
+
+Probado empíricamente, no solo razonado: sin el flag, `mqtt` (importado
+a nivel de módulo en `node-mqtt-client.ts`, re-exportado por el barrel
+raíz) sí termina en el bundle de producción de `apps/portal` —
+confirmado con `grep` sobre el JS minificado real. Con `"sideEffects":
+false` agregado, el bundle de `apps/portal` baja de 737.69 kB a 633.34
+kB gzip (~14%, ~104 kB) y el string `mqtt` desaparece del bundle.
+`apps/parent` y `apps/board` compilan sin cambios de comportamiento;
+`apps/api`/`apps/worker` no se ven afectados (corren en Node vía
+NestJS, sin bundler — `sideEffects` es un concepto de tree-shaking de
+Vite/Rollup/webpack, no de resolución de módulos de Node). Los 1160
+tests del repo pasan sin cambios.
+
+### 3. `eslint-plugin-react` → `@eslint-react/eslint-plugin`
+
+`eslint-plugin-react` sigue sin declarar soporte para ESLint 10 más de
+un año después de publicada su última versión (7.37.5) — mismo tipo de
+bloqueo que ADR-021 ya documentó para TypeScript 7.
+`@eslint-react/eslint-plugin` sí lo soporta, instala limpio junto al
+resto del stack del proyecto (`eslint-plugin-react-hooks@7.1.1`, que —
+verificado — ya convivía bien con ESLint 10 pese a lo que sugerían los
+issues públicos consultados; el bloqueo real era solo la mitad de reglas
+JSX, no las de hooks) y no introduce ningún requisito de Node nuevo (el
+proyecto ya declaraba `"engines": {"node": ">=24.11"}` desde antes,
+exactamente lo que este plugin pide).
+
+Agregado su config `recommended` al mismo bloque de archivos que ya
+tenía las reglas de `react-hooks`, en `eslint.config.mjs`. Corrido
+`npm run lint` contra todo el código real: **0 errores, 24 warnings**
+(sugerencias de React 19 — `useContext`→`use`, deps faltantes en
+`useEffect`, convención de nombres de setters — nada crítico). La regla
+que específicamente preocupaba (`no-missing-key`, equivalente a
+`react/jsx-key`, activa como `error` en el preset `recommended`) pasó
+limpia en todo el repo — no había ningún bug de `key` escondido, pero
+ahora si apareciera se detectaría.
+
+**Los 24 warnings quedan tal cual, sin corregir en este ADR** — son
+mejoras de código legítimas pero no son la deuda que este ADR cierra
+(cobertura de lint ausente); corregirlas es trabajo aparte, opcional,
+sin urgencia.
+
+### 4. Deduplicación de `asApiError`
+
+Verificado programáticamente (hash de las 17 copias): las 17
+implementaciones locales de `asApiError` en los 3 frontends son
+**byte-idénticas** entre sí y con la versión ya promovida a
+`packages/shared/src/api-client/api-error.ts` (ADR-075 Paso 2). Se
+reemplazan las 17 por el import de `@casillego/shared` — cambio
+mecánico puro, sin ADR de diseño propio (ya lo decía así la nota
+original del backlog), documentado aquí solo para cerrarlo formalmente
+junto con los otros 3 puntos mecánicos de esta sesión.
+
+**Consecuencias.** Sin cambios de comportamiento visibles para el
+usuario en ninguno de los 4 puntos. `docs/plan-implementacion.md`
+actualizado — estos 4 ítems salen de "Backlog técnico" y se marcan
+resueltos. Los 8 ítems restantes del backlog (3 decisiones de producto
+diferidas sin cambios, la nota sobre tests de integración que no es
+deuda real, y la revocación de refresh token) no se tocan en este ADR.
+
+## Referencias
+
+- ADR-021 (compuerta de calidad; mismo tipo de bloqueo de ecosistema que
+  motivó la elección de versión de TypeScript ahí).
+- ADR-036 (design system; primera vez que se documentó la ausencia de
+  `eslint-plugin-react`).
+- ADR-075 (extracción de `asApiError` a `packages/shared`, Paso 2 —
+  este ADR completa la migración de los consumidores restantes).
+- `docs/plan-implementacion.md` § Backlog técnico.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, readAccessToken, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError, readAccessToken } from '@casillego/shared';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import {
   mergeBoardMonitorDelta,
@@ -63,12 +63,6 @@ interface DeliveredTodayApiResponse {
   asOf: string;
   total: number;
   byGroup: DeliveredToday['byGroup'];
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 function parseMessage(data: unknown): BoardMonitorRow | null {

@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ApiError,
-  classifyRefreshFailure,
-  readAccessToken,
-  UNKNOWN_ERROR_CODE,
-} from '@casillego/shared';
+import { ApiError, asApiError, classifyRefreshFailure, readAccessToken } from '@casillego/shared';
 import { apiBaseUrl, apiClient, tokenStorage } from '../api/client';
 import {
   mergeBoardDelta,
@@ -62,12 +57,6 @@ export interface InstitutionBoardValue {
 
 interface ListInstitutionBoardResponse {
   pickupRequests: BoardRow[];
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 export interface ManualAnnouncePayload {

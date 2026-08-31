@@ -8,6 +8,7 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
+import reactPlugin from '@eslint-react/eslint-plugin';
 
 export default tseslint.config(
   {
@@ -73,11 +74,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
   },
 
-  // Código React (apps de navegador + @casillego/ui): reglas de hooks.
-  // Nota: no se agrega `eslint-plugin-react` — su última versión publicada
-  // (7.37.5) declara peer `eslint@^3...^9.7`, no soporta ESLint 10 (mismo
-  // tipo de conflicto que TypeScript 7 en ADR-021). Se retoma cuando publique
-  // soporte, o se evalúa una alternativa nativa de flat config.
+  // Código React (apps de navegador + @casillego/ui): reglas de hooks +
+  // reglas JSX (ADR-102). `eslint-plugin-react` sigue sin declarar soporte
+  // para ESLint 10 (última versión publicada, 7.37.5, hace más de un año) —
+  // se usa `@eslint-react/eslint-plugin` en su lugar, alternativa nativa de
+  // flat config que sí soporta ESLint 10.
   {
     files: [
       'apps/portal/src/**/*.{ts,tsx}',
@@ -92,6 +93,16 @@ export default tseslint.config(
     rules: {
       ...reactHooksPlugin.configs.recommended.rules,
     },
+  },
+
+  {
+    files: [
+      'apps/portal/src/**/*.{ts,tsx}',
+      'apps/parent/src/**/*.{ts,tsx}',
+      'apps/board/src/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+    ],
+    ...reactPlugin.configs.recommended,
   },
 
   // Scripts de mantenimiento fuera de `src` (p.ej. apps/api/scripts): no

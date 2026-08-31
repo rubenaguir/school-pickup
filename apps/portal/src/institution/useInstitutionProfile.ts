@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import type { InstitutionStatus, InstitutionType } from '@casillego/shared';
 import type { LatLng } from '@casillego/ui';
 import { apiClient } from '../api/client';
@@ -70,12 +70,6 @@ export interface InstitutionProfileValue {
   saveError: ApiError | null;
   /** Bumped on every successful save, so the screen can confirm it. */
   savedCount: number;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 
 /** Body of GET /users/me (specs/api-contracts/users.md). `email` is read-only (ADR-059 point 4). */
@@ -61,12 +61,6 @@ export interface ProfileValue {
   changingPassword: boolean;
   changePasswordError: ApiError | null;
   clearChangePasswordError: () => void;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**

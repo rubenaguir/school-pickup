@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, UNKNOWN_ERROR_CODE } from '@casillego/shared';
+import { ApiError, asApiError } from '@casillego/shared';
 import { apiClient } from '../api/client';
 
 /** The five predefined ranges of ADR-060 point 1 — no free-form dates in this phase. */
@@ -42,12 +42,6 @@ export interface InstitutionReportsValue {
   period: ReportPeriod;
   setPeriod: (next: ReportPeriod) => void;
   reload: () => void;
-}
-
-function asApiError(caught: unknown): ApiError {
-  return caught instanceof ApiError
-    ? caught
-    : new ApiError({ code: UNKNOWN_ERROR_CODE, message: 'Error desconocido', status: 0 });
 }
 
 /**
