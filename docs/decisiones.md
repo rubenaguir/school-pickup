@@ -8053,3 +8053,88 @@ deuda real, y la revocación de refresh token) no se tocan en este ADR.
 - ADR-075 (extracción de `asApiError` a `packages/shared`, Paso 2 —
   este ADR completa la migración de los consumidores restantes).
 - `docs/plan-implementacion.md` § Backlog técnico.
+
+## ADR-103 — Revocación de refresh token vía `token_version`, activada al cambiar contraseña
+
+**Contexto.** ADR-019 punto 3 aceptó conscientemente el refresh token
+stateless como limitación del MVP y lo dejó como ítem de backlog. Al
+retomarlo (a petición del humano, cierre del backlog técnico), se
+investigó el mecanismo real antes de diseñar nada:
+
+- `POST /auth/refresh` ya revalida `users.status` en cada uso (enmienda
+  de ADR-019 en Fase 4) — una cuenta suspendida bloquea la renovación
+  con retraso máximo de 15 min (el TTL del access token). El hueco real
+  es más angosto de lo que sugiere la nota del backlog: **un refresh
+  token robado de una cuenta que sigue `active`** no se puede invalidar
+  antes de sus 30 días.
+- Cada llamada a `/auth/refresh` ya rota el refresh token (ADR-067,
+  emite uno nuevo) — pero nunca invalida el anterior, que sigue siendo
+  válido hasta su propio vencimiento. La rotación existe, no "quema"
+  nada.
+- No existe ningún endpoint de logout — cerrar sesión es 100% del lado
+  cliente (`AuthContext.logout()` solo borra `localStorage`), sin aviso
+  al servidor.
+- `JwtStrategy` (protege cada request autenticado) es completamente
+  stateless — sin consulta a base de datos por request. Cualquier
+  diseño que agregue una consulta ahí afecta el costo de *todas* las
+  llamadas autenticadas del sistema, no solo las de refresh.
+
+**Decisión.** Se descarta una tabla de sesiones/tokens revocados (lo que
+sugiere literalmente la nota original del backlog, `revoked_tokens`) a
+favor de algo más liviano: **`users.token_version`, un entero simple**.
+Confirmado con el humano — alcance mínimo, sin tabla de sesiones
+individuales ni acción de administrador sobre otros usuarios.
+
+- Columna nueva `users.token_version` (`integer`, `NOT NULL`, default
+  `0`).
+- El refresh token gana un claim `tokenVersion` (además de `sub`/`type`)
+  con el valor de `users.token_version` al momento de emitirse.
+- `POST /auth/refresh` compara `payload.tokenVersion` contra
+  `user.tokenVersion` actual — si no coinciden, `401
+  INVALID_REFRESH_TOKEN` (mismo código ya existente, sin código nuevo).
+- **Único disparador que incrementa `token_version`: un cambio de
+  contraseña exitoso** (`UsersService.changePassword()`). Hoy cambiar tu
+  contraseña *no* invalida ningún token ya emitido — con esto, si
+  alguien tenía un token robado de tu cuenta, cambiar tu contraseña lo
+  saca. Confirmado con el humano: **sin endpoint ni botón de UI
+  dedicados** ("cerrar sesión en todos los dispositivos") — queda
+  exclusivamente como efecto secundario interno del cambio de
+  contraseña, no como feature aparte.
+- `JwtStrategy` no se toca — el chequeo vive únicamente en
+  `POST /auth/refresh`. Un access token ya emitido antes del incremento
+  sigue funcionando hasta su propio TTL de 15 min; mismo límite que ya
+  existía para una cuenta que pasa a `suspended`, no una regresión.
+
+**Lo que esto no resuelve, a propósito:**
+- No hay detección automática de reuso de un token ya rotado (exigiría
+  rastrear cada token individualmente, no un contador). Un token robado
+  y usado por un atacante *antes* que el dueño legítimo no dispara
+  ninguna alerta ni revocación automática — la revocación es siempre
+  reactiva (el dueño cambia su contraseña), nunca proactiva.
+- No se puede invalidar una sola sesión/dispositivo dejando las demás
+  vivas — es todo o nada para ese usuario. Coincide con el escenario
+  real que motiva esto (perdiste el dispositivo, no sabes cuál token
+  robaron) mejor que con un panel de "dispositivos conectados" que el
+  proyecto no tiene en ningún otro lado.
+- Ningún admin puede forzar el cierre de sesión de otro usuario — sería
+  una decisión de autorización aparte (¿puede un admin de institución
+  sobre su propio personal? ¿solo super-admin sobre cualquiera?), fuera
+  de alcance de este ADR.
+
+**Consecuencias.** Sin nueva entidad, sin job de limpieza/purga (a
+diferencia de `location_updates`, ADR-018, no hay una tabla que crezca —
+es una sola columna por usuario). `specs/entities/user.md` y
+`specs/api-contracts/{auth,users}.md` actualizados. Migración simple,
+sin backfill (default `0` para todas las cuentas existentes).
+
+## Referencias
+
+- ADR-019 punto 3 y su enmienda (decisión original que este ADR retoma;
+  el chequeo de `users.status` en refresh que ya existía y que este ADR
+  no modifica).
+- ADR-067 (rotación de refresh token en cada uso — el comportamiento que
+  reveló que rotar no es lo mismo que revocar).
+- ADR-059 punto 3 (`POST /users/me/change-password`, el endpoint donde
+  vive el único disparador de este ADR).
+- `specs/entities/user.md`, `specs/api-contracts/auth.md`,
+  `specs/api-contracts/users.md`.

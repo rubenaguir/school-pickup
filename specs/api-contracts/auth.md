@@ -178,24 +178,40 @@ justificación en `specs/features/003-login.md`).
 **nuevo**, con TTL fresco de 30 días desde ese momento — el cliente debe
 descartar el que usó para pedir el refresh y guardar el nuevo. Es
 longevidad de sesión para uso activo continuo, no un endurecimiento de
-seguridad: sigue sin existir lista de revocación (stateless, mismo
-criterio que el resto del sistema), así que un `refreshToken` robado sigue
-siendo utilizable hasta su propio TTL sin que el original quede invalidado
-del lado del servidor.
+seguridad: la rotación por sí sola no invalida el token anterior, que
+sigue siendo válido hasta su propio TTL si alguien más también lo tiene.
+
+**Revocación por versión (ADR-103).** Cada `refreshToken` lleva un claim
+`tokenVersion`, comparado en cada llamada contra `users.token_version`
+actual — si no coinciden, `401 INVALID_REFRESH_TOKEN` (mismo código que
+el resto de fallas de este endpoint, sin código nuevo). Hoy el único
+punto del sistema que incrementa `token_version` es un cambio de
+contraseña exitoso (`POST /users/me/change-password` — ver
+`specs/api-contracts/users.md`): cambiar tu contraseña invalida de golpe
+todo refresh token ya emitido para tu cuenta, sin importar cuántos había.
+No existe ningún endpoint ni acción de UI dedicados solo a esto — es
+un efecto secundario del cambio de contraseña, no una feature aparte
+(alcance confirmado con el humano). El access token no se ve afectado
+por este chequeo (`JwtStrategy` sigue siendo stateless, sin consulta a
+base de datos en cada request autenticado) — uno ya emitido antes del
+incremento sigue funcionando hasta su propio TTL de 15 min, mismo límite
+que ya existía para una cuenta que pasa a `suspended`.
 
 **Errores**
 | Código | `code` | Caso |
 |---|---|---|
-| 401 | `INVALID_REFRESH_TOKEN` | refresh token inválido, expirado o mal formado; o con firma y expiración válidas pero cuyo `users` referido (`sub`) ya no existe |
+| 401 | `INVALID_REFRESH_TOKEN` | refresh token inválido, expirado o mal formado; con firma y expiración válidas pero cuyo `users` referido (`sub`) ya no existe; o con `tokenVersion` distinto al `token_version` actual del usuario (ADR-103) |
 | 403 | `ACCOUNT_SUSPENDED` | token con firma y expiración válidas, pero el `users` referido (`sub`) tiene `status = suspended` — mismo `code` que usa `POST /auth/login` para el mismo caso |
 
-Nota: al ser stateless (ver feature 003), no existe un endpoint de logout
-que invalide el refresh token del lado del servidor en este slice. Sin
-embargo, cada uso de este endpoint sí revalida `users.status` contra la
-base de datos (no solo la firma/expiración del JWT): una suspensión
-posterior a la emisión del refresh token bloquea la renovación en el
-siguiente intento, con un retraso máximo igual al TTL del access token
-vigente. Ver ADR-019, punto 3 (enmienda).
+Nota: sigue sin existir un endpoint de logout que invalide un refresh
+token específico del lado del servidor — ADR-103 cubre el caso de
+"invalidar todos los tokens de esta cuenta" (vía cambio de contraseña),
+no el de "invalidar solo este token". Cada uso de este endpoint sí
+revalida `users.status` contra la base de datos (no solo la firma/
+expiración del JWT): una suspensión posterior a la emisión del refresh
+token bloquea la renovación en el siguiente intento, con un retraso
+máximo igual al TTL del access token vigente. Ver ADR-019, punto 3
+(enmienda), y ADR-103.
 
 ## `POST /auth/verify-email`
 

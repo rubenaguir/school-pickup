@@ -82,6 +82,14 @@ sin requisito de complejidad adicional (ADR-059 punto 3).
 { "success": true }
 ```
 
+**Efecto secundario (ADR-103):** un cambio de contraseña exitoso
+incrementa `users.token_version`, lo que invalida de golpe todo refresh
+token ya emitido para esta cuenta — la próxima vez que cualquier sesión
+(propia u otra, si alguien más tenía un token robado) intente
+`POST /auth/refresh`, recibe `401 INVALID_REFRESH_TOKEN`. No afecta el
+access token ya en uso en la sesión actual, que sigue vivo hasta su
+propio TTL de 15 min. Ver `specs/api-contracts/auth.md`.
+
 **Nota sobre sesiones existentes (ADR-059 punto 5):** cambiar la
 contraseña no revoca ningún `accessToken`/`refreshToken` ya emitido —
 siguen siendo válidos hasta su expiración natural. Limitación aceptada, no

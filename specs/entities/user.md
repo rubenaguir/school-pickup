@@ -23,6 +23,7 @@ existencia de filas en `student_guardians`.
 | `notify_product_news` | `boolean` | NOT NULL, default `false` | ver ADR-016 |
 | `privacy_accepted_at` | `timestamptz` | nullable | momento en que el usuario aceptó el aviso de privacidad en su registro. `NULL` para toda cuenta creada antes de ADR-099 — decisión de producto explícita, no se retroaplica a cuentas existentes |
 | `privacy_notice_version` | `varchar(20)` | nullable | qué versión de `docs/aviso-privacidad.md` aceptó (ej. `"2026-08"`). `NULL` junto con `privacy_accepted_at` para cuentas anteriores a ADR-099. Ver ADR-099 |
+| `token_version` | `integer` | NOT NULL, default `0` | invalida de golpe todo refresh token ya emitido para este usuario cuando se incrementa — hoy solo lo incrementa un cambio de contraseña exitoso. Ver ADR-103 |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | |
 
@@ -52,6 +53,7 @@ existencia de filas en `student_guardians`.
 - `password_hash` es nullable: es `NULL` para un `users` invitado por un admin (`institution_members`) o por otro tutor (`student_guardians`) que aún no define contraseña. Invariante: un `users` con `status = active` debe tener `password_hash` no nulo. No se implementa como `CHECK` constraint; se valida en la capa de servicio al activar la cuenta (auto-registro con contraseña de entrada, o aceptación de invitación que la define por primera vez), consistente con ADR-017. Ver ADR-022.
 - `full_name` es nullable, mismo patrón y misma razón que `password_hash`: es `NULL` para un `users` creado por invitación (`student_guardians` o `institution_members`) cuyo nombre real todavía no se captura — se llena al aceptar la invitación. Invariante: un `users` con `status = active` debe tener `full_name` no nulo (misma validación en capa de servicio al activar, no `CHECK` de BD). Ver ADR-030.
 - `privacy_accepted_at`/`privacy_notice_version` son nullable **a propósito y de forma permanente** para cuentas creadas antes de ADR-099 — no hay ningún mecanismo (ni bloqueante ni recordatorio) que las fuerce a completarlos retroactivamente; es una decisión de producto explícita, no un pendiente. Para cuentas creadas después de ADR-099, ambos campos son obligatorios en el flujo de registro: `RegisterInstitutionDto.admin`/`RegisterGuardianDto` exigen `acceptedPrivacyNotice: true` y el servicio los escribe en el mismo `INSERT` que crea el `users` — nunca quedan `NULL` en una cuenta nueva. No se modela como `NOT NULL` de esquema porque coexisten ambos casos (cuentas viejas sin valor, cuentas nuevas con valor obligatorio) en la misma tabla. Ver ADR-099.
+- `token_version` no se expone en ningún endpoint (ni request ni response) — es puramente interno, viaja embebido como claim dentro del refresh token firmado y se compara contra el valor actual de la fila en `POST /auth/refresh`. Hoy el único punto que lo incrementa es `UsersService.changePassword()` — deliberadamente no hay endpoint ni acción de UI dedicados a invalidar sesiones por separado (alcance confirmado con el humano). No cubre el access token (`JwtStrategy` sigue siendo stateless, sin lookup a BD por request) — un access token ya emitido antes del incremento sigue funcionando hasta su propio TTL de 15 min, mismo límite que ya existe para una cuenta que se suspende. Ver ADR-103.
 
 ## Enums
 
@@ -63,4 +65,5 @@ existencia de filas en `student_guardians`.
 - ADR-011 (el rol operativo vive en `institution_members`, no aquí).
 - ADR-018 (transiciones válidas de `status`).
 - ADR-022 (`password_hash` nullable; invariante `active` ⇒ `password_hash` no nulo).
+- ADR-103 (`token_version`; revocación de refresh tokens al cambiar contraseña).
 - ADR-099 (`privacy_accepted_at`/`privacy_notice_version`; consentimiento explícito solo para registros nuevos, `docs/aviso-privacidad.md`).
