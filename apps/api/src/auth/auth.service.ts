@@ -254,15 +254,22 @@ export class AuthService {
         message: 'Invalid or expired refresh token.',
       });
 
-    let payload: { sub: string };
+    let payload: { sub: string; tokenVersion: number };
     try {
-      payload = this.refreshJwtService.verify<{ sub: string }>(dto.refreshToken);
+      payload = this.refreshJwtService.verify<{ sub: string; tokenVersion: number }>(
+        dto.refreshToken,
+      );
     } catch {
       throw invalidRefreshToken();
     }
 
     const user = await this.usersRepository.findOneBy({ id: payload.sub });
     if (!user) {
+      throw invalidRefreshToken();
+    }
+    // ADR-103: a token_version bump (today: a password change) invalidates
+    // every refresh token issued before it.
+    if (payload.tokenVersion !== user.tokenVersion) {
       throw invalidRefreshToken();
     }
     if (user.status === 'suspended') {
@@ -349,6 +356,10 @@ export class AuthService {
   }
 
   private issueRefreshToken(user: User): string {
-    return this.refreshJwtService.sign({ sub: user.id, type: 'refresh' });
+    return this.refreshJwtService.sign({
+      sub: user.id,
+      type: 'refresh',
+      tokenVersion: user.tokenVersion,
+    });
   }
 }

@@ -54,8 +54,9 @@ export class UsersService {
 
   /**
    * Separate endpoint from updateMe (ADR-059 point 3): a security action that
-   * requires currentPassword, not a field edit. Does not revoke tokens
-   * already issued (ADR-059 point 5).
+   * requires currentPassword, not a field edit. Bumps tokenVersion (ADR-103),
+   * which invalidates every refresh token already issued for this account; the
+   * current access token stays valid until its own 15-min TTL (ADR-059 point 5).
    */
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<ChangePasswordResponse> {
     const user = await this.findOrFail(userId);
@@ -68,6 +69,8 @@ export class UsersService {
     }
 
     user.passwordHash = await hashPassword(dto.newPassword);
+    // ADR-103: invalidate every refresh token already issued for this account.
+    user.tokenVersion += 1;
     await this.usersRepository.save(user);
 
     return { success: true };

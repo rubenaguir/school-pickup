@@ -12,6 +12,7 @@ function buildUser(overrides?: Partial<User>): User {
     phone: '5555555555',
     status: 'active',
     isSuperAdmin: false,
+    tokenVersion: 0,
     notifyEnrollmentApproved: true,
     notifyDismissalReminder: true,
     notifyDeliveryConfirmed: true,
@@ -113,6 +114,24 @@ describe('UsersService', () => {
       const saved = usersRepo.save.mock.calls[0]?.[0];
       expect(saved.passwordHash).not.toBe(currentHash);
       await expect(verifyPassword(saved.passwordHash!, 'brand-new-password')).resolves.toBe(true);
+    });
+
+    it('bumps tokenVersion in the same save, invalidating existing refresh tokens (ADR-103)', async () => {
+      const currentHash = await hashPassword('correct-password');
+      const { service, usersRepo } = buildService({
+        findOne: vi
+          .fn()
+          .mockResolvedValue(buildUser({ passwordHash: currentHash, tokenVersion: 4 })),
+      });
+
+      await service.changePassword('user-1', {
+        currentPassword: 'correct-password',
+        newPassword: 'brand-new-password',
+      });
+
+      expect(usersRepo.save).toHaveBeenCalledOnce();
+      const saved = usersRepo.save.mock.calls[0]?.[0];
+      expect(saved.tokenVersion).toBe(5);
     });
 
     it('rejects with 401 INVALID_CURRENT_PASSWORD when currentPassword does not match', async () => {

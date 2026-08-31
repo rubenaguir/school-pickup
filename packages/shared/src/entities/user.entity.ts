@@ -67,6 +67,12 @@ export class User {
   @Column({ name: 'privacy_notice_version', type: 'varchar', length: 20, nullable: true })
   privacyNoticeVersion!: string | null;
 
+  // ADR-103: bumped on a successful password change; every refresh token whose
+  // `tokenVersion` claim no longer matches this value is rejected by
+  // POST /auth/refresh. Purely internal — never exposed on any endpoint.
+  @Column({ name: 'token_version', type: 'int', default: 0 })
+  tokenVersion!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

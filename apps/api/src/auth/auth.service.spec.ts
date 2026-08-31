@@ -350,12 +350,16 @@ describe('AuthService.refresh', () => {
   it('issues a new access token and a rotated refresh token for a valid refresh token and an active user', async () => {
     const { service, refreshJwtService } = buildAuthService({
       usersRepository: {
-        findOneBy: vi
-          .fn()
-          .mockResolvedValue({ id: 'u1', email: 'a@b.com', isSuperAdmin: false, status: 'active' }),
+        findOneBy: vi.fn().mockResolvedValue({
+          id: 'u1',
+          email: 'a@b.com',
+          isSuperAdmin: false,
+          status: 'active',
+          tokenVersion: 3,
+        }),
       },
     });
-    const refreshToken = refreshJwtService.sign({ sub: 'u1', type: 'refresh' });
+    const refreshToken = refreshJwtService.sign({ sub: 'u1', type: 'refresh', tokenVersion: 3 });
 
     const result = await service.refresh({ refreshToken });
 
@@ -363,10 +367,30 @@ describe('AuthService.refresh', () => {
     expect(result.refreshToken).toEqual(expect.any(String));
     expect(Object.keys(result).sort()).toEqual(['accessToken', 'refreshToken']);
     // ADR-067: the response carries a freshly-issued refresh token for the
-    // same user, not the caller's original one echoed back.
+    // same user, not the caller's original one echoed back. ADR-103: it also
+    // carries the user's current token_version as a claim.
     expect(
-      refreshJwtService.verify<{ sub: string; type: string }>(result.refreshToken),
-    ).toMatchObject({ sub: 'u1', type: 'refresh' });
+      refreshJwtService.verify<{ sub: string; type: string; tokenVersion: number }>(
+        result.refreshToken,
+      ),
+    ).toMatchObject({ sub: 'u1', type: 'refresh', tokenVersion: 3 });
+  });
+
+  it('rejects with 401 INVALID_REFRESH_TOKEN when tokenVersion no longer matches the user (ADR-103)', async () => {
+    const { service, refreshJwtService } = buildAuthService({
+      usersRepository: {
+        findOneBy: vi
+          .fn()
+          .mockResolvedValue({ id: 'u1', email: 'a@b.com', status: 'active', tokenVersion: 2 }),
+      },
+    });
+    // Signed before the user changed their password (token_version was 1).
+    const refreshToken = refreshJwtService.sign({ sub: 'u1', type: 'refresh', tokenVersion: 1 });
+
+    await expect(service.refresh({ refreshToken })).rejects.toMatchObject({
+      status: 401,
+      response: { code: 'INVALID_REFRESH_TOKEN' },
+    });
   });
 
   it('rejects with 401 INVALID_REFRESH_TOKEN for a malformed token', async () => {
