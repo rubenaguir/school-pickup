@@ -8138,3 +8138,55 @@ sin backfill (default `0` para todas las cuentas existentes).
   vive el único disparador de este ADR).
 - `specs/entities/user.md`, `specs/api-contracts/auth.md`,
   `specs/api-contracts/users.md`.
+
+## ADR-104 — `npm run check` fallaba en un clon 100% fresco: `lint` corría antes de que `packages/shared` existiera compilado
+
+**Contexto.** Encontrado al verificar la implementación de ADR-103: en
+un clon genuinamente nuevo (sin `packages/shared/dist/` construido de
+ninguna sesión anterior), `npm run check` fallaba con **más de 2000
+errores falsos** (`@typescript-eslint/no-unsafe-assignment`,
+`no-unsafe-member-access`, etc.) en cascada por todo el repo — nada
+relacionado con código real. Causa: el script
+`"check": "lint && format:check && build && test"` corre `lint`
+**antes** de `build`; el linting type-aware no puede resolver los tipos
+de `@casillego/shared` sin su `dist/` compilado (`packages/shared` es la
+única pieza del monorepo con paso de compilación propio — `packages/ui`
+no lo necesita, sus `exports` apuntan directo a `./src/index.ts`,
+consumido crudo por Vite). Nunca se había detectado porque el entorno de
+desarrollo local ya tenía `packages/shared` construido de sesiones
+anteriores — el mismo síntoma que `npm run dev:api` tuvo en ADR-046, con
+la misma causa de fondo: un paso que asume compilación previa sin
+garantizarla.
+
+**Decisión.** Se agrega `npm run build:shared` (ya existía como script)
+como prepaso de `check`:
+
+```json
+"check": "npm run build:shared && npm run lint && npm run format:check && npm run build && npm run test"
+```
+
+Se eligió sobre la alternativa de reordenar a `build && lint && ...`
+(construir los 5 workspaces antes de lintear) porque solo
+`packages/shared` es la dependencia real que otros workspaces necesitan
+resuelta para el linting type-aware — construir los otros 4 primero solo
+alargaría el gate sin resolver nada que `lint` necesite.
+
+Probado en un clon 100% virgen, sin ningún paso manual: `npm run check`
+completo pasa limpio (0 errores de lint, 24 warnings esperados de
+ADR-102, 1162 tests) partiendo de cero, sin `dist/` de ningún workspace
+preexistente.
+
+**Consecuencias.** Sin cambios de comportamiento del código — es
+puramente el orden del script de calidad. Relevante para cualquier
+revisión que clone el repo desde cero y corra `npm run check` para
+verificar que todo funciona (defensa de tesis incluida) — antes de este
+ADR, ese flujo exacto habría fallado con miles de errores falsos.
+
+## Referencias
+
+- ADR-021 (compuerta de calidad original, define el script `check`).
+- ADR-046 (mismo patrón de causa raíz: un paso que asume estado
+  compilado previo sin garantizarlo — ahí `npm run dev:api`, aquí
+  `npm run check`).
+- ADR-103 (la verificación de su implementación fue lo que reveló este
+  problema).
