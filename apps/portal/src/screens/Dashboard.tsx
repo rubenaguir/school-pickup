@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Card, EmptyState, ErrorState, SkeletonRow } from '@casillego/ui';
 import type { BadgeProps } from '@casillego/ui';
-import type { PickupRequestStatus } from '@casillego/shared';
+import type { PickupRequestStatus, StudentGuardianRelationship } from '@casillego/shared';
 import { relationshipLabel } from '@casillego/shared';
+import { apiClient } from '../api/client';
 import { useInstitution } from '../institution/InstitutionContext';
 import { useDismissalWindow } from '../institution/useDismissalWindow';
 import { useInstitutionBoardMonitor } from '../institution/useInstitutionBoardMonitor';
@@ -38,42 +39,68 @@ const BADGE_TONE: Record<PickupRequestStatus, NonNullable<BadgeProps['tone']>> =
 };
 
 /**
- * "Requiere atención" (ADR-072 §6): fixed example content copied from the
- * kit's `DASH_ALERTS`, NOT real data — no alert concept exists yet in the
- * domain (no "lleva mucho en puerta"/geofence-off signal). The panel stays
- * visually present because the human wants it kept as a placeholder to
- * populate once that concept exists; it must never be read as this
- * institution's actual alerts.
+ * "Requiere atención" (ADR-105): three real conditions computed against the
+ * institution's live data, one endpoint. Polled on mount and every 60 s while
+ * the panel is mounted — NOT wired to the board-monitor WS channel: the
+ * `waiting_too_long` condition changes relevance with the mere passage of
+ * time, with no event to push (ADR-105).
  */
-const PLACEHOLDER_ALERTS = [
-  {
-    name: 'Regina Campos Téllez',
-    detail: '+12 min en puerta sin completar la entrega',
+type AttentionItemType = 'waiting_too_long' | 'cancelled_no_followup' | 'first_time_guardian';
+
+interface AttentionItem {
+  type: AttentionItemType;
+  pickupRequestId: string;
+  studentFullName: string;
+  guardianFullName: string;
+  guardianRelationship: StudentGuardianRelationship;
+  waitingMinutes: number | null;
+}
+
+interface AttentionItemsResponse {
+  asOf: string;
+  items: AttentionItem[];
+}
+
+const ATTENTION_REFRESH_MS = 60_000;
+
+const ATTENTION_STYLE: Record<
+  AttentionItemType,
+  { icon: string; color: string; iconBg: string; bg: string; border: string }
+> = {
+  waiting_too_long: {
     icon: '!',
     color: 'var(--danger)',
     iconBg: 'var(--danger-bg)',
     bg: '#FEF4F4',
     border: 'var(--danger-border)',
   },
-  {
-    name: 'Mateo Domínguez Ríos',
-    detail: 'Recoge chofer autorizado — verificar identidad en puerta',
+  first_time_guardian: {
     icon: '?',
     color: 'var(--status-arriving-fg)',
     iconBg: 'var(--status-arriving-bg)',
     bg: '#FFFBEB',
     border: 'rgba(245,158,11,.22)',
   },
-  {
-    name: 'Santiago Bravo Mena',
-    detail: 'Recogida cancelada por el tutor · pasa a contraturno',
+  cancelled_no_followup: {
     icon: '×',
     color: 'var(--accent-slate-fg)',
     iconBg: 'var(--accent-slate-bg)',
     bg: '#F6F8FA',
     border: 'rgba(100,116,139,.16)',
   },
-] as const;
+};
+
+/** The backend response carries no prose — the card text is built here. */
+function attentionDetail(item: AttentionItem): string {
+  const guardian = `${item.guardianFullName} (${relationshipLabel(item.guardianRelationship)})`;
+  if (item.type === 'waiting_too_long') {
+    return `+${item.waitingMinutes ?? 0} min en puerta sin completar la entrega`;
+  }
+  if (item.type === 'first_time_guardian') {
+    return `Primera vez que ${guardian} recoge a este alumno — verifica identidad en puerta`;
+  }
+  return `Recogida cancelada por ${guardian} · sin recogida de seguimiento`;
+}
 
 const FILTERS = ['Todos', 'En camino', 'En puerta', 'Entregados'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -85,6 +112,20 @@ function matchesFilter(row: BoardMonitorRow, filter: Filter): boolean {
   if (filter === 'En puerta') return row.status === 'arrived';
   return row.status === 'delivered';
 }
+
+const EMPTY_ATTENTION_ICON = (
+  <svg
+    width="28"
+    height="28"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+  >
+    <path d="M9 12l2 2 4-4" />
+    <circle cx="12" cy="12" r="9" />
+  </svg>
+);
 
 const EMPTY_ACTIVITY_ICON = (
   <svg
@@ -149,6 +190,33 @@ export function Dashboard() {
   const dismissalWindow = useDismissalWindow(institutionId);
   const monitor = useInstitutionBoardMonitor(institutionId);
   const [filter, setFilter] = useState<Filter>('Todos');
+  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
+
+  useEffect(() => {
+    if (!institutionId) return;
+    let cancelled = false;
+
+    const load = () => {
+      void apiClient
+        .get<AttentionItemsResponse>(
+          `/institutions/${encodeURIComponent(institutionId)}/attention-items`,
+        )
+        .then((response) => {
+          if (!cancelled) setAttentionItems(response.items);
+        })
+        .catch(() => {
+          // A transient failure just leaves the last good list in place until
+          // the next tick; the panel is a hint, not a blocking control.
+        });
+    };
+
+    load();
+    const timer = setInterval(load, ATTENTION_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [institutionId]);
 
   const enCaminoCount = monitor.rows.filter(
     (row) => row.status === 'en_route' || row.status === 'approaching' || row.status === 'arriving',
@@ -251,58 +319,75 @@ export function Dashboard() {
                 padding: '0 8px',
               }}
             >
-              {PLACEHOLDER_ALERTS.length}
+              {attentionItems.length}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
-            {PLACEHOLDER_ALERTS.map((alert) => (
-              <div
-                key={alert.name}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  padding: '13px 14px',
-                  borderRadius: 'var(--radius-lg)',
-                  background: alert.bg,
-                  border: `1px solid ${alert.border}`,
-                }}
-              >
-                <span
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 9,
-                    background: alert.iconBg,
-                    color: alert.color,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    fontWeight: 800,
-                  }}
-                >
-                  {alert.icon}
-                </span>
-                <span
-                  style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>
-                    {alert.name}
-                  </span>
-                  <span
+            {attentionItems.length === 0 ? (
+              <EmptyState
+                icon={EMPTY_ATTENTION_ICON}
+                title="Nada requiere atención"
+                description="Aquí aparecen las recogidas que llevan demasiado en puerta, las canceladas sin seguimiento y la primera vez que un tutor recoge a un alumno."
+              />
+            ) : (
+              attentionItems.map((item) => {
+                const style = ATTENTION_STYLE[item.type];
+                return (
+                  <div
+                    key={item.pickupRequestId}
                     style={{
-                      fontSize: 13,
-                      color: 'var(--ink-300)',
-                      fontWeight: 500,
-                      lineHeight: 1.35,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '13px 14px',
+                      borderRadius: 'var(--radius-lg)',
+                      background: style.bg,
+                      border: `1px solid ${style.border}`,
                     }}
                   >
-                    {alert.detail}
-                  </span>
-                </span>
-              </div>
-            ))}
+                    <span
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 9,
+                        background: style.iconBg,
+                        color: style.color,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {style.icon}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                      }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>
+                        {item.studentFullName}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: 'var(--ink-300)',
+                          fontWeight: 500,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {attentionDetail(item)}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </Card>
       </div>

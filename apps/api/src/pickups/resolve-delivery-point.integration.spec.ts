@@ -117,6 +117,10 @@ describe.skipIf(!databaseReachable)('resolveDeliveryPointId (Postgres real, ADR-
       undefined as never,
       undefined as never,
       undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
     );
   });
 

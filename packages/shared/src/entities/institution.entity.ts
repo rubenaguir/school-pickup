@@ -68,6 +68,9 @@ export class Institution {
   @Column({ name: 'arriving_lead_minutes', type: 'int', default: 5 })
   arrivingLeadMinutes!: number;
 
+  @Column({ name: 'attention_wait_minutes', type: 'int', default: 20 })
+  attentionWaitMinutes!: number;
+
   @Column({ name: 'join_code', type: 'varchar', length: 20, unique: true })
   joinCode!: string;
 

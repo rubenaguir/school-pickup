@@ -15,6 +15,7 @@ interface InstitutionProfileFields {
   arrivalToleranceMinutes: number;
   advanceNoticeMinutes: number;
   arrivingLeadMinutes: number;
+  attentionWaitMinutes: number;
 }
 
 export interface GetInstitutionResponse extends InstitutionProfileFields {

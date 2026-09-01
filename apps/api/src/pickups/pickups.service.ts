@@ -9,7 +9,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { Between, DataSource, In, MoreThan, Not, Repository } from 'typeorm';
 import {
   boardAnnounceTopic,
   boardMonitorTopic,
@@ -39,6 +39,8 @@ import { InstitutionAccessService } from '../institutions/institution-access.ser
 import {
   AuditLog,
   DeliveryPoint,
+  DismissalException,
+  DismissalWindow,
   Enrollment,
   Institution,
   InstitutionMember,
@@ -49,11 +51,16 @@ import {
   type User,
   Vehicle,
 } from '@casillego/shared/entities';
+import { toCalendarDate } from '../institution-reports/institution-reports.service';
+import { resolveDeadline, resolveDismissalWindowEnd } from '../institution-reports/punctuality';
 import { randomDeliveryCode } from './delivery-code.util';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import type { ListPickupRequestsQueryDto } from './dto/list-pickup-requests-query.dto';
 import type { SendLocationDto } from './dto/send-location.dto';
 import type {
+  AttentionItem,
+  AttentionItemsResponse,
+  AttentionItemType,
   DeliveredTodayGroupCount,
   DeliveredTodayResponse,
   ListDeliveryPointQueueResponse,
@@ -164,6 +171,14 @@ export class PickupsService {
     private readonly auditLogRepository: Repository<AuditLog>,
     @InjectRepository(PushSubscription)
     private readonly pushSubscriptionsRepository: Repository<PushSubscription>,
+    @InjectRepository(PickupRequestStatusHistory)
+    private readonly statusHistoryRepository: Repository<PickupRequestStatusHistory>,
+    @InjectRepository(Institution)
+    private readonly institutionsRepository: Repository<Institution>,
+    @InjectRepository(DismissalWindow)
+    private readonly dismissalWindowsRepository: Repository<DismissalWindow>,
+    @InjectRepository(DismissalException)
+    private readonly dismissalExceptionsRepository: Repository<DismissalException>,
     private readonly dataSource: DataSource,
     @Inject(MQTT_CLIENT) private readonly mqttClient: MqttClient,
     @Inject(PUSH_PROVIDER) private readonly pushProvider: PushProvider,
@@ -443,6 +458,214 @@ export class PickupsService {
     return [...counts.entries()]
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => a.label.localeCompare(b.label, 'es-MX'));
+  }
+
+  /**
+   * Dashboard's "Requiere atención" panel (ADR-105) — three independent
+   * conditions, one query each, never variants of a single query. Its own
+   * endpoint, not folded into the live `monitor` feed: that feed filters to
+   * ACTIVE_STATUSES and never carries a `cancelled` row, and condition 1
+   * (`waiting_too_long`) changes relevance with the mere passage of time, with
+   * no event to push over WS. Read-only; visible to any institution_member,
+   * same authorization as `getDeliveredToday`.
+   */
+  async getAttentionItems(institutionId: string): Promise<AttentionItemsResponse> {
+    const asOf = new Date();
+    const startOfToday = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate(), 0, 0, 0, 0);
+
+    const institution = await this.institutionsRepository.findOne({ where: { id: institutionId } });
+    if (!institution) {
+      // Degenerate case — the guard already 404s a non-existent institution
+      // (ADR-022 pt.4); this only fires if the row vanished in between.
+      throw new NotFoundException(RESOURCE_NOT_FOUND);
+    }
+
+    const [dismissalWindows, dismissalExceptions] = await Promise.all([
+      this.dismissalWindowsRepository.find({
+        where: { institution: { id: institutionId }, status: 'active' },
+      }),
+      this.dismissalExceptionsRepository.find({ where: { institution: { id: institutionId } } }),
+    ]);
+
+    const [waitingTooLong, cancelledNoFollowup, firstTimeGuardian] = await Promise.all([
+      this.resolveWaitingTooLong(institutionId, institution.attentionWaitMinutes, asOf),
+      this.resolveCancelledNoFollowup(
+        institutionId,
+        institution.arrivalToleranceMinutes,
+        startOfToday,
+        asOf,
+        dismissalWindows,
+        dismissalExceptions,
+      ),
+      this.resolveFirstTimeGuardian(institutionId),
+    ]);
+
+    return {
+      asOf: asOf.toISOString(),
+      // `waiting_too_long` first, most urgent first; the other two concatenated
+      // as-is — no cross-type ordering is guaranteed (ADR-105).
+      items: [...waitingTooLong, ...cancelledNoFollowup, ...firstTimeGuardian],
+    };
+  }
+
+  /**
+   * `arrived` pickups whose most recent transition to `arrived`
+   * (`pickup_request_status_history`) is older than
+   * `institutions.attention_wait_minutes`. `waitingMinutes` is the elapsed
+   * minutes since that transition, floored. Sorted most urgent first.
+   */
+  private async resolveWaitingTooLong(
+    institutionId: string,
+    attentionWaitMinutes: number,
+    asOf: Date,
+  ): Promise<AttentionItem[]> {
+    const arrivedPickups = await this.pickupRequestsRepository.find({
+      where: { institution: { id: institutionId }, status: 'arrived' },
+      relations: { enrollment: { student: true }, guardian: true },
+    });
+    if (arrivedPickups.length === 0) return [];
+
+    const arrivedHistory = await this.statusHistoryRepository.find({
+      where: {
+        pickupRequest: { id: In(arrivedPickups.map((pickup) => pickup.id)) },
+        status: 'arrived',
+      },
+      relations: { pickupRequest: true },
+      order: { changedAt: 'DESC' },
+    });
+    const arrivedAtByPickup = new Map<string, Date>();
+    for (const row of arrivedHistory) {
+      if (!arrivedAtByPickup.has(row.pickupRequest.id)) {
+        arrivedAtByPickup.set(row.pickupRequest.id, row.changedAt);
+      }
+    }
+
+    const thresholdMs = attentionWaitMinutes * 60_000;
+    const items: AttentionItem[] = [];
+    for (const pickup of arrivedPickups) {
+      const arrivedAt = arrivedAtByPickup.get(pickup.id);
+      if (!arrivedAt) continue;
+      const elapsedMs = asOf.getTime() - arrivedAt.getTime();
+      if (elapsedMs <= thresholdMs) continue;
+      items.push(
+        await this.toAttentionItem('waiting_too_long', pickup, Math.floor(elapsedMs / 60_000)),
+      );
+    }
+    return items.sort((a, b) => (b.waitingMinutes ?? 0) - (a.waitingMinutes ?? 0));
+  }
+
+  /**
+   * `cancelled` pickups completed today with no later pickup for the same
+   * enrollment (any status — a rebooking is not an abandoned student), still
+   * inside today's dismissal deadline for the student's level. An institution
+   * with no resolvable window that day does not exclude the item — only a
+   * window that has already closed does (ADR-105).
+   */
+  private async resolveCancelledNoFollowup(
+    institutionId: string,
+    arrivalToleranceMinutes: number,
+    startOfToday: Date,
+    asOf: Date,
+    dismissalWindows: readonly DismissalWindow[],
+    dismissalExceptions: readonly DismissalException[],
+  ): Promise<AttentionItem[]> {
+    const cancelledToday = await this.pickupRequestsRepository.find({
+      where: {
+        institution: { id: institutionId },
+        status: 'cancelled',
+        completedAt: Between(startOfToday, asOf),
+      },
+      relations: { enrollment: { student: true, group: true }, guardian: true },
+    });
+    if (cancelledToday.length === 0) return [];
+
+    const date = toCalendarDate(asOf);
+    const weekday = asOf.getDay();
+
+    const items: AttentionItem[] = [];
+    for (const pickup of cancelledToday) {
+      // `id: Not(...)` is load-bearing, not redundant: Postgres keeps
+      // `created_at` to the microsecond but a JS `Date` truncates to the
+      // millisecond, so `MoreThan(pickup.createdAt)` matches the row itself
+      // (its real `.200535` is `> .200000`). Without this the condition would
+      // never fire. "otro ... creado después" (ADR-105 caso 4).
+      const hasFollowup = await this.pickupRequestsRepository.exists({
+        where: {
+          id: Not(pickup.id),
+          enrollment: { id: pickup.enrollment.id },
+          createdAt: MoreThan(pickup.createdAt),
+        },
+      });
+      if (hasFollowup) continue;
+
+      const level = pickup.enrollment.group?.name ?? null;
+      const windowEnd = resolveDismissalWindowEnd(
+        date,
+        weekday,
+        level,
+        dismissalExceptions,
+        dismissalWindows,
+      );
+      if (windowEnd !== null) {
+        const deadline = resolveDeadline(date, windowEnd, arrivalToleranceMinutes);
+        if (asOf.getTime() > deadline.getTime()) continue;
+      }
+
+      items.push(await this.toAttentionItem('cancelled_no_followup', pickup, null));
+    }
+    return items;
+  }
+
+  /**
+   * Active pickups (`ACTIVE_STATUSES`) whose guardian has never completed a
+   * `delivered` for the same enrollment — the staff has never seen this person
+   * pick up this student. The `relationship` of the guardian is irrelevant
+   * (ADR-105). Uses `IDX_pickup_requests_enrollment_guardian_status`.
+   */
+  private async resolveFirstTimeGuardian(institutionId: string): Promise<AttentionItem[]> {
+    const activePickups = await this.pickupRequestsRepository.find({
+      where: { institution: { id: institutionId }, status: In(ACTIVE_STATUSES) },
+      relations: { enrollment: { student: true }, guardian: true },
+    });
+    if (activePickups.length === 0) return [];
+
+    const items: AttentionItem[] = [];
+    for (const pickup of activePickups) {
+      const guardianHasDeliveredBefore = await this.pickupRequestsRepository.exists({
+        where: {
+          enrollment: { id: pickup.enrollment.id },
+          guardian: { id: pickup.guardian.id },
+          status: 'delivered',
+        },
+      });
+      if (guardianHasDeliveredBefore) continue;
+      items.push(await this.toAttentionItem('first_time_guardian', pickup, null));
+    }
+    return items;
+  }
+
+  /**
+   * Same `student_guardians` resolution the Carril payloads use
+   * (`resolveGuardianRelationship`) — the loaded `guardian` relation is not
+   * trusted for `fullName`, and `relationship` needs the link row anyway.
+   */
+  private async toAttentionItem(
+    type: AttentionItemType,
+    pickup: PickupRequest,
+    waitingMinutes: number | null,
+  ): Promise<AttentionItem> {
+    const { relationship, guardianFullName } = await this.resolveGuardianRelationship(
+      pickup.enrollment.student.id,
+      pickup.guardian.id,
+    );
+    return {
+      type,
+      pickupRequestId: pickup.id,
+      studentFullName: pickup.enrollment.student.fullName,
+      guardianFullName,
+      guardianRelationship: relationship,
+      waitingMinutes,
+    };
   }
 
   async arrive(userId: string, id: string): Promise<PickupRequestArrivedResponse> {

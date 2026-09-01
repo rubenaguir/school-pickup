@@ -40,6 +40,7 @@ interface FormValues {
   arrivalToleranceMinutes: string;
   advanceNoticeMinutes: string;
   arrivingLeadMinutes: string;
+  attentionWaitMinutes: string;
 }
 
 const INTEGER = /^-?\d+$/;
@@ -58,6 +59,7 @@ function toFormValues(profile: InstitutionProfileData): FormValues {
     arrivalToleranceMinutes: String(profile.arrivalToleranceMinutes),
     advanceNoticeMinutes: String(profile.advanceNoticeMinutes),
     arrivingLeadMinutes: String(profile.arrivingLeadMinutes),
+    attentionWaitMinutes: String(profile.attentionWaitMinutes),
   };
 }
 
@@ -91,6 +93,7 @@ const NUMERIC_FIELDS = [
   ['arrivalToleranceMinutes', 'Tolerancia de llegada'],
   ['advanceNoticeMinutes', 'Aviso anticipado'],
   ['arrivingLeadMinutes', 'Minutos para «llegando»'],
+  ['attentionWaitMinutes', 'Minutos de espera para atención'],
 ] as const;
 
 function invalidNumericLabels(form: FormValues): string[] {
@@ -442,6 +445,21 @@ function ProfileForm({
               value={form.arrivingLeadMinutes}
               disabled={!canEdit}
               onChange={(event) => update('arrivingLeadMinutes', event.target.value)}
+              style={INPUT_STYLE}
+            />
+          </Field>
+
+          <Field
+            label="Minutos de espera para atención"
+            htmlFor={`${fieldId}-attention`}
+            hint="Tiempo en puerta tras el que la recogida aparece en «Requiere atención» del Dashboard."
+          >
+            <input
+              id={`${fieldId}-attention`}
+              inputMode="numeric"
+              value={form.attentionWaitMinutes}
+              disabled={!canEdit}
+              onChange={(event) => update('attentionWaitMinutes', event.target.value)}
               style={INPUT_STYLE}
             />
           </Field>

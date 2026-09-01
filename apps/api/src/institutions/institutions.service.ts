@@ -103,6 +103,7 @@ export class InstitutionsService {
       arrivalToleranceMinutes: institution.arrivalToleranceMinutes,
       advanceNoticeMinutes: institution.advanceNoticeMinutes,
       arrivingLeadMinutes: institution.arrivingLeadMinutes,
+      attentionWaitMinutes: institution.attentionWaitMinutes,
       joinCode: institution.joinCode,
       status: institution.status,
     };
@@ -148,6 +149,9 @@ export class InstitutionsService {
     if (dto.arrivingLeadMinutes !== undefined) {
       institution.arrivingLeadMinutes = dto.arrivingLeadMinutes;
     }
+    if (dto.attentionWaitMinutes !== undefined) {
+      institution.attentionWaitMinutes = dto.attentionWaitMinutes;
+    }
 
     const saved = await this.institutionsRepository.save(institution);
 
@@ -165,6 +169,7 @@ export class InstitutionsService {
       arrivalToleranceMinutes: saved.arrivalToleranceMinutes,
       advanceNoticeMinutes: saved.advanceNoticeMinutes,
       arrivingLeadMinutes: saved.arrivingLeadMinutes,
+      attentionWaitMinutes: saved.attentionWaitMinutes,
       status: saved.status,
     };
   }

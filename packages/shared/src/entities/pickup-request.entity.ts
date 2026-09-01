@@ -43,6 +43,11 @@ const ARRIVAL_MODE_VALUES: readonly ArrivalMode[] = ['vehicle', 'walking'];
     where: `"status" IN ('en_route', 'approaching', 'arriving', 'arrived')`,
   },
 )
+// Espejo declarativo del índice aplicado en la migración
+// 1788300000000-AttentionWaitMinutesAndPickupIndex.ts — resuelve "¿este tutor
+// ya completó alguna vez un `delivered` para este alumno?" (panel "Requiere
+// atención" del Dashboard, condición de primera vez). Ver ADR-105.
+@Index('IDX_pickup_requests_enrollment_guardian_status', ['enrollment', 'guardian', 'status'])
 export class PickupRequest {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

@@ -26,6 +26,7 @@ export interface InstitutionProfile {
   arrivalToleranceMinutes: number;
   advanceNoticeMinutes: number;
   arrivingLeadMinutes: number;
+  attentionWaitMinutes: number;
   joinCode: string;
   status: InstitutionStatus;
 }
@@ -50,6 +51,7 @@ export type InstitutionProfileChanges = Partial<
     | 'arrivalToleranceMinutes'
     | 'advanceNoticeMinutes'
     | 'arrivingLeadMinutes'
+    | 'attentionWaitMinutes'
   >
 >;
 

@@ -19,6 +19,7 @@ function buildInstitution(overrides?: Partial<Institution>): Institution {
     arrivalToleranceMinutes: 10,
     advanceNoticeMinutes: 15,
     arrivingLeadMinutes: 5,
+    attentionWaitMinutes: 20,
     joinCode: 'CSB-2024',
     status: 'approved',
     createdAt: new Date(),

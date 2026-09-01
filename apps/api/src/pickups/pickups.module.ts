@@ -8,7 +8,10 @@ import { PushModule } from '../push-subscriptions/push.module';
 import {
   AuditLog,
   DeliveryPoint,
+  DismissalException,
+  DismissalWindow,
   Enrollment,
+  Institution,
   InstitutionMember,
   PickupRequest,
   PickupRequestStatusHistory,
@@ -20,6 +23,7 @@ import { PickupsController } from './pickups.controller';
 import { PickupDeliveryController } from './pickup-delivery.controller';
 import { PickupAnnounceController } from './pickup-announce.controller';
 import { DeliveredTodayController } from './delivered-today.controller';
+import { AttentionItemsController } from './attention-items.controller';
 import { PickupsService } from './pickups.service';
 import { PickupRequestAccessService } from './pickup-request-access.service';
 
@@ -35,6 +39,9 @@ import { PickupRequestAccessService } from './pickup-request-access.service';
       DeliveryPoint,
       AuditLog,
       PushSubscription,
+      Institution,
+      DismissalWindow,
+      DismissalException,
     ]),
     AuthModule,
     MqttModule,
@@ -47,6 +54,7 @@ import { PickupRequestAccessService } from './pickup-request-access.service';
     PickupDeliveryController,
     PickupAnnounceController,
     DeliveredTodayController,
+    AttentionItemsController,
   ],
   providers: [PickupsService, PickupRequestAccessService],
   exports: [PickupRequestAccessService],

@@ -107,10 +107,14 @@ function buildOwnedPickupRequest(overrides?: Partial<PickupRequest>): PickupRequ
 function buildService(overrides?: {
   pickupRequests?: Partial<
     Record<
-      'exists' | 'create' | 'save' | 'findOne' | 'findAndCount' | 'createQueryBuilder',
+      'exists' | 'create' | 'save' | 'findOne' | 'find' | 'findAndCount' | 'createQueryBuilder',
       unknown
     >
   >;
+  statusHistory?: Partial<Record<'find', unknown>>;
+  institutions?: Partial<Record<'findOne', unknown>>;
+  dismissalWindows?: Partial<Record<'find', unknown>>;
+  dismissalExceptions?: Partial<Record<'find', unknown>>;
   enrollments?: Partial<Record<'findOne', unknown>>;
   studentGuardians?: Partial<Record<'findOne' | 'exists' | 'find', unknown>>;
   institutionMembers?: Partial<Record<'exists', unknown>>;
@@ -129,6 +133,7 @@ function buildService(overrides?: {
     create: vi.fn((partial: Partial<PickupRequest>) => partial),
     save: vi.fn((entity: Partial<PickupRequest>) => Promise.resolve(buildPickupRequest(entity))),
     findOne: vi.fn().mockResolvedValue(buildOwnedPickupRequest()),
+    find: vi.fn().mockResolvedValue([]),
     findAndCount: vi.fn().mockResolvedValue([[], 0]),
     ...overrides?.pickupRequests,
   };
@@ -167,6 +172,24 @@ function buildService(overrides?: {
   const statusHistoryRepo = {
     create: vi.fn((partial: object) => partial),
     save: vi.fn((entity: object) => Promise.resolve({ id: '1', ...entity })),
+    find: vi.fn().mockResolvedValue([]),
+    ...overrides?.statusHistory,
+  };
+  const institutionsRepo = {
+    findOne: vi.fn().mockResolvedValue({
+      id: 'inst-1',
+      attentionWaitMinutes: 20,
+      arrivalToleranceMinutes: 10,
+    }),
+    ...overrides?.institutions,
+  };
+  const dismissalWindowsRepo = {
+    find: vi.fn().mockResolvedValue([]),
+    ...overrides?.dismissalWindows,
+  };
+  const dismissalExceptionsRepo = {
+    find: vi.fn().mockResolvedValue([]),
+    ...overrides?.dismissalExceptions,
   };
   const dataSource = {
     transaction: vi.fn((cb: (manager: unknown) => Promise<unknown>) =>
@@ -201,6 +224,10 @@ function buildService(overrides?: {
     deliveryPointsRepo as never,
     auditLogRepo as never,
     pushSubscriptionsRepo as never,
+    statusHistoryRepo as never,
+    institutionsRepo as never,
+    dismissalWindowsRepo as never,
+    dismissalExceptionsRepo as never,
     dataSource as never,
     mqttClient as never,
     pushProvider as never,
@@ -217,6 +244,9 @@ function buildService(overrides?: {
     deliveryPointsRepo,
     auditLogRepo,
     statusHistoryRepo,
+    institutionsRepo,
+    dismissalWindowsRepo,
+    dismissalExceptionsRepo,
     pushSubscriptionsRepo,
     pushProvider,
     dataSource,
@@ -1521,6 +1551,271 @@ describe('PickupsService', () => {
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('pickup.status = :status', {
         status: 'delivered',
       });
+    });
+  });
+
+  describe('getAttentionItems', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function arrivedPickup(overrides?: Partial<PickupRequest>): PickupRequest {
+      return buildPickupRequest({
+        id: 'pr-arr',
+        status: 'arrived',
+        enrollment: {
+          id: 'enr-arr',
+          group: null,
+          student: { id: 'stu-arr', fullName: 'Ana Ruiz' },
+        } as Enrollment,
+        guardian: { id: 'g-arr' },
+        ...overrides,
+      });
+    }
+
+    // getAttentionItems runs three `find` calls, one per condition — routed here
+    // by the `status` in the `where` clause.
+    function findByStatus(map: {
+      arrived?: PickupRequest[];
+      cancelled?: PickupRequest[];
+      active?: PickupRequest[];
+    }) {
+      return vi.fn(({ where }: { where: { status: unknown } }) => {
+        if (where.status === 'arrived') return Promise.resolve(map.arrived ?? []);
+        if (where.status === 'cancelled') return Promise.resolve(map.cancelled ?? []);
+        return Promise.resolve(map.active ?? []);
+      });
+    }
+
+    it('flags an arrived pickup whose transition to arrived is older than attention_wait_minutes', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T14:00:00.000Z'));
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ arrived: [arrivedPickup()] }),
+          exists: vi.fn().mockResolvedValue(false),
+        },
+        statusHistory: {
+          find: vi.fn().mockResolvedValue([
+            {
+              pickupRequest: { id: 'pr-arr' },
+              status: 'arrived',
+              changedAt: new Date('2026-08-31T13:30:00.000Z'),
+            },
+          ]),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({
+        type: 'waiting_too_long',
+        pickupRequestId: 'pr-arr',
+        studentFullName: 'Ana Ruiz',
+        waitingMinutes: 30,
+      });
+    });
+
+    it('does not flag an arrived pickup still within the threshold', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T14:00:00.000Z'));
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ arrived: [arrivedPickup()] }),
+          exists: vi.fn().mockResolvedValue(false),
+        },
+        statusHistory: {
+          find: vi.fn().mockResolvedValue([
+            {
+              pickupRequest: { id: 'pr-arr' },
+              status: 'arrived',
+              changedAt: new Date('2026-08-31T13:50:00.000Z'),
+            },
+          ]),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('flags a first-time guardian for this enrollment, not one with a prior delivered', async () => {
+      const first = buildPickupRequest({
+        id: 'pr-first',
+        status: 'en_route',
+        enrollment: {
+          id: 'enr-1',
+          group: null,
+          student: { id: 's1', fullName: 'Niño Uno' },
+        } as Enrollment,
+        guardian: { id: 'g1' },
+      });
+      const repeat = buildPickupRequest({
+        id: 'pr-repeat',
+        status: 'en_route',
+        enrollment: {
+          id: 'enr-2',
+          group: null,
+          student: { id: 's2', fullName: 'Niño Dos' },
+        } as Enrollment,
+        guardian: { id: 'g2' },
+      });
+      const exists = vi.fn(({ where }: { where: { guardian?: { id: string } } }) =>
+        Promise.resolve(where.guardian?.id === 'g2'),
+      );
+      const { service } = buildService({
+        pickupRequests: { find: findByStatus({ active: [first, repeat] }), exists },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items.map((item) => item.pickupRequestId)).toEqual(['pr-first']);
+      expect(result.items[0].type).toBe('first_time_guardian');
+    });
+
+    it('orders waiting_too_long by waitingMinutes desc, ahead of the other types', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T14:00:00.000Z'));
+      const a = arrivedPickup({
+        id: 'pr-a',
+        enrollment: {
+          id: 'ea',
+          group: null,
+          student: { id: 'sa', fullName: 'A' },
+        } as Enrollment,
+      });
+      const b = arrivedPickup({
+        id: 'pr-b',
+        enrollment: {
+          id: 'eb',
+          group: null,
+          student: { id: 'sb', fullName: 'B' },
+        } as Enrollment,
+      });
+      const active = buildPickupRequest({
+        id: 'pr-c',
+        status: 'en_route',
+        enrollment: {
+          id: 'ec',
+          group: null,
+          student: { id: 'sc', fullName: 'C' },
+        } as Enrollment,
+        guardian: { id: 'gc' },
+      });
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ arrived: [a, b], active: [active] }),
+          exists: vi.fn().mockResolvedValue(false),
+        },
+        statusHistory: {
+          find: vi.fn().mockResolvedValue([
+            {
+              pickupRequest: { id: 'pr-a' },
+              status: 'arrived',
+              changedAt: new Date('2026-08-31T13:35:00.000Z'),
+            },
+            {
+              pickupRequest: { id: 'pr-b' },
+              status: 'arrived',
+              changedAt: new Date('2026-08-31T13:00:00.000Z'),
+            },
+          ]),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items.map((item) => [item.type, item.pickupRequestId])).toEqual([
+        ['waiting_too_long', 'pr-b'],
+        ['waiting_too_long', 'pr-a'],
+        ['first_time_guardian', 'pr-c'],
+      ]);
+    });
+
+    function cancelledPickup(overrides?: Partial<PickupRequest>): PickupRequest {
+      return buildPickupRequest({
+        id: 'pr-can',
+        status: 'cancelled',
+        createdAt: new Date('2026-08-31T13:00:00.000Z'),
+        completedAt: new Date('2026-08-31T13:05:00.000Z'),
+        enrollment: {
+          id: 'enr-can',
+          group: null,
+          student: { id: 'stu-can', fullName: 'Caro Cancel' },
+        } as Enrollment,
+        guardian: { id: 'g-can' },
+        ...overrides,
+      });
+    }
+
+    it('flags a cancelled pickup completed today with no later pickup and no dismissal window that day', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T14:00:00.000Z'));
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ cancelled: [cancelledPickup()] }),
+          // hasFollowup lookup — no other pickup for the enrollment.
+          exists: vi.fn().mockResolvedValue(false),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({
+        type: 'cancelled_no_followup',
+        pickupRequestId: 'pr-can',
+        studentFullName: 'Caro Cancel',
+        waitingMinutes: null,
+      });
+    });
+
+    it('does not flag a cancelled pickup that has a later pickup for the same enrollment', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T14:00:00.000Z'));
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ cancelled: [cancelledPickup()] }),
+          exists: vi.fn().mockResolvedValue(true),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('does not flag a cancelled pickup once today’s dismissal deadline has passed', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-31T23:30:00.000Z'));
+      const { service } = buildService({
+        pickupRequests: {
+          find: findByStatus({ cancelled: [cancelledPickup()] }),
+          exists: vi.fn().mockResolvedValue(false),
+        },
+        institutions: {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'inst-1',
+            attentionWaitMinutes: 20,
+            arrivalToleranceMinutes: 10,
+          }),
+        },
+        dismissalWindows: {
+          find: vi.fn().mockResolvedValue([
+            {
+              weekday: new Date('2026-08-31T12:00:00.000Z').getDay(),
+              endTime: '14:30',
+              level: null,
+            },
+          ]),
+        },
+      });
+
+      const result = await service.getAttentionItems('inst-1');
+
+      expect(result.items).toHaveLength(0);
     });
   });
 

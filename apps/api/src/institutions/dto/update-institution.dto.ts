@@ -71,4 +71,8 @@ export class UpdateInstitutionDto {
   @IsOptional()
   @IsInt()
   arrivingLeadMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  attentionWaitMinutes?: number;
 }

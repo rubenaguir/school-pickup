@@ -177,3 +177,31 @@ export interface DeliveredTodayResponse {
   total: number;
   byGroup: DeliveredTodayGroupCount[];
 }
+
+export type AttentionItemType =
+  'waiting_too_long' | 'cancelled_no_followup' | 'first_time_guardian';
+
+/**
+ * One row of `GET /institutions/:id/attention-items` (ADR-105). The response
+ * carries no pre-composed prose — the Dashboard builds each card's text from
+ * these fields, same criterion as the rest of this contract.
+ */
+export interface AttentionItem {
+  type: AttentionItemType;
+  pickupRequestId: string;
+  studentFullName: string;
+  guardianFullName: string;
+  guardianRelationship: StudentGuardianRelationship;
+  /** Minutes since the transition to `arrived`, floored. Only populated for
+   * `type = 'waiting_too_long'`; `null` for the other two types. */
+  waitingMinutes: number | null;
+}
+
+/**
+ * `GET /institutions/:id/attention-items` (ADR-105). `asOf` is the instant the
+ * server ran the queries — never a client-sent value.
+ */
+export interface AttentionItemsResponse {
+  asOf: string;
+  items: AttentionItem[];
+}
