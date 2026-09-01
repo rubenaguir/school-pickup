@@ -1,1 +1,19 @@
+# ADR-106: fuerza LF en todo archivo de texto, sin importar el
+# core.autocrlf de quien clone. Sin esto, un checkout en Windows con
+# autocrlf=true convierte a CRLF al bajar los archivos — el contenido
+# real del repo nunca tiene CRLF (blobs siempre en LF), pero `prettier
+# --check` sí lo detecta contra esos archivos ya convertidos en disco,
+# dando un falso positivo local que no reproduce en CI ni en ningún
+# clon Linux/Mac.
 * text=auto eol=lf
+
+# Binarios explícitos, para que git nunca intente normalizarlos aunque
+# `text=auto` los detecte mal por contenido.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

@@ -8303,3 +8303,49 @@ existentes).
 - `specs/features/032-panel-requiere-atencion.md`,
   `specs/api-contracts/pickup-requests.md`,
   `specs/entities/{institution,pickup_request}.md`.
+
+## ADR-106 — `.gitattributes`: forzar LF sin importar el `core.autocrlf` de quien clone
+
+**Contexto.** Durante la verificación de ADR-103 y de nuevo en ADR-105,
+`npm run format:check` marcó archivos (`packages/shared/package.json`,
+luego 6 archivos más: `auth.service.{ts,spec}`, `users.service.{ts,spec}`,
+`user.entity.ts`) como mal formateados **en la máquina local de Rubén**
+(Windows), sin poder reproducirse en ningún clon de verificación (siempre
+Linux). Confirmado antes de decidir nada: un clon 100% fresco en Linux
+tiene `format:check` limpio — el contenido real de cada blob del repo ya
+está en LF. La causa es puramente de checkout: `core.autocrlf=true` en
+Windows convierte a CRLF los archivos al bajarlos, y `prettier --check`
+(que por default espera `eol: "lf"`) marca esa conversión como una
+violación de formato — un falso positivo local que nunca fue un problema
+del repositorio.
+
+**Decisión.** `.gitattributes` en la raíz con `* text=auto eol=lf` —
+fuerza LF en todo archivo de texto sin importar la configuración de
+`core.autocrlf` de quien clone, sea cual sea su sistema operativo. Se
+agregan también extensiones binarias explícitas (`.png`, `.ttf`, y otras
+comunes que hoy no existen en el repo pero podrían agregarse después:
+`.jpg`/`.gif`/`.ico`/`.woff`/`.woff2`) para que `text=auto` nunca intente
+normalizarlas por error de detección de contenido.
+
+Verificado con `git add --renormalize .` antes de commitear: **cero
+archivos necesitaron cambiar** — confirma que todo blob ya almacenado
+era LF puro, el fix es preventivo para el futuro, no una corrección de
+contenido existente.
+
+**Para que el checkout local de Rubén quede al día** (el `.gitattributes`
+nuevo no toca retroactivamente archivos ya en el disco, solo aplica a
+checkouts nuevos): re-clonar el repo desde cero es lo más simple y a
+prueba de errores; la alternativa es `git add --renormalize .` sobre el
+checkout existente después de traer este commit.
+
+**Consecuencias.** Cierra la clase de falso positivo completa, no
+archivo por archivo — sin este ADR, cualquier sesión futura en Windows
+podía volver a producir el mismo síntoma en un archivo distinto. Sin
+cambios de contenido en ningún archivo del repo.
+
+## Referencias
+
+- ADR-104 (mismo tipo de hallazgo: un falso positivo de `npm run check`
+  que solo aparece en checkouts "distintos" al entorno de desarrollo
+  habitual — ahí un clon 100% fresco sin build previo, aquí un checkout
+  en Windows).
