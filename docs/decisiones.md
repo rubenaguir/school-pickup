@@ -8190,3 +8190,116 @@ ADR, ese flujo exacto habría fallado con miles de errores falsos.
   `npm run check`).
 - ADR-103 (la verificación de su implementación fue lo que reveló este
   problema).
+
+## ADR-105 — Panel "Requiere atención" del Dashboard: implementación real de las 3 condiciones
+
+**Contexto.** El Dashboard de institución (`apps/portal`) tiene desde
+ADR-072 §6 un panel "Requiere atención" con contenido **fijo de
+ejemplo**, marcado explícitamente en el código como no-real
+(`PLACEHOLDER_ALERTS`, con un comentario que dice textualmente "NOT real
+data — no alert concept exists yet in the domain"). A petición del
+humano, se construyen las 3 condiciones reales — que resultan ser
+exactamente los 3 ejemplos que ya estaban ahí, palabra por palabra.
+
+Investigación previa al diseño, contra el código real:
+
+- El feed que alimenta el resto del Dashboard (`view=monitor`,
+  reutilizado de Carril, ADR-071) filtra explícitamente
+  `status IN (ACTIVE_STATUSES)` — **excluye canceladas y entregadas a
+  propósito**, correcto para un tablero operativo en vivo. Esto
+  descarta extender ese mismo feed para cubrir el caso de recogidas
+  canceladas: nunca llegan al cliente por ese canal.
+- `pickup_request_status_history.changed_at` ya registra el momento
+  exacto de cada transición de estado — no hace falta ninguna columna
+  nueva para saber cuándo un viaje entró a `arrived`.
+- `student_guardians.relationship` ya incluye `'driver'` en su enum
+  desde el modelo original — el dato "es un chofer" ya existe, no hace
+  falta agregarlo.
+- Ya existe una función reutilizable,
+  `resolveDismissalWindowEnd`/`resolveDeadline`
+  (`apps/api/src/institution-reports/punctuality.ts`, ADR-060 punto 4),
+  que resuelve la ventana de salida vigente de hoy **por nivel del
+  alumno** (excepción del día gana sobre ventana recurrente,
+  coincidencia de nivel gana sobre "todos los niveles") — ya la usa el
+  cálculo de puntualidad de reportes.
+
+**Decisión.**
+
+### 1. Endpoint propio, no una extensión del feed en vivo
+
+`GET /institutions/:id/attention-items` — mismo patrón de autorización
+que `GET /institutions/:id/delivered-today` (ADR-072 §6 enmienda):
+visible para cualquier `institution_member`, sin restricción de `role`
+(a diferencia de `GET /institutions/:id/reports`, que exige `role =
+admin`, ADR-060 punto 6). Mismo criterio de "endpoint propio, no
+reutilizar el de reportes ni el feed en vivo" que ya se aplicó ahí.
+Consultado una vez al montar el Dashboard y refrescado cada 60s por
+temporizador del lado cliente — **no** por el canal WS del tablero: la
+condición 1 (tiempo esperando) cambia de relevancia con el simple paso
+del tiempo, sin que ocurra ningún evento que la dispare; forzarla al
+patrón de deltas WS existente no encaja.
+
+### 2. Las 3 condiciones, cada una con su propia consulta
+
+- **`waiting_too_long`**: `pickup_requests.status = 'arrived'` cuya
+  fila más reciente en `pickup_request_status_history` con `status =
+  'arrived'` tiene `changed_at` más antiguo que
+  `institutions.attention_wait_minutes` minutos (nuevo, ver punto 3).
+- **`cancelled_no_followup`**: `status = 'cancelled'`, completado hoy,
+  sin otro `pickup_requests` del mismo `enrollment_id` creado después,
+  **y** todavía dentro de la ventana de salida de hoy — reutilizando
+  `resolveDismissalWindowEnd`/`resolveDeadline` tal cual, sin
+  reimplementar la lógica. Confirmado con el humano: la ventana se
+  cierra "hasta que termine la ventana de salida del día", no las 24h
+  completas — después de esa hora, una recogida cancelada sin
+  seguimiento deja de mostrarse.
+- **`first_time_guardian`**: viaje activo (no terminal) para el cual el
+  `guardian_user_id` nunca completó un `delivered` previo para ese
+  mismo `enrollment_id`. **Reemplaza la idea original de "marcar toda
+  recogida por chofer autorizado"** — confirmado con el humano tras
+  evaluarlo: marcar cada recogida de un chofer habitual sería puro
+  ruido para una familia que lo usa a diario. Lo que de verdad amerita
+  atención no es la `relationship` de quien recoge, sino que el staff
+  nunca lo ha visto recoger a ese alumno específico — aplica igual a un
+  chofer sustituto, un abuelo que nunca antes había recogido, o
+  cualquier tutor autorizado en su primera vez. Requiere índice nuevo
+  `(enrollment_id, guardian_user_id, status)` en `pickup_requests` — no
+  existía ninguno que cubriera esta consulta.
+
+### 3. `institutions.attention_wait_minutes`, configurable por institución
+
+Columna nueva (`int`, `NOT NULL`, default `20`) — mismo patrón exacto
+que `arrival_tolerance_minutes`/`advance_notice_minutes`/
+`arriving_lead_minutes`, que ya existen con esta forma. Confirmado con
+el humano: **20 minutos de arranque, no los 12 del ejemplo original** —
+en Ciudad de México, 12 minutos es prácticamente puntual dadas las
+condiciones de tráfico reales; además debe poder variar por
+institución, dado que la accesibilidad de la zona no es uniforme.
+Editable en `InstitutionProfile.tsx`, misma sección donde ya se editan
+los otros 3 umbrales.
+
+**Consecuencias.** El panel deja de mostrar contenido de ejemplo —
+puede aparecer vacío (`EmptyState`) si ninguna de las 3 condiciones
+aplica, cosa que `PLACEHOLDER_ALERTS` nunca permitía mostrar. Sin
+cambios al feed `monitor` ni a Carril (`apps/board`) — las 3 consultas
+nuevas viven aparte. `institutions.attention_wait_minutes` no tiene
+backfill que decidir (default `20` cubre todas las instituciones
+existentes).
+
+## Referencias
+
+- ADR-072 §6 (origen del panel, contenido de ejemplo marcado como no-real
+  en el propio código).
+- ADR-071 punto 1 (visibilidad del Dashboard a cualquier
+  `institution_member`, sin restricción de `role`).
+- ADR-072 §6 enmienda (patrón de `delivered-today`: endpoint propio, no
+  reutilizar `institution-reports`).
+- ADR-060 punto 4 (`resolveDismissalWindowEnd`/`resolveDeadline`,
+  reutilizadas tal cual desde `institution-reports/punctuality.ts`).
+- ADR-084 (nivel del alumno vía `enrollment.group?.name`, consumido igual
+  aquí que en reportes).
+- ADR-025 (`arrival_tolerance_minutes`/`advance_notice_minutes`, el
+  patrón que `attention_wait_minutes` replica).
+- `specs/features/032-panel-requiere-atencion.md`,
+  `specs/api-contracts/pickup-requests.md`,
+  `specs/entities/{institution,pickup_request}.md`.

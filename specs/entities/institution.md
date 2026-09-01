@@ -24,6 +24,7 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 | `arrival_tolerance_minutes` | `int` | NOT NULL, default `10` | ver ADR-015 y ADR-025 |
 | `advance_notice_minutes` | `int` | NOT NULL, default `15` | ver ADR-015 y ADR-025 |
 | `arriving_lead_minutes` | `int` | NOT NULL, default `5` | minutos de ETA restante a partir de los cuales el `worker` pasa el `pickup_requests` a `arriving`. Distinto de `geofence_radius_meters`. Ver ADR-024 |
+| `attention_wait_minutes` | `int` | NOT NULL, default `20` | minutos en `arrived` antes de marcar un viaje como "requiere atención" en el Dashboard. Configurable por institución a propósito — la accesibilidad de la zona varía (ADR-105) |
 | `join_code` | `varchar(20)` | NOT NULL, único | ver ADR-015 |
 | `status` | `enum` (`pending`, `approved`, `suspended`) | NOT NULL, default `pending` | aprobado por super-admin |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | |
@@ -69,3 +70,4 @@ indirectamente, de una `institutions`. Ver ADR-004 (por qué "institution" y no
 - ADR-025 (defaults de `geofence_radius_meters`, `activation_radius_meters`,
   `arrival_tolerance_minutes` y `advance_notice_minutes`).
 - ADR-084 (catálogo de grupos `institution_groups`, relación `groups`).
+- ADR-105 (`attention_wait_minutes`; panel "Requiere atención" del Dashboard).

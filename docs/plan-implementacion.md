@@ -871,6 +871,27 @@ ADRs retroactivos de infraestructura ya conocidos.
       entidades reales sin su spec dedicada (ADR-066 la documentó inline
       en el ADR, nunca se promovió a spec propia)
 
+### Panel "Requiere atención" del Dashboard — implementación real (ADR-105)
+
+- [ ] `institutions.attention_wait_minutes` (`int`, default `20`) —
+      migración + entidad + editable en `InstitutionProfile.tsx`, misma
+      sección que `arrivalToleranceMinutes`/`advanceNoticeMinutes`/
+      `arrivingLeadMinutes`
+- [ ] Índice nuevo `(enrollment_id, guardian_user_id, status)` en
+      `pickup_requests` — sin esto la consulta de `first_time_guardian`
+      no tiene ningún índice que la resuelva
+- [ ] `GET /institutions/:id/attention-items` — controller nuevo (mismo
+      patrón que `DeliveredTodayController`), 3 consultas independientes:
+      `waiting_too_long` (vía `pickup_request_status_history`),
+      `cancelled_no_followup` (reutilizando
+      `resolveDismissalWindowEnd`/`resolveDeadline` de
+      `institution-reports/punctuality.ts`, sin reimplementar), y
+      `first_time_guardian`
+- [ ] `Dashboard.tsx`: `PLACEHOLDER_ALERTS` reemplazado por el fetch a
+      `attention-items`, refrescado cada 60s por temporizador — no por
+      el canal WS del tablero (la condición 1 cambia con el simple paso
+      del tiempo, sin evento que la dispare)
+
 ---
 
 ## Decisiones pendientes que bloquean fases futuras

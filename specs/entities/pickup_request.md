@@ -47,6 +47,7 @@ concentra el estado en vivo del trayecto (ubicación, ETA, punto de entrega).
 - Índice único parcial `(institution_id, delivery_code) WHERE status IN ('en_route', 'approaching', 'arriving', 'arrived')` — implementa el alcance de unicidad de `delivery_code` (ver invariantes). Ver ADR-018 y ADR-093.
 - Índice único parcial `(enrollment_id) WHERE status IN ('en_route', 'approaching', 'arriving', 'arrived')` — fuerza en base de datos que no exista más de un `pickup_requests` no terminal por `enrollment_id` (ver invariantes). Mismo patrón que el índice parcial de `vehicles.is_primary`. Ver ADR-024 punto 1, ADR-025 y ADR-093.
 - Índice GIST en `last_location` si en el futuro se necesitan consultas espaciales entre viajes (hoy la detección de arribo compara un solo punto contra `institutions.location`, no requiere índice espacial de por sí).
+- Índice compuesto `(enrollment_id, guardian_user_id, status)` — resuelve "¿ya hubo alguna vez un `delivered` de este tutor para este alumno?" (panel "Requiere atención" del Dashboard, condición de primera vez). Ver ADR-105.
 
 ## Invariantes de negocio
 
@@ -81,3 +82,6 @@ concentra el estado en vivo del trayecto (ubicación, ETA, punto de entrega).
 - ADR-093 (estado `approaching`: nuevo valor de enum, transición
   `en_route → approaching` vía `activation_radius_meters`, ampliación de los
   índices únicos parciales y del alcance de unicidad de `delivery_code`).
+- ADR-105 (panel "Requiere atención" del Dashboard: índice
+  `(enrollment_id, guardian_user_id, status)`, condiciones de alerta sobre
+  `pickup_request_status_history`).

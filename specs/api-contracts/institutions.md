@@ -44,6 +44,7 @@ Devuelve la configuración de la institución. Ver feature 008.
   "arrivalToleranceMinutes": "number",
   "advanceNoticeMinutes": "number",
   "arrivingLeadMinutes": "number",
+  "attentionWaitMinutes": "number",
   "joinCode": "string",
   "status": "pending | approved | suspended"
 }
@@ -75,7 +76,8 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
   "levels": ["string"],
   "arrivalToleranceMinutes": "number",
   "advanceNoticeMinutes": "number",
-  "arrivingLeadMinutes": "number"
+  "arrivingLeadMinutes": "number",
+  "attentionWaitMinutes": "number"
 }
 ```
 
@@ -100,6 +102,7 @@ son opcionales (edición parcial); no se pueden editar `type`, `join_code` ni
   "arrivalToleranceMinutes": "number",
   "advanceNoticeMinutes": "number",
   "arrivingLeadMinutes": "number",
+  "attentionWaitMinutes": "number",
   "status": "pending | approved | suspended"
 }
 ```

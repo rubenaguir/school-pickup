@@ -649,17 +649,93 @@ igual a `asOf`: esa entrega ya está incluida en `total`/`byGroup`.
 | 403 | `NOT_INSTITUTION_MEMBER` | el usuario no es `institution_members` de esa `:id` |
 | 404 | `RESOURCE_NOT_FOUND` | la institución no existe (caso degenerado del guard, ADR-022 punto 4) |
 
+## `GET /institutions/:id/attention-items`
+
+Panel "Requiere atención" del Dashboard (`apps/portal`) — ADR-105.
+Reemplaza el contenido fijo de ejemplo que tenía el panel desde ADR-072 §6.
+Mismo criterio de autorización que `delivered-today` (endpoint propio, no
+folded en `institution-reports`): visible para cualquier
+`institution_member`, sin restricción de `role`.
+
+Consolida 3 condiciones independientes, cada una evaluada con su propia
+consulta — no son variantes de una sola:
+
+1. **`waiting_too_long`** — un `pickup_requests` en `status = 'arrived'`
+   cuya transición a `arrived` (`pickup_request_status_history`, la fila
+   más reciente con `status = 'arrived'` para ese viaje) ocurrió hace más
+   de `institutions.attention_wait_minutes` minutos.
+2. **`cancelled_no_followup`** — un `pickup_requests` en
+   `status = 'cancelled'`, con `completed_at` de hoy, para el cual no
+   existe ningún otro `pickup_requests` con el mismo `enrollment_id`
+   creado después (`created_at` posterior), **y** todavía no pasó el
+   cierre de la ventana de salida de hoy para el nivel de ese alumno.
+   Cierre = `resolveDeadline(fecha_hoy, resolveDismissalWindowEnd(...),
+   institutions.arrival_tolerance_minutes)` — mismas funciones que ya usa
+   `InstitutionReportsService` para puntualidad
+   (`apps/api/src/institution-reports/punctuality.ts`), reutilizadas tal
+   cual, no reimplementadas. Si `resolveDismissalWindowEnd` devuelve
+   `null` (institución sin ventana configurada ese día), el ítem no se
+   excluye por esta condición — solo se excluye si sí hay ventana y ya
+   se cerró.
+3. **`first_time_guardian`** — un `pickup_requests` en estado activo
+   (`en_route`, `approaching`, `arriving` o `arrived`) para el cual no
+   existe ningún otro `pickup_requests` con el mismo `enrollment_id` **y**
+   el mismo `guardian_user_id` en `status = 'delivered'`. No importa la
+   `relationship` del tutor (chofer, abuela, etc.) — lo que importa es que
+   el staff nunca ha visto a esa persona recoger a ese alumno
+   específico. Decisión de producto (ADR-105): se descartó marcar *toda*
+   recogida por chofer autorizado — demasiado ruido para una familia que
+   usa el mismo chofer todos los días; esta condición solo dispara la
+   primera vez.
+
+**Request:** sin body ni query params.
+
+**Response 200**
+```json
+{
+  "asOf": "string (timestamptz, ISO 8601)",
+  "items": [
+    {
+      "type": "waiting_too_long | cancelled_no_followup | first_time_guardian",
+      "pickupRequestId": "string (uuid)",
+      "studentFullName": "string",
+      "guardianFullName": "string",
+      "guardianRelationship": "mother | father | grandparent | driver | other",
+      "waitingMinutes": "number | null"
+    }
+  ]
+}
+```
+
+`waitingMinutes` solo se llena para `type = 'waiting_too_long'` (minutos
+transcurridos desde la transición a `arrived`, redondeado hacia abajo);
+`null` en los otros 2 tipos. El frontend arma el texto legible de cada
+tarjeta a partir de estos campos — la respuesta no trae prosa
+pre-armada, mismo criterio que el resto de este contrato y de
+`institution-reports.md`.
+
+Sin orden garantizado entre tipos distintos; dentro del mismo tipo,
+`waiting_too_long` ordenado por `waitingMinutes` descendente (el más
+urgente primero), los otros 2 por `pickupRequestId` sin significado
+particular.
+
+**Errores** — mismos 3 casos que `delivered-today` arriba
+(`401`/`403 NOT_INSTITUTION_MEMBER`/`404 RESOURCE_NOT_FOUND`).
+
 ## Referencias
 
 - `specs/features/018-crear-pickup-request.md`,
   `specs/features/021-confirmar-llegada-y-entrega.md`,
-  `specs/features/022-cancelar-pickup-request.md`.
+  `specs/features/022-cancelar-pickup-request.md`,
+  `specs/features/032-panel-requiere-atencion.md`.
 - `specs/api-contracts/pickup-realtime-mqtt.md` (tiempo real; publicación de cada
   transición).
 - `specs/entities/pickup_request.md`,
   `specs/entities/pickup_request_status_history.md`,
   `specs/entities/enrollment.md`, `specs/entities/student_guardian.md`,
   `specs/entities/institution_member.md`.
+- ADR-105 (`GET /institutions/:id/attention-items`, panel "Requiere
+  atención").
 - ADR-011 (entrega no restringida por `role`).
 - ADR-012 (resolución de `delivery_point_id`).
 - ADR-013 (`delivery_code`, ciclo de vida).
