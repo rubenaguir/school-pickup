@@ -8349,3 +8349,102 @@ cambios de contenido en ningún archivo del repo.
   que solo aparece en checkouts "distintos" al entorno de desarrollo
   habitual — ahí un clon 100% fresco sin build previo, aquí un checkout
   en Windows).
+
+## ADR-107 — Landing page pública en `landing/`, fuera de los workspaces de npm
+
+**Contexto.** `casillego.com.mx` está planeado como "landing/sitio
+comercial" desde ADR-010 (el ADR fundacional de despliegue), como la 5ª
+pieza del esquema junto a `portal.`/`app.`/`tablero.`/`api.` — nunca se
+construyó. A petición del humano, se construye finalmente, con dos
+requisitos explícitos: HTML plano (sin framework) para que los
+buscadores la indexen sin depender de renderizado del lado del cliente,
+y que transmita calidez/confianza además de explicar el producto.
+
+**Decisión.**
+
+### 1. Ubicación: `landing/` en la raíz del repo, no un workspace de npm
+
+Confirmado con el humano en dos pasos — primero que la página en sí no
+necesita build ni framework (coincide con el requisito de indexabilidad:
+un SPA de React como los otros 3 frontends no sirve aquí sin
+renderizado del lado del servidor, que sería sobre-ingeniería para una
+sola página estática), y después, explícitamente, que la carpeta vive
+en **este mismo repositorio** — no uno aparte. Las razones: ADR-010 ya
+trataba este dominio como la misma familia de decisiones que los otros
+4 subdominios; toda la disciplina de ADRs/specs de este proyecto vive en
+un solo lugar, relevante para la trazabilidad de la defensa de tesis; y
+el script de despliegue que ya cubre los otros 3 subdominios puede
+extenderse para incluir esta carpeta sin coordinar dos repos.
+
+`landing/index.html` + 2 fotos, sin `package.json`, sin lint/format de
+`npm run check` (no es código, y `.gitattributes`/ADR-106 ya cubre el
+único problema real que un archivo de texto plano podría tener — line
+endings). Wiring de nginx para servir esta carpeta en el dominio raíz
+queda fuera del repo, mismo límite que ya establecieron ADR-010/100
+para el resto de la infraestructura — el humano lo configura
+directamente en el VPS.
+
+**Sin spec de `specs/features/`** — el template de feature (Given/When/
+Then, entidades, contrato de API) no aplica a contenido estático sin
+lógica de negocio ni backend; sería forzar la metodología donde no
+encaja, mismo criterio que ya se aplicó a ADR-098 (reordenamiento de UI
+sin tocar datos).
+
+### 2. Identidad visual: tokens del design system existente, sin uno nuevo
+
+Reutiliza los tokens reales de `packages/ui/src/tokens/` (coral de marca
+`#fb6a45`, tonos navy, tipografía Schibsted Grotesk) embebidos
+directamente en el `<style>` del HTML — visualmente consistente con las
+3 apps sin necesitar un pipeline de build compartido. El comentario
+`/* Brand (coral pin) */` de `colors.css` inspiró el logotipo nuevo: un
+pin geométrico simple en ese mismo color, junto al wordmark — no existía
+ningún logo previo en el repo.
+
+### 3. Contenido: sin afirmaciones que no se puedan sostener
+
+Confirmado el criterio de contenido: nada de estadísticas ni testimonios
+inventados, ni una sola institución real hoy en producción (confirmado
+en la sesión de backlog técnico). El cierre dice "pensado para
+instituciones de Ciudad de México", no una afirmación de tracción que
+sería falsa. La estructura (hero / problema / cómo funciona / CTA doble
+/ footer) confirmada con el humano.
+
+El hero muestra el journey de 4 estados (En camino → Llegando → En
+puerta → Entregado) con los colores reales de `pickup_requests.status`
+— más específico y honesto que una foto de stock genérica o un
+gradiente, aunque terminó reubicado dentro de "Cómo funciona" (punto 4)
+cuando se agregaron fotos al hero.
+
+### 4. Fotografía: generada por IA, editada para quitar una señalización ficticia problemática
+
+El humano generó 2 fotos con un generador de imágenes, a partir de
+prompts detallados que esta sesión escribió (composición, luz,
+encuadre, y explícitamente "sin letreros ni logos de escuela visibles").
+Ambas imágenes resultantes sí mostraban el nombre de una institución
+("St. Mary's Elementary School", "Oakwood Elementary") en letreros de
+fondo, pese a la instrucción — se difuminó esa zona específica en cada
+imagen (`ImageFilter.GaussianBlur` sobre la región exacta, sin recortar
+ni alterar el resto de la composición) antes de integrarlas. Usar el
+nombre de una institución específica, real o con apariencia de serlo,
+en el sitio de un producto sin relación con ella habría sido engañoso
+— se corrigió antes de publicar, no se dejó pasar.
+
+**Consecuencias.** 3 archivos nuevos (`landing/index.html`,
+`landing/hero-photo.jpg`, `landing/cierre-photo.jpg`), cero cambios a
+código existente. `docs/plan-implementacion.md` actualizado. Pendiente
+fuera de este ADR: configurar nginx en el VPS para servir esta carpeta
+en `casillego.com.mx` (dominio raíz) — mismo patrón que ya existe para
+los otros 4 subdominios, documentado fuera del repo desde ADR-010/100.
+
+## Referencias
+
+- ADR-010 (planeó `casillego.com.mx` → landing/sitio comercial desde el
+  inicio del proyecto).
+- ADR-100 (límite ya establecido: configuración de infraestructura fuera
+  del repo).
+- ADR-099 (`/privacy`, enlazada desde el footer de la landing).
+- ADR-098 (mismo criterio de "sin spec de feature cuando no aplica SDD").
+- ADR-106 (`.gitattributes`, cubre line endings de `landing/index.html`
+  igual que el resto del repo).
+- `docs/design-brief.md` (posicionamiento y personalidad de marca,
+  fuente del copy).

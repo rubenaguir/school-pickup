@@ -871,26 +871,49 @@ ADRs retroactivos de infraestructura ya conocidos.
       entidades reales sin su spec dedicada (ADR-066 la documentó inline
       en el ADR, nunca se promovió a spec propia)
 
-### Panel "Requiere atención" del Dashboard — implementación real (ADR-105)
+### Panel "Requiere atención" del Dashboard — implementación real (ADR-105) ✅ completo
 
-- [ ] `institutions.attention_wait_minutes` (`int`, default `20`) —
+- [x] `institutions.attention_wait_minutes` (`int`, default `20`) —
       migración + entidad + editable en `InstitutionProfile.tsx`, misma
       sección que `arrivalToleranceMinutes`/`advanceNoticeMinutes`/
       `arrivingLeadMinutes`
-- [ ] Índice nuevo `(enrollment_id, guardian_user_id, status)` en
+- [x] Índice nuevo `(enrollment_id, guardian_user_id, status)` en
       `pickup_requests` — sin esto la consulta de `first_time_guardian`
       no tiene ningún índice que la resuelva
-- [ ] `GET /institutions/:id/attention-items` — controller nuevo (mismo
+- [x] `GET /institutions/:id/attention-items` — controller nuevo (mismo
       patrón que `DeliveredTodayController`), 3 consultas independientes:
       `waiting_too_long` (vía `pickup_request_status_history`),
       `cancelled_no_followup` (reutilizando
       `resolveDismissalWindowEnd`/`resolveDeadline` de
       `institution-reports/punctuality.ts`, sin reimplementar), y
       `first_time_guardian`
-- [ ] `Dashboard.tsx`: `PLACEHOLDER_ALERTS` reemplazado por el fetch a
+- [x] `Dashboard.tsx`: `PLACEHOLDER_ALERTS` reemplazado por el fetch a
       `attention-items`, refrescado cada 60s por temporizador — no por
       el canal WS del tablero (la condición 1 cambia con el simple paso
       del tiempo, sin evento que la dispare)
+
+Verificado en clon independiente (commit `448d0e1` + `4086a69`): los 10
+puntos del diseño coinciden fielmente con el código real, incluido el
+bug de microsegundos vs. milisegundos de Postgres encontrado y corregido
+durante la verificación en vivo (`MoreThan(pickup.createdAt)` se
+matcheaba a sí mismo sin `id: Not(pickup.id)`).
+
+### Landing page pública en `landing/` (ADR-107)
+
+- [x] `landing/index.html` — HTML plano sin build, tokens del design
+      system existente embebidos, estructura hero/problema/cómo-funciona
+      con el journey de 4 estados/CTA doble/footer con enlace a
+      `/privacy`
+- [x] Logotipo nuevo — pin geométrico en el coral de marca, no existía
+      ningún logo previo en el repo
+- [x] `landing/hero-photo.jpg`, `landing/cierre-photo.jpg` — generadas
+      por IA a partir de prompts escritos en esta sesión; ambas
+      requirieron edición (`GaussianBlur` localizado) para quitar
+      señalización de una institución específica que el generador
+      incluyó pese a la instrucción explícita de evitarlo
+- [ ] Configurar nginx en el VPS para servir `landing/` en el dominio
+      raíz `casillego.com.mx` — fuera del repo, responsabilidad del
+      humano (mismo límite que ADR-010/100 para el resto de la infra)
 
 ---
 
