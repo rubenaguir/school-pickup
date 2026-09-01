@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CasiLlego — la salida de la escuela, sin esperar a ciegas</title>
+<meta name="description" content="CasiLlego conecta a tutores e instituciones en tiempo real durante la recogida escolar: el tutor avisa que va en camino, la institución prepara al alumno antes de que llegue.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="canonical" href="https://casillego.com.mx/">
+<meta property="og:title" content="CasiLlego — la salida de la escuela, sin esperar a ciegas">
+<meta property="og:description" content="El tutor avisa que va en camino. La institución prepara al alumno. Se acabó la fila de coches esperando sin saber cuánto falta.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://casillego.com.mx/">
+<meta property="og:locale" content="es_MX">
+<style>
+  @font-face {
+    font-family: 'Schibsted Grotesk';
+    src: url('https://fonts.gstatic.com/s/schibstedgrotesk/v7/JqzK5SSPQuCQF3t8uOwiUL-taUTtarVKQ9vZ6pJJWlMNIsEATw.ttf') format('truetype');
+    font-weight: 400 900;
+    font-display: swap;
+  }
+
+  :root {
+    --brand: #fb6a45;
+    --brand-strong: #b4472c;
+    --brand-soft: rgba(251, 106, 69, 0.12);
+    --ink-900: #0e1f30;
+    --ink-700: #243b52;
+    --ink-400: #4b5f6e;
+    --ink-300: #5b7185;
+    --ink-100: #a6b4c2;
+    --bg-app: #e9eef3;
+    --surface: #ffffff;
+    --border: #e2e9f0;
+    --border-strong: #d6e0e8;
+    --status-en-route: #3b82f6;
+    --status-arriving: #f59e0b;
+    --status-arrived: #0ea5a4;
+    --status-delivered: #22c55e;
+    --font-sans: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--bg-app);
+    color: var(--ink-400);
+    line-height: 1.55;
+  }
+
+  h1, h2, h3 { color: var(--ink-900); margin: 0; letter-spacing: -0.01em; }
+
+  a { color: inherit; }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    padding: 22px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header.site .wrap { display: flex; align-items: center; justify-content: space-between; }
+  .wordmark { font-size: 19px; font-weight: 800; color: var(--ink-900); text-decoration: none; }
+  .wordmark span { color: var(--brand); }
+  nav.site-links { display: flex; gap: 10px; }
+  .btn {
+    display: inline-block;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 8px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--brand); color: #ffffff; }
+  .btn-primary:hover { background: var(--brand-strong); }
+  .btn-ghost { background: transparent; color: var(--ink-700); border-color: var(--border-strong); }
+  .btn-ghost:hover { background: var(--bg-app); }
+
+  .hero { padding: 76px 0 64px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
+  .hero h1 { font-size: 42px; font-weight: 800; line-height: 1.15; max-width: 15ch; }
+  .hero p.lead { font-size: 17px; color: var(--ink-400); max-width: 44ch; margin: 20px 0 30px; }
+  .hero .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hero .actions .btn { padding: 13px 22px; font-size: 15px; }
+
+  .journey {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px;
+  }
+  .journey .eyebrow { font-size: 12px; color: var(--ink-300); margin: 0 0 18px; }
+  .journey ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+  .journey li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-700);
+    position: relative;
+  }
+  .journey li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 30px;
+    bottom: -8px;
+    width: 2px;
+    background: var(--border-strong);
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; z-index: 1; }
+  .dot-en-route { background: var(--status-en-route); }
+  .dot-arriving { background: var(--status-arriving); }
+  .dot-arrived { background: var(--status-arrived); }
+  .dot-delivered { background: var(--status-delivered); }
+  .journey .eta { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--ink-300); }
+
+  .photo { border-radius: 16px; overflow: hidden; }
+  .photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .hero .photo { aspect-ratio: 4 / 3; }
+  .cierre .photo { aspect-ratio: 16 / 6; max-width: 720px; margin: 0 auto 32px; }
+
+  section.problema { padding: 56px 0; }
+  .problema .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  .problema h2 { font-size: 26px; font-weight: 800; max-width: 16ch; }
+  .problema .col p { font-size: 15px; color: var(--ink-400); margin: 14px 0 0; }
+  .problema .col h3 { font-size: 15px; font-weight: 700; color: var(--ink-700); }
+
+  section.como-funciona { padding: 56px 0 64px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .como-funciona h2 { font-size: 26px; font-weight: 800; text-align: center; }
+  .pasos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 40px; }
+  .paso .num { font-size: 13px; font-weight: 700; color: var(--brand); margin-bottom: 10px; }
+  .paso h3 { font-size: 16px; font-weight: 700; color: var(--ink-900); }
+  .paso p { font-size: 14px; color: var(--ink-400); margin: 8px 0 0; }
+
+  section.cierre { padding: 72px 0; text-align: center; }
+  .cierre h2 { font-size: 28px; font-weight: 800; max-width: 22ch; margin: 0 auto; }
+  .cierre p { font-size: 15px; color: var(--ink-400); max-width: 40ch; margin: 16px auto 30px; }
+  .cierre .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  footer.site { border-top: 1px solid var(--border); padding: 28px 0; }
+  footer.site .wrap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  footer.site p { font-size: 13px; color: var(--ink-300); margin: 0; }
+  footer.site a { font-size: 13px; color: var(--ink-300); text-decoration: none; }
+  footer.site a:hover { color: var(--ink-700); }
+
+  @media (max-width: 760px) {
+    .hero .wrap { grid-template-columns: 1fr; gap: 36px; }
+    .hero h1 { font-size: 32px; max-width: none; }
+    .problema .wrap { grid-template-columns: 1fr; }
+    .pasos { grid-template-columns: 1fr; }
+    nav.site-links .btn-ghost { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="wordmark" href="#top">
+      <svg width="26" height="26" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="vertical-align:-7px;margin-right:6px">
+        <path d="M14 2.5C8.75 2.5 4.5 6.7 4.5 11.9C4.5 18.3 14 25.5 14 25.5C14 25.5 23.5 18.3 23.5 11.9C23.5 6.7 19.25 2.5 14 2.5Z" fill="#fb6a45"/>
+        <circle cx="14" cy="11.5" r="3.6" fill="#ffffff"/>
+      </svg>Casi<span>Llego</span></a>
+    <nav class="site-links">
+      <a class="btn btn-ghost" href="https://portal.casillego.com.mx/login">Soy institución</a>
+      <a class="btn btn-primary" href="https://app.casillego.com.mx/login">Soy tutor</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <h1>Avisas que vas en camino. Tu hijo sale a tiempo.</h1>
+        <p class="lead">CasiLlego conecta a tutores e instituciones durante la recogida escolar: la escuela ve tu ETA en tiempo real y prepara al alumno antes de que llegues — nada de fila de coches esperando sin saber cuánto falta.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://portal.casillego.com.mx/login">Registrar mi institución</a>
+          <a class="btn btn-ghost" href="https://app.casillego.com.mx/login">Empezar como tutor</a>
+        </div>
+      </div>
+      <div class="photo">
+        <img src="hero-photo.jpg" alt="Una madre recibe con un abrazo a su hija a la salida de la escuela, junto al coche" width="825" height="1024" loading="eager">
+      </div>
+    </div>
+  </section>
+
+  <section class="problema">
+    <div class="wrap">
+      <div>
+        <h2>La salida escolar es un problema de información, no de tráfico</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr;gap:24px">
+        <div class="col">
+          <h3>Para el tutor</h3>
+          <p>No sabes si conviene salir ya o esperar diez minutos más — así que sales antes de tiempo y esperas en la fila, o llegas tarde y tu hijo espera a él.</p>
+        </div>
+        <div class="col">
+          <h3>Para la institución</h3>
+          <p>El personal no sabe quién viene en camino hasta que el coche ya está en la puerta — no hay forma de preparar al alumno con anticipación, ni de organizar la salida por quién llega primero.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="como-funciona">
+    <div class="wrap">
+      <h2>Cómo funciona</h2>
+      <div class="pasos">
+        <div class="paso">
+          <p class="num">1</p>
+          <h3>El tutor avisa</h3>
+          <p>Un botón en la app, al salir hacia la escuela. Nada que llenar, nada que llamar.</p>
+        </div>
+        <div class="paso">
+          <p class="num">2</p>
+          <h3>La institución ve el ETA</h3>
+          <p>El tablero de la institución muestra quién viene, en qué orden va a llegar y cuánto falta — como las llegadas de un aeropuerto.</p>
+        </div>
+        <div class="paso">
+          <p class="num">3</p>
+          <h3>Se confirma la entrega</h3>
+          <p>Un código de 4 dígitos en la app del tutor confirma en la puerta que el alumno se entregó a la persona correcta.</p>
+        </div>
+      </div>
+      <div class="journey" style="margin-top:36px;max-width:520px">
+        <p class="eyebrow">Así se ve el paso 2, en tiempo real</p>
+        <ol>
+          <li><span class="dot dot-en-route" aria-hidden="true"></span>En camino<span class="eta">Salió de casa</span></li>
+          <li><span class="dot dot-arriving" aria-hidden="true"></span>Llegando<span class="eta">3 min</span></li>
+          <li><span class="dot dot-arrived" aria-hidden="true"></span>En puerta<span class="eta">Alumno listo</span></li>
+          <li><span class="dot dot-delivered" aria-hidden="true"></span>Entregado<span class="eta">Confirmado</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="cierre">
+    <div class="wrap">
+      <div class="photo">
+        <img src="cierre-photo.jpg" alt="Un grupo de familias camina con sus hijos por el patio de la institución hacia los coches al final del día" width="1024" height="434" loading="lazy">
+      </div>
+      <h2>Un producto nuevo, pensado para instituciones de Ciudad de México</h2>
+      <p>Si diriges una institución educativa o extracurricular y la salida es un dolor de cabeza diario, hablemos.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://portal.casillego.com.mx/login">Registrar mi institución</a>
+        <a class="btn btn-ghost" href="https://app.casillego.com.mx/login">Descargar para tutores</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>&copy; 2026 CasiLlego</p>
+    <a href="https://portal.casillego.com.mx/privacy">Aviso de privacidad</a>
+  </div>
+</footer>
+
+</body>
+</html>
