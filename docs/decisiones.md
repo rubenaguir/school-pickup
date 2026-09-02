@@ -8448,3 +8448,62 @@ los otros 4 subdominios, documentado fuera del repo desde ADR-010/100.
   igual que el resto del repo).
 - `docs/design-brief.md` (posicionamiento y personalidad de marca,
   fuente del copy).
+
+## ADR-108 — `pin-mark.svg`/`pin-mark-inverse.svg`: `viewBox` con espacio vacío asimétrico, corregido en la fuente
+
+**Contexto.** Al ajustar el logo de `landing/index.html` (ADR-107) a
+petición del humano, se encontró que el `viewBox="0 0 100 116"` del pin
+no está centrado alrededor de la forma que dibuja: el pin ocupa
+verticalmente el rango y≈30–113 dentro de esas 116 unidades — 30 de
+margen vacío arriba, solo 3 abajo. Cualquier consumidor que centre la
+caja del SVG por flexbox (`align-items: center`) termina con el pin
+visiblemente corrido hacia abajo, porque centra la caja, no la forma
+visible dentro de ella. En `landing/index.html` se corrigió recortando
+el `viewBox` a `0 28 100 88` en la copia embebida ahí (ADR-107 ya
+decidió que esa carpeta vive fuera de los workspaces, sin poder
+importar de `packages/ui` — la duplicación de estas rutas SVG entre
+`landing/` y `packages/ui` es una consecuencia ya aceptada de esa
+decisión, no algo nuevo que resolver aquí).
+
+El mismo bug existe en la fuente real que sí consume la aplicación:
+`packages/ui/src/assets/pin-mark.svg` y su variante
+`pin-mark-inverse.svg` (mismo `viewBox`, solo invierte los colores —
+pin blanco/anillo coral en vez de pin coral/anillo blanco). Único
+consumidor real: `BrandPanel.tsx` (panel izquierdo de las 6 pantallas
+de acceso — `Login`/`VerifyEmail`/`AcceptInvitation` en `apps/parent` y
+`apps/portal`, ADR-081), vía `<img src={pinMark}>` con las clases
+`.cll-brand-panel-logo-mark` (`29×34` escritorio, `20×23` móvil,
+ADR-086).
+
+**Decisión.** Se corrige en la fuente, no en cada consumidor — mismo
+criterio que ya se aplicó al centralizar `asApiError`
+(ADR-075/ADR-102) o `resolveDismissalWindowEnd` (reutilizada, nunca
+reimplementada, ADR-105): un solo lugar que arreglar, todo consumidor
+presente y futuro se beneficia sin más cambios.
+
+- `packages/ui/src/assets/pin-mark.svg` y `pin-mark-inverse.svg`:
+  `viewBox` de `0 0 100 116` a `0 28 100 88` — igual que el recorte ya
+  probado en `landing/index.html`, sin tocar los `path`/`g` internos.
+- `BrandPanel.tsx`, clase `.cll-brand-panel-logo-mark`: las
+  dimensiones se recalculan para la nueva proporción (`100:88` en vez
+  de `100:116`), manteniendo el mismo alto que ya tenía cada breakpoint
+  — el ancho es lo único que cambia, calculado como
+  `alto × (100/88)`. Escritorio: `29×34` → `39×34`. Móvil: `20×23` →
+  `26×23`. No es una decisión de tamaño nueva — es la proporción
+  correcta para el mismo alto ya elegido en ADR-086.
+
+**Consecuencias.** Las 6 pantallas de acceso (`Login`, `VerifyEmail`,
+`AcceptInvitation` × 2 apps) quedan con el logo correctamente
+centrado respecto al wordmark "CasiLlego", mismo criterio visual que
+ya tiene `landing/index.html`. Sin cambios de contenido, solo
+geometría del `viewBox` y las 4 dimensiones de la clase CSS.
+
+## Referencias
+
+- ADR-107 (el recorte de `viewBox` ya probado en `landing/index.html`,
+  que este ADR replica en la fuente real).
+- ADR-081 (las 6 pantallas de acceso que usan `BrandPanel`).
+- ADR-086 (dimensiones actuales de `.cll-brand-panel-logo-mark` por
+  breakpoint, que este ADR ajusta en proporción, no en alto).
+- ADR-075/ADR-102, ADR-105 (mismo criterio de corregir en la fuente
+  compartida, no en cada consumidor).

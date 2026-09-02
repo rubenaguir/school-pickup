@@ -51,7 +51,7 @@ const RESPONSIVE_STYLE = `
   padding: 38px 40px;
   justify-content: space-between;
 }
-.cll-brand-panel-logo-mark { width: 29px; height: 34px; }
+.cll-brand-panel-logo-mark { width: 39px; height: 34px; }
 .cll-brand-panel-logo-text { font-size: 22px; }
 .cll-brand-panel-headline { font-size: 38px; line-height: 1.08; }
 .cll-brand-panel-tagline { font-size: 16px; margin-top: 16px; }
@@ -76,7 +76,7 @@ const RESPONSIVE_STYLE = `
     justify-content: center;
     gap: 14px;
   }
-  .cll-brand-panel-logo-mark { width: 20px; height: 23px; }
+  .cll-brand-panel-logo-mark { width: 26px; height: 23px; }
   .cll-brand-panel-logo-text { font-size: 15px; }
   .cll-brand-panel-headline { font-size: 22px; line-height: 1.15; }
   .cll-brand-panel-tagline { display: none; }
