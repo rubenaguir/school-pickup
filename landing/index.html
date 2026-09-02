@@ -201,42 +201,40 @@
         text-align: center;
         margin-bottom: 60px;
       }
-      .problema-cards {
+      .problema-panel {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 32px;
-      }
-      .card {
-        background: var(--bg-app);
-        padding: 40px;
-        border-radius: 20px;
+        grid-template-columns: 1fr 1px 1fr;
+        background: var(--surface);
         border: 1px solid var(--border);
-        position: relative;
+        border-radius: 20px;
+        box-shadow: 0 24px 56px -30px rgba(14, 31, 48, 0.28);
         overflow: hidden;
       }
-      .card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 6px;
+      .problema-side {
+        padding: 44px 40px;
       }
-      .card-tutor::before {
-        background: var(--brand);
+      .problema-divider {
+        background: var(--border-strong);
+        margin: 40px 0;
       }
-      .card-institucion::before {
-        background: var(--ink-700);
+      .problema-icon {
+        width: 34px;
+        height: 34px;
+        margin-bottom: 18px;
       }
-      .card h3 {
-        font-size: 24px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+      .problema-side:first-child .problema-icon {
+        color: var(--brand);
       }
-      .card p {
-        font-size: 16px;
+      .problema-side:last-child .problema-icon {
+        color: var(--ink-700);
+      }
+      .problema-side h3 {
+        font-size: 18px;
+        font-weight: 800;
+        margin: 0 0 10px;
+      }
+      .problema-side p {
+        font-size: 15px;
         margin: 0;
         color: var(--ink-400);
       }
@@ -459,6 +457,15 @@
         .problema-cards {
           grid-template-columns: 1fr;
         }
+        .problema-panel {
+          grid-template-columns: 1fr;
+        }
+        .problema-divider {
+          display: none;
+        }
+        .problema-side:first-child {
+          border-bottom: 1px solid var(--border);
+        }
         .paso-row {
           flex-direction: column;
           text-align: center;
@@ -533,16 +540,27 @@
       <section class="problema">
         <div class="wrap">
           <h2>La salida escolar es un problema de información, no de tráfico</h2>
-          <div class="problema-cards">
-            <div class="card card-tutor">
-              <h3>Para el tutor</h3>
+          <div class="problema-panel">
+            <div class="problema-side">
+              <svg class="problema-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="6" r="2.5" />
+                <path d="M6.5 21v-5.5a3 3 0 0 1 3-3h5a3 3 0 0 1 3 3V21" />
+                <path d="M9 13.5 6 10M15 13.5l3-3.5" />
+              </svg>
+              <h3>El tutor</h3>
               <p>
                 No sabes si conviene salir ya o esperar diez minutos más — así que sales antes de
                 tiempo y esperas en la fila, o llegas tarde y tu hijo te espera a ti.
               </p>
             </div>
-            <div class="card card-institucion">
-              <h3>Para la institución</h3>
+            <div class="problema-divider"></div>
+            <div class="problema-side">
+              <svg class="problema-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V8.5L12 3l8 5.5V21" />
+                <path d="M9 21v-6h6v6" />
+                <path d="M9 12h.01M15 12h.01M9 9h.01M15 9h.01" />
+              </svg>
+              <h3>La institución</h3>
               <p>
                 El personal no sabe quién viene en camino hasta que el coche ya está en la puerta —
                 no hay forma de preparar al alumno con anticipación, ni de organizar la salida por
