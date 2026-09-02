@@ -8507,3 +8507,69 @@ geometría del `viewBox` y las 4 dimensiones de la clase CSS.
   breakpoint, que este ADR ajusta en proporción, no en alto).
 - ADR-075/ADR-102, ADR-105 (mismo criterio de corregir en la fuente
   compartida, no en cada consumidor).
+
+## ADR-109 — Breakpoint de `BrandPanel`/pantallas de acceso: `767px` no cubre tablets de 768px de ancho
+
+**Contexto.** Encontrado por el humano probando `apps/parent` en
+distintos tamaños reales de dispositivo: en un viewport de 768px
+(iPad Mini vertical, y en general cualquier tablet con ese ancho
+exacto en portrait — un tamaño común, no un caso raro), la pantalla de
+`Login` se ve rota — el formulario queda apretado a una columna de
+apenas ~146px, con texto partido palabra por palabra ("¿Primera / vez
+en / CasiLlego? / Crear / cuenta").
+
+Causa raíz, verificada con los números reales del layout: el
+`@media (max-width: 767px)` de `BrandPanel` (que colapsa
+`.cll-auth-shell` a una columna) compara contra el **viewport**, pero
+lo que de verdad rompe el layout es el ancho **del contenido**
+después de restar el `BrandPanel` fijo (470px) y el padding del shell
+— algo que se queda sin espacio mucho antes de que el viewport llegue
+a 767px. A 768px de viewport (que ya no dispara el breakpoint, por 1px):
+`.cll-auth-shell` (`width: 1180, maxWidth: '100%'`) renders a
+`768 - 40` (`--space-8` × 2 de padding externo) `= 728px`;
+`.cll-auth-content` se queda con `728 - 470 = 258px`, menos sus propios
+`padding: 48px 56px` (`112px`) `= 146px` para el formulario — muy por
+debajo de los `380px` de `maxWidth` que el propio formulario espera.
+
+`TutorShell` comparte el mismo valor `767px` (mencionado explícitamente
+en el comentario de `BrandPanel`), pero **no tiene el mismo problema**
+— verificado: su sidebar mide `250px`, no `470px`, y no vive dentro de
+un shell centrado de `1180px` con el mismo padding — a 768px de
+viewport le sobran ~518px de contenido, sin apretarse. Los dos
+`767px` nunca fueron un valor compartido de verdad (no hay una
+variable CSS en común), son dos números iguales por coincidencia en
+dos archivos con matemática de layout distinta — este ADR corrige solo
+el de `BrandPanel`, `TutorShell` se queda como está.
+
+**Decisión.** Sube el breakpoint de `BrandPanel`/las 6 pantallas de
+acceso de `767px` a `1023px` (el punto de corte estándar de "tablet
+landscape / desktop", ya familiar y usado en el ecosistema). Verificado
+con la misma matemática: a `1024px` de viewport (el primer ancho que
+queda en modo escritorio), el formulario recibe `~402px` — cómodo
+alrededor de su `maxWidth: 380`. Cualquier ancho de `1023px` para abajo
+—incluyendo los 768–1024px de tablets portrait e híbridos que hoy se
+rompen— cae en el layout apilado ya construido (`BrandPanel` se
+convierte en una franja compacta de 148px arriba, formulario a ancho
+completo debajo), que ya está bien resuelto, solo nunca se activaba a
+tiempo.
+
+Se corrige el comentario que decía "same breakpoint as `TutorShell`" —
+ya no es cierto, y nunca debió presentarse como una regla compartida.
+
+**Consecuencias.** Las 6 pantallas de acceso (`Login`/`VerifyEmail`/
+`AcceptInvitation` × `apps/parent`/`apps/portal`) pasan a modo apilado
+en un rango de anchos más amplio que antes (768–1023px, no solo
+≤767px) — un cambio de comportamiento visible, pero deliberado: ese
+rango ya se veía roto, ahora se ve como el modo compacto que el propio
+código ya tenía diseñado. `TutorShell` no se toca.
+
+## Referencias
+
+- ADR-081 (las 6 pantallas de acceso que comparten `BrandPanel`/
+  `.cll-auth-shell`).
+- ADR-086 (el layout apilado bajo el breakpoint, y el truco de
+  `!important` para pisar el `flex: 1` inline — sin cambios de
+  comportamiento en ese modo, solo cuándo se activa).
+- ADR-108 (mismo componente, corrección relacionada de alineación del
+  logo — sesión de pruebas de dispositivo real que encontró ambos
+  problemas).

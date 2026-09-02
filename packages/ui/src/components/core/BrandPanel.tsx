@@ -28,7 +28,11 @@ const CHECK = (
  * tag applies to the whole document regardless of where it's mounted in the
  * tree, so the 6 screens only need to add `cll-auth-shell`/`cll-auth-content`
  * classNames to their own container divs, no separate style tag per screen
- * (ADR-086). Same `@media (max-width: 767px)` breakpoint as `TutorShell`.
+ * (ADR-086). Breakpoint at `1023px` — deliberately NOT the same value as
+ * `TutorShell`'s `767px` (ADR-109): this shell's fixed panel is 470px wide
+ * against `TutorShell`'s 250px sidebar, so at a ~768px viewport `TutorShell`
+ * still has room to spare but this shell's form is crushed to ~146px. The two
+ * were never a shared value, just a coincidence of matching numbers.
  *
  * Below the breakpoint, `.cll-auth-shell` stacks to a column and
  * `.cll-auth-content` drops its `flex: 1` (set inline in every screen) for
@@ -59,7 +63,7 @@ const RESPONSIVE_STYLE = `
 .cll-brand-panel-bullet { font-size: 14px; gap: 11px; }
 .cll-brand-panel-bullet-icon { width: 22px; height: 22px; }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .cll-auth-shell { flex-direction: column; min-height: 0 !important; }
   .cll-auth-content {
     flex: none !important;
