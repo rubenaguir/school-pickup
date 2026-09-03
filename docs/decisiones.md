@@ -8573,3 +8573,148 @@ código ya tenía diseñado. `TutorShell` no se toca.
 - ADR-108 (mismo componente, corrección relacionada de alineación del
   logo — sesión de pruebas de dispositivo real que encontró ambos
   problemas).
+
+## ADR-110 — Cierre de los 24 warnings de `@eslint-react` (ADR-102): 10 modernización, 10 documentados, 4 bugs reales
+
+**Contexto.** ADR-102 dejó explícitamente sin corregir los 24 warnings
+que `@eslint-react/eslint-plugin` encontró al agregarlo — "mejora de
+código legítima, no la deuda que ese ADR cierra". A petición del
+humano ("no me gusta que estén ahí"), se investigó cada uno contra el
+código real antes de tocar nada. Resultado: no son 24 correcciones del
+mismo tipo — son 3 grupos con tratamiento distinto.
+
+**Decisión.**
+
+### 1. Modernización a React 19 — 10 warnings, 5 archivos, cambio mecánico
+
+`no-context-provider` + `no-use-context`, siempre en pares, en
+`AuthContext.tsx` (`apps/board`/`apps/parent`/`apps/portal`) e
+`InstitutionContext.tsx` (`apps/board`/`apps/portal` — `apps/parent`
+no tiene uno propio). Los 5 archivos comparten el mismo patrón simple,
+verificado uno por uno: `<XContext.Provider value={v}>{children}</XContext.Provider>`
+→ `<XContext value={v}>{children}</XContext>`, y
+`useContext(XContext)` → `use(XContext)` (`use` importado de `react`
+junto a lo que ya se importaba). Sin cambio de comportamiento — son las
+dos formas que React 19 documenta como equivalentes a los patrones
+anteriores.
+
+### 2. Patrones intencionales — 10 warnings, documentados en el código, no reescritos
+
+**6 — `set-state-in-effect`** (`setConnection`/`setConnectionErrorReason`,
+pares en `useInstitutionBoard.ts`, `useInstitutionBoardMonitor.ts`,
+`useRealtimeChannel.ts`): los 3 archivos llaman `connect()`
+síncronamente al arrancar el efecto, y `connect()` marca
+`'connecting'`/`'reconnecting'` de inmediato, antes de que exista
+siquiera el `WebSocket` — es la señal correcta de "iniciando" en el
+momento en que el efecto arranca (ej. cuando cambia `institutionId`),
+no un efecto secundario evitable. Se documenta con
+`eslint-disable-next-line @eslint-react/set-state-in-effect` justo
+arriba de cada par de líneas, con una nota breve explicando por qué es
+el momento correcto para esa transición de estado — mismo razonamiento
+que ya tenía el código en comentarios cercanos, sin reestructurar la
+lógica de conexión.
+
+**2 — `exhaustive-deps`** (`GeofenceMap.tsx:347`,
+`useRealtimeChannel.ts:256`): **no eran warnings nuevos sin resolver —
+ya tenían `// eslint-disable-next-line react-hooks/exhaustive-deps`**
+con su justificación completa ya escrita (`geofenceRadiusMeters` se lee
+una sola vez a propósito; `getSocketUrl`/`fetchSnapshot`/`mergeDelta`/
+`parseDelta`/`fatalCloseReason`/`refreshToken` son estables por
+convención del consumidor). **Corrección sobre un error de esta misma
+sesión**: la primera versión de este ADR asumía que `react-hooks/
+exhaustive-deps` "ya no existe en este proyecto" tras ADR-102 — falso,
+y contradice el propio ADR-102, que dice explícitamente que
+`@eslint-react` se agregó *junto a* `eslint-plugin-react-hooks`
+(`eslint.config.mjs`, `plugins: { 'react-hooks': reactHooksPlugin }`,
+línea 89), no en su lugar — las reglas de hooks de ese plugin
+(`react-hooks/exhaustive-deps` incluida) siguen activas. Las 2 líneas
+disparan **dos** warnings simultáneos, uno por cada plugin
+(`react-hooks/exhaustive-deps` y `@eslint-react/exhaustive-deps`) —
+renombrar el comentario existente solo cambia cuál de las dos se
+suprime, no basta. Se corrige a una directiva combinada, ambos nombres
+de regla separados por coma en la misma línea:
+
+```
+// eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
+```
+
+Encontrado por el propio Claude Code al implementar — antes de
+commitear, no después.
+
+**2 — `use-state`** (naming, `useInstitutionsQueue.ts:107`,
+`useInstitutionReports.ts:56`): `setFilterState`/`setPeriodState` no
+son errores de nombre — cada hook tiene una función pública
+`setFilter`/`setPeriod` (vía `useCallback`) que envuelve al setter
+crudo con lógica adicional; el nombre "raro" del setter interno existe
+justamente para no chocar con el nombre limpio que sí se expone.
+Documentado con `eslint-disable-next-line`, sin renombrar nada — renombrar
+rompería el patrón wrapper o forzaría renombrar la función pública, un
+cambio de API que nadie pidió.
+
+### 3. Bugs reales — 4 warnings, sí se corrigen
+
+**1 — `use-state` (lazy init)**, `useInstitutionBoard.ts:110`:
+`useState<Set<string>>(new Set())` construye un `Set` nuevo en cada
+render para descartarlo en todos menos el primero — cambia a
+`useState<Set<string>>(() => new Set())`. Sin impacto funcional, es
+una optimización real y trivial.
+
+**1 — `web-api-no-leaked-timeout`**, `useInstitutionBoard.ts:178`
+(dentro de `flagChanged`, la función que resalta temporalmente un
+`pickup_request` que acaba de cambiar en el tablero de Carril): el
+`setTimeout` que quita el resalte nunca se guarda — si el efecto se
+desmonta o `institutionId` cambia mientras el timeout sigue pendiente,
+dispara igual sobre un canal que ya nadie escucha. Se agrega un
+`Set<ReturnType<typeof setTimeout>>` a nivel del efecto (mismo patrón
+que ya usa `retryTimer`, pero admite varios pendientes a la vez —
+`flagChanged` puede llamarse varias veces seguidas para distintos
+alumnos), y se limpia entero en el cleanup del efecto. **La regla
+sigue marcando la línea después del fix** — hace coincidencia de
+patrón textual (`clearTimeout(<misma variable>)` léxico), no rastrea
+limpieza indirecta a través de una colección. El código es correcto
+(el timer sí se limpia, vía `flagTimers.forEach(clearTimeout)` en el
+cleanup); se documenta con `eslint-disable-next-line` explicando por
+qué, en vez de forzar el código a la forma que la regla sabe reconocer
+— `flagChanged` necesita una colección porque puede tener varios
+timers pendientes a la vez, no uno solo con nombre fijo.
+
+**2 — `web-api-no-leaked-event-listener`**, `useWakeLock.ts:38` (mismo
+`addEventListener('release', ...)`, dos advertencias sobre la misma
+línea): **este es el hallazgo real de esta revisión, no solo forma.**
+El listener de `'release'` es una función anónima inline, nunca se
+quita. Si `isVisible` cambia rápido (false→true→false, ej. cambiar de
+pestaña dos veces seguido), el cleanup del efecto viejo llama
+`sentinel.release()`, que dispara `'release'` de forma asíncrona — para
+cuando ese evento llega, ya pudo haberse pedido un candado *nuevo* con
+estado `'active'`, y el listener viejo (que sigue vivo porque nunca se
+quitó) pisa ese `'active'` correcto con `'unavailable'`. Se nombra el
+listener (`handleRelease`) y se quita explícitamente con
+`removeEventListener` en el cleanup, antes de llamar `release()` — la
+condición de carrera deja de ser posible, no solo de advertirse. **Uno
+de los 2 warnings de esta línea se resuelve solo con el fix; el otro
+queda** — la regla no cruza `sentinel` (la constante local dentro de
+`requestLock()`) con `sentinelRef.current` (usado en el cleanup) como
+el mismo objeto, aunque en tiempo de ejecución sí lo sean
+(`sentinelRef.current = sentinel` los une). Mismo criterio que el
+punto anterior: se documenta con `eslint-disable-next-line`, no se
+retuerce el código para que la regla lo reconozca — el `ref` existe
+precisamente porque el cleanup vive en un closure distinto al de
+`requestLock()`.
+
+**Consecuencias.** 12 archivos tocados, cero cambio de comportamiento
+en 20 de los 24 casos (10 modernización + 10 documentados);
+comportamiento genuinamente distinto en 2 (el timeout huérfano ya no
+dispara sobre un canal cerrado; el listener de wake lock ya no puede
+pisar un estado más reciente). `npm run lint` debe quedar en 0
+warnings, 0 errores.
+
+## Referencias
+
+- ADR-102 (introducción de `@eslint-react/eslint-plugin`; dejó estos 24
+  explícitamente sin corregir).
+- ADR-075 (`useRealtimeChannel.ts` como implementación de referencia;
+  `useInstitutionBoard.ts`/`useInstitutionBoardMonitor.ts` quedaron sin
+  migrar a propósito, cada uno con su propia copia del mismo patrón de
+  conexión).
+- ADR-063 punto 4 (`useWakeLock`, el wrapper de
+  `navigator.wakeLock.request`).

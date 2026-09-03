@@ -343,7 +343,7 @@ export function GeofenceMap({
     };
     // `geofenceRadiusMeters` is read once for the initial ring; later values
     // arrive through the sync effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [accessToken]);
 
   useEffect(() => {

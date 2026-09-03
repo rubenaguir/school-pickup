@@ -53,6 +53,10 @@ export interface InstitutionReportsValue {
  * accordingly; this hook just never fetches while it is null.
  */
 export function useInstitutionReports(institutionId: string | null): InstitutionReportsValue {
+  // El setter se llama distinto al de useState a propósito: la función
+  // pública `setPeriod` más abajo envuelve a este, y necesita el nombre
+  // limpio para su propia API. Ver ADR-110.
+  // eslint-disable-next-line @eslint-react/use-state
   const [period, setPeriodState] = useState<ReportPeriod>(DEFAULT_PERIOD);
   const [status, setStatus] = useState<InstitutionReportsStatus>('loading');
   const [report, setReport] = useState<InstitutionReport | null>(null);

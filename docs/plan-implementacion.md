@@ -915,6 +915,34 @@ matcheaba a sí mismo sin `id: Not(pickup.id)`).
       raíz `casillego.com.mx` — fuera del repo, responsabilidad del
       humano (mismo límite que ADR-010/100 para el resto de la infra)
 
+### Cierre de los 24 warnings de `@eslint-react` (ADR-110)
+
+- [ ] 10 — modernización a React 19 (`<Context.Provider>` → `<Context>`,
+      `useContext` → `use`) en `AuthContext.tsx` × 3 apps e
+      `InstitutionContext.tsx` × `apps/board`/`apps/portal`
+- [ ] 6 — `set-state-in-effect` documentado con
+      `eslint-disable-next-line` en `useInstitutionBoard.ts`/
+      `useInstitutionBoardMonitor.ts`/`useRealtimeChannel.ts` — patrón
+      intencional, no se reestructura
+- [ ] 2 — `exhaustive-deps`: comentarios de supresión ya existentes,
+      corregido el nombre de la regla (`react-hooks/exhaustive-deps` →
+      `@eslint-react/exhaustive-deps`) en `GeofenceMap.tsx` y
+      `useRealtimeChannel.ts`
+- [ ] 2 — `use-state` (naming) documentado con `eslint-disable-next-line`
+      en `useInstitutionsQueue.ts`/`useInstitutionReports.ts` — el setter
+      "raro" evita chocar con la función pública que lo envuelve
+- [ ] 1 — `use-state` (lazy init) corregido de verdad en
+      `useInstitutionBoard.ts` — `useState(new Set())` →
+      `useState(() => new Set())`
+- [ ] 1 — `web-api-no-leaked-timeout` corregido de verdad en
+      `useInstitutionBoard.ts` (`flagChanged`) — `Set` de timers
+      pendientes, limpiado en el cleanup del efecto
+- [ ] 2 — `web-api-no-leaked-event-listener` corregido de verdad en
+      `useWakeLock.ts` — **bug real, no solo forma**: listener de
+      `'release'` sin nombre ni limpieza podía pisar el estado de un
+      candado nuevo con el de uno viejo si la visibilidad cambiaba
+      rápido
+
 ---
 
 ## Decisiones pendientes que bloquean fases futuras

@@ -104,6 +104,10 @@ function isStaleRow(error: ApiError): boolean {
  * generic `useRealtimeChannel` (ADR-075).
  */
 export function useInstitutionsQueue(): InstitutionsQueueValue {
+  // El setter se llama distinto al de useState a propósito: la función
+  // pública `setFilter` más abajo envuelve a este, y necesita el nombre
+  // limpio para su propia API. Ver ADR-110.
+  // eslint-disable-next-line @eslint-react/use-state
   const [filter, setFilterState] = useState<StatusFilter>('pending');
   const [banner, setBanner] = useState<Banner | null>(null);
   const [rowError, setRowError] = useState<RowError | null>(null);

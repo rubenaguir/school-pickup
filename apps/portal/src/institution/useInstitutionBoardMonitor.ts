@@ -232,7 +232,13 @@ export function useInstitutionBoardMonitor(
     }
 
     function connect(id: string) {
+      // El estado se marca de inmediato al arrancar la conexión — es la
+      // señal correcta de "iniciando" en el momento en que el efecto
+      // arranca (ej. institutionId cambió), no un efecto secundario
+      // evitable. Ver ADR-110.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnection(retries === 0 ? 'connecting' : 'reconnecting');
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnectionErrorReason(null);
 
       const accessToken = readAccessToken(tokenStorage) ?? '';

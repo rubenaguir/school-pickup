@@ -107,7 +107,7 @@ export function useInstitutionBoard(
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [connectionErrorReason, setConnectionErrorReason] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
+  const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(() => new Set());
 
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ institutionId: string; error: ApiError } | null>(null);
@@ -151,6 +151,10 @@ export function useInstitutionBoard(
     let cancelled = false;
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    // Pending un-flag timers from `flagChanged` — several can be in flight at
+    // once (one per burst of changed ids). Cleared wholesale on cleanup so a
+    // timeout never fires on a channel nobody listens to any more (ADR-110).
+    const flagTimers = new Set<ReturnType<typeof setTimeout>>();
     let retries = 0;
     /** Non-null only while a snapshot request is in flight. */
     let buffered: BoardRow[] | null = null;
@@ -175,13 +179,20 @@ export function useInstitutionBoard(
         ids.forEach((id) => next.add(id));
         return next;
       });
-      setTimeout(() => {
+      // El timer se limpia en el cleanup del efecto vía
+      // `flagTimers.forEach(clearTimeout)` — la regla no reconoce limpieza
+      // indirecta a través de una colección, solo `clearTimeout(<misma
+      // variable>)` textual. Ver ADR-110.
+      // eslint-disable-next-line @eslint-react/web-api-no-leaked-timeout
+      const timer = setTimeout(() => {
+        flagTimers.delete(timer);
         setRecentlyChangedIds((current) => {
           const next = new Set(current);
           ids.forEach((id) => next.delete(id));
           return next;
         });
       }, RECENTLY_CHANGED_MS);
+      flagTimers.add(timer);
     }
 
     function applyLiveDelta(delta: BoardRow) {
@@ -237,7 +248,13 @@ export function useInstitutionBoard(
     }
 
     function connect(id: string) {
+      // El estado se marca de inmediato al arrancar la conexión — es la
+      // señal correcta de "iniciando" en el momento en que el efecto
+      // arranca (ej. institutionId cambió), no un efecto secundario
+      // evitable. Ver ADR-110.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnection(retries === 0 ? 'connecting' : 'reconnecting');
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnectionErrorReason(null);
 
       // Read on every attempt, never captured once — same reasoning as
@@ -338,6 +355,8 @@ export function useInstitutionBoard(
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      flagTimers.forEach(clearTimeout);
+      flagTimers.clear();
       // Nulled first: the handlers above would otherwise schedule a
       // reconnection for a channel nobody is listening to any more.
       if (socket) {

@@ -26,6 +26,10 @@ export function useWakeLock(): WakeLockStatus {
 
     let cancelled = false;
 
+    function handleRelease() {
+      setStatus('unavailable');
+    }
+
     async function requestLock() {
       try {
         const sentinel = await navigator.wakeLock.request('screen');
@@ -35,7 +39,12 @@ export function useWakeLock(): WakeLockStatus {
         }
         sentinelRef.current = sentinel;
         setStatus('active');
-        sentinel.addEventListener('release', () => setStatus('unavailable'));
+        // Se quita explícitamente en el cleanup vía
+        // `sentinelRef.current?.removeEventListener` — la regla no cruza
+        // `sentinel` (variable local) con `sentinelRef.current` como el mismo
+        // objeto, aunque en tiempo de ejecución sí lo sean. Ver ADR-110.
+        // eslint-disable-next-line @eslint-react/web-api-no-leaked-event-listener
+        sentinel.addEventListener('release', handleRelease);
       } catch {
         setStatus('unavailable');
       }
@@ -45,6 +54,9 @@ export function useWakeLock(): WakeLockStatus {
 
     return () => {
       cancelled = true;
+      // Quitar el listener antes de liberar: un 'release' disparado por
+      // esta misma limpieza no debe pisar un estado más nuevo. Ver ADR-110.
+      sentinelRef.current?.removeEventListener('release', handleRelease);
       void sentinelRef.current?.release();
       sentinelRef.current = null;
     };

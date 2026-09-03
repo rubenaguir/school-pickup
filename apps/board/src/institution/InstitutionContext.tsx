@@ -1,6 +1,6 @@
 import {
   createContext,
-  useContext,
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -89,11 +89,11 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     };
   }, [status, memberships, error, retry]);
 
-  return <InstitutionContext.Provider value={value}>{children}</InstitutionContext.Provider>;
+  return <InstitutionContext value={value}>{children}</InstitutionContext>;
 }
 
 export function useInstitution(): InstitutionContextValue {
-  const value = useContext(InstitutionContext);
+  const value = use(InstitutionContext);
   if (!value) {
     throw new Error('useInstitution must be used inside <InstitutionProvider>.');
   }

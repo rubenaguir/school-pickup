@@ -158,7 +158,13 @@ export function useRealtimeChannel<TState, TDelta>(
     }
 
     function connect(key: string) {
+      // El estado se marca de inmediato al arrancar la conexión — es la
+      // señal correcta de "iniciando" en el momento en que el efecto
+      // arranca (ej. institutionId cambió), no un efecto secundario
+      // evitable. Ver ADR-110.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnection(retries === 0 ? 'connecting' : 'reconnecting');
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
       setConnectionErrorReason(null);
 
       const opened = new WebSocket(getSocketUrl());
@@ -252,7 +258,7 @@ export function useRealtimeChannel<TState, TDelta>(
     // `refreshToken` are stable by the consumer's own convention (useCallback,
     // or declared outside render) — same assumption the original per-screen
     // effects made before this extraction.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [channelKey, attempt]);
 
   return { status, state, error, connection, connectionErrorReason, reload };

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 import {
   decodeAccessToken,
   login as requestLogin,
@@ -66,11 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, updateAvailable, login, logout],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext value={value}>{children}</AuthContext>;
 }
 
 export function useAuth(): AuthContextValue {
-  const value = useContext(AuthContext);
+  const value = use(AuthContext);
   if (!value) {
     throw new Error('useAuth must be used inside <AuthProvider>.');
   }
