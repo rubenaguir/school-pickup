@@ -30,6 +30,10 @@
 /** Fixed pause after each queue item, in ms — the "breathing room" ADR-093 asks for. */
 const GAP_MS = 650;
 
+/** Pausa entre el timbre de atención y el arranque de la voz — distinta de
+ * `GAP_MS`, que es la pausa entre anuncios ya terminados. */
+const PRE_VOICE_DELAY_MS = 1000;
+
 /** Activation tone: soft, mid, non-strident. */
 const ACTIVATION_FREQ_HZ = 587.33; // ~D5
 const ACTIVATION_DURATION_MS = 220;
@@ -38,7 +42,11 @@ const ACTIVATION_DURATION_MS = 220;
 const ATTENTION_FREQ_HZ = 987.77; // ~B5
 const ATTENTION_DURATION_MS = 160;
 
-const CHIME_PEAK_GAIN = 0.12;
+/** Ganancia del timbre de activación — sin cambio, mismo valor de siempre. */
+const ACTIVATION_PEAK_GAIN = 0.12;
+
+/** Ganancia del timbre de atención (antes del voceo) — más fuerte a propósito. */
+const ATTENTION_PEAK_GAIN = 0.22;
 
 type QueueItem = { kind: 'activation-chime' } | { kind: 'voice'; text: string };
 
@@ -107,7 +115,7 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-function playTone(freqHz: number, durationMs: number): Promise<void> {
+function playTone(freqHz: number, durationMs: number, peakGain: number): Promise<void> {
   const ctx = getAudioContext();
   if (!ctx) return Promise.resolve();
 
@@ -134,7 +142,7 @@ function playTone(freqHz: number, durationMs: number): Promise<void> {
 
       // Short attack/decay ramps so the tone doesn't click on/off.
       gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(CHIME_PEAK_GAIN, now + 0.015);
+      gain.gain.linearRampToValueAtTime(peakGain, now + 0.015);
       gain.gain.linearRampToValueAtTime(0, now + durationS);
 
       oscillator.connect(gain);
@@ -176,9 +184,11 @@ function speak(text: string): Promise<void> {
 }
 
 const defaultDeps: BoardAudioQueueDeps = {
-  playActivationChime: () => playTone(ACTIVATION_FREQ_HZ, ACTIVATION_DURATION_MS),
+  playActivationChime: () =>
+    playTone(ACTIVATION_FREQ_HZ, ACTIVATION_DURATION_MS, ACTIVATION_PEAK_GAIN),
   playVoice: async (text: string) => {
-    await playTone(ATTENTION_FREQ_HZ, ATTENTION_DURATION_MS);
+    await playTone(ATTENTION_FREQ_HZ, ATTENTION_DURATION_MS, ATTENTION_PEAK_GAIN);
+    await delay(PRE_VOICE_DELAY_MS);
     await speak(text);
   },
   gapMs: GAP_MS,

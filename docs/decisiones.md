@@ -8760,3 +8760,47 @@ inferior. Sin cambio de comportamiento, solo geometría de 2 valores
 - ADR-096 (`AppVersionLabel` en el tablero — su ubicación original
   "esquina inferior izquierda, casi invisible a propósito", que este
   ADR no cambia, solo su distancia del borde).
+
+## ADR-112 — Timbre de atención más fuerte, pausa de 1s antes del voceo
+
+**Contexto.** A petición del humano, ajustando `apps/board/src/board/
+audio-queue.ts` (ADR-093): el timbre de "atención" (el que suena justo
+antes de la voz, distinto del de "activación" cuando algo entra en
+`approaching`) debía sonar más fuerte, y faltaba una pausa perceptible
+entre ese timbre y el arranque del voceo — hoy la voz arranca
+inmediatamente después de que el tono termina.
+
+Verificado antes de tocar nada: `CHIME_PEAK_GAIN` era **un solo valor
+compartido** entre los dos timbres (activación y atención) — subirlo
+habría subido también el de activación, que el humano no pidió tocar.
+Ningún test referencia estas constantes directamente (`audio-queue.
+test.ts` reemplaza `playVoice`/`playActivationChime` por completo vía
+`deps`, nunca ejercita `defaultDeps` real) — cambio de bajo riesgo.
+
+**Decisión.**
+
+- `CHIME_PEAK_GAIN` se separa en dos constantes independientes:
+  `ACTIVATION_PEAK_GAIN = 0.12` (sin cambio, mismo valor de siempre) y
+  `ATTENTION_PEAK_GAIN = 0.22` (el que pidió el humano, ~83% más de
+  ganancia lineal — perceptiblemente más fuerte sin acercarse a
+  saturar, dado que son tonos senoidales simples vía `GainNode`).
+  `playTone()` gana un tercer parámetro `peakGain`, explícito en
+  ambos sitios donde se llama — mismo criterio que ya usan
+  `freqHz`/`durationMs`, sin default implícito.
+- Nueva constante `PRE_VOICE_DELAY_MS = 1000` — pausa insertada entre
+  el timbre de atención y el arranque de `speak(text)`, dentro de
+  `playVoice`. Distinta de `GAP_MS = 650` (la pausa *entre* anuncios
+  ya terminados, sin cambios) — esta es interna a un solo anuncio.
+
+**Consecuencias.** Sin cambios de comportamiento fuera de estos 2
+ajustes de audio. Valores iniciales razonables, no necesariamente
+definitivos — el volumen y el timing solo se pueden juzgar
+escuchándolos en el kiosco real; si tras probarlo el humano quiere
+afinar cualquiera de los 2 números, es un cambio de una constante,
+sin rediseño.
+
+## Referencias
+
+- ADR-093 (cola de audio original — timbre de activación, timbre de
+  atención, `GAP_MS` entre anuncios; este ADR no cambia esa
+  arquitectura, solo 2 valores y un parámetro nuevo).
