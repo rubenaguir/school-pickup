@@ -367,7 +367,7 @@ export function Home() {
        * owns bottom-right), `--ink-100` and tiny — near-invisible to a parent
        * or student at the gate, legible for whoever looks for it on purpose.
        */}
-      <div style={{ position: 'fixed', left: 8, bottom: 6, zIndex: 1, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', left: 8, bottom: 56, zIndex: 1, pointerEvents: 'none' }}>
         <AppVersionLabel buildId={__APP_BUILD_ID__} tone="faint" />
       </div>
     </div>

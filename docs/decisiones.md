@@ -8718,3 +8718,45 @@ warnings, 0 errores.
   conexión).
 - ADR-063 punto 4 (`useWakeLock`, el wrapper de
   `navigator.wakeLock.request`).
+
+## ADR-111 — `ModeSwitcher`/`AppVersionLabel` tapaban la barra de "Voceando" de Andén
+
+**Contexto.** Encontrado por el humano probando el tablero real en modo
+Andén: la barra inferior de `AndenBoard.tsx` ("Voceando: — / Mostrando X
+de Y · se actualiza solo") queda parcialmente tapada por el selector de
+modo (`ModeSwitcher`) y por la etiqueta de versión (`AppVersionLabel`).
+
+Causa raíz: son 3 piezas que no se conocen entre sí. `AndenBoard.tsx`
+tiene `minHeight: '100vh'` en columna — su barra de pie (`padding: '13px
+38px'`, ~50px de alto con el texto) siempre queda pegada al borde
+inferior real de la pantalla, no al final de su propio contenido.
+`ModeSwitcher` (`position: absolute; bottom: 18; right: 18`) y el
+envoltorio de `AppVersionLabel` (`position: fixed; bottom: 6`) son
+overlays globales que `Home.tsx` dibuja **sobre cualquiera de los 3
+modos** — se diseñaron pensando en Sereno/Carril, que no tienen esta
+barra (verificado: ninguno de los dos define un footer parecido), así
+que nadie notó la colisión hasta probarlo en Andén específicamente.
+
+**Decisión.** Sube el `bottom` de ambos overlays en `Home.tsx` lo
+suficiente para despejar la barra de Andén (~50px) más el margen
+original de cada uno:
+
+- `ModeSwitcher`: `bottom: 18` → `bottom: 68`.
+- Envoltorio de `AppVersionLabel`: `bottom: 6` → `bottom: 56`.
+
+Se ajustan los 2 globalmente (no solo cuando `mode === 'anden'`) —
+más simple que lógica condicional por modo, y el único costo es un
+poco más de aire de sobra en Sereno/Carril, que no tienen nada ahí
+abajo con qué chocar. Sin tocar `AndenBoard.tsx` ni la barra en sí —
+el contenido de esa barra ya estaba bien, el problema era el overlay
+por encima, no la barra misma.
+
+**Consecuencias.** Los 3 modos quedan sin colisión visual en la esquina
+inferior. Sin cambio de comportamiento, solo geometría de 2 valores
+`bottom`.
+
+## Referencias
+
+- ADR-096 (`AppVersionLabel` en el tablero — su ubicación original
+  "esquina inferior izquierda, casi invisible a propósito", que este
+  ADR no cambia, solo su distancia del borde).

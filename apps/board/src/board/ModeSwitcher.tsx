@@ -22,7 +22,7 @@ export function ModeSwitcher({ value, onChange }: ModeSwitcherProps) {
     <div
       style={{
         position: 'absolute',
-        bottom: 18,
+        bottom: 68,
         right: 18,
         display: 'flex',
         gap: 4,
