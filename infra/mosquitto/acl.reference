@@ -5,6 +5,12 @@
 # "school-pickup/". Este archivo documenta las reglas de ACL que el operador del
 # broker debe aplicar para aislar a CasiLlego y a cada institución (tenant).
 #
+# ESTADO ACTUAL (2026-11-12, ADR-113): el broker ya autentica y aplica ACL con el
+# plugin dynamic-security (no con este archivo ni con mosquitto_passwd). Hay una
+# sola cuenta de sistema, "casillego" (api + worker), con readwrite/subscribe
+# sobre school-pickup/# y nada mas. Lo de abajo (ACL por institucion) sigue siendo
+# solo el patron objetivo de largo plazo; hoy ningun navegador se conecta (ADR-050).
+#
 # Aislamiento multi-tenant: cada cliente solo puede publicar/suscribirse a los
 # topics de SU institución, todos bajo el prefijo raíz "school-pickup/".
 #

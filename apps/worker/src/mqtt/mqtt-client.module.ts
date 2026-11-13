@@ -10,7 +10,7 @@ import { MQTT_CLIENT, NodeMqttClient, type MqttClient } from '@casillego/shared'
           url: process.env.MQTT_URL ?? 'mqtt://localhost:1883',
           username: process.env.MQTT_USERNAME || undefined,
           password: process.env.MQTT_PASSWORD || undefined,
-          clientId: 'worker',
+          clientId: process.env.MQTT_CLIENT_ID || 'casillego-worker',
         }),
     },
   ],

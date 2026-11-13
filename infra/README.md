@@ -25,7 +25,13 @@ propio servidor de Postgres.
 Es un broker **compartido con otras aplicaciones**. Por eso todos los topics de
 CasiLlego cuelgan del prefijo raíz `school-pickup/` (ver `packages/shared`). Configura
 la conexión vía `.env`: `MQTT_URL`, `MQTT_WS_URL`, `MQTT_USERNAME`,
-`MQTT_PASSWORD`.
+`MQTT_PASSWORD` (y, solo por proceso, `MQTT_CLIENT_ID`).
+
+El broker autentica y aplica ACL con `dynamic-security` (ADR-113): cuenta
+propia `casillego`, limitada a `school-pickup/#`, por TLS en
+`mqtts://mqtt-jmra.com.mx:8883` (por nombre de host, no por IP). Client IDs
+`casillego-api` / `casillego-worker`. Detalle en `docs/arquitectura.md`
+§ "Broker MQTT (Mosquitto)".
 
 - `mosquitto/acl.reference` — plantilla de las reglas de ACL que el operador del
   broker debe aplicar para aislar a CasiLlego y a cada institución (tenant). Es

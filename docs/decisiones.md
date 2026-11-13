@@ -2944,6 +2944,12 @@ suscribirse a topics de cualquier institución — rompiendo el aislamiento
 multi-tenant que gobierna el resto del sistema (`docs/arquitectura.md`,
 `InstitutionMembershipGuard`).
 
+> **Nota (2026-11-12, ADR-113):** el broker ya autentica y aplica ACL por
+> sistema (`dynamic-security`, cuenta `casillego` limitada a
+> `school-pickup/#`). Este ADR se mantiene: ese ACL no aísla a una
+> institución de otra, así que los navegadores siguen sin conectarse
+> directo.
+
 **Decisión.**
 1. **El navegador nunca se conecta directamente al broker MQTT.** En su
    lugar, `apps/api` expone su propio servidor WebSocket nativo (NestJS,
@@ -7798,7 +7804,8 @@ ausente o `false` cae en el `400 INVALID_PAYLOAD` ya existente del
 proyecto (con `details`, mismo mecanismo de siempre, sin código de error
 nuevo). Checkbox `required` en ambos formularios, justo antes del botón
 "Crear cuenta", con enlace inline al aviso integral (modal, sin sacar al
-usuario del formulario). En el caso de reutilización de cuenta existente
+usuario del formulario — **corregido en el addendum de este ADR:** se
+implementó como página propia en pestaña nueva). En el caso de reutilización de cuenta existente
 (ADR-028 punto 2), el consentimiento se escribe igual sobre el `users`
 reutilizado — es un evento real ocurriendo en ese envío, no se omite.
 
@@ -7815,6 +7822,27 @@ formularios de registro (institución, tutor); si el checkbox no se
 marca, el registro no procede. Contenido legal versionado en texto
 plano dentro del repo, no en base de datos — actualizarlo en el futuro
 es un cambio de código simple, sin migración.
+
+### Addendum — página propia en vez de modal
+
+Encontrado al verificar la Fase 10 contra el código real: el enlace del
+checkbox no abre un modal, sino la ruta `/privacy` (`PRIVACY_NOTICE_PATH`,
+pantalla `PrivacyNotice.tsx` en `apps/portal` y `apps/parent`) en una
+pestaña nueva (`target="_blank"`). Confirmado con el humano: **se acepta
+la implementación tal como está y no se mueve el código.** El objetivo
+original del punto 3 —no sacar al usuario del formulario— se cumple
+igual: el formulario queda intacto en su pestaña. La misma ruta sirve
+además como destino del enlace persistente del punto 4 y del pie de la
+landing (ADR-107), algo que un modal atado al formulario no habría
+cubierto.
+
+Precisión menor sobre el punto 2: el contenido compartido en
+`packages/ui` es un componente React (`PrivacyNoticeContent`), no una
+constante de texto; el criterio de fuente única no cambia.
+
+El aviso ya está desplegado en producción; `docs/aviso-privacidad.md`
+lleva como "Última actualización" el 29 de agosto de 2026 (fecha de la
+implementación de la versión `2026-08`).
 
 ## Referencias
 
@@ -8804,3 +8832,70 @@ sin rediseño.
 - ADR-093 (cola de audio original — timbre de activación, timbre de
   atención, `GAP_MS` entre anuncios; este ADR no cambia esa
   arquitectura, solo 2 valores y un parámetro nuevo).
+
+## ADR-113 — El broker MQTT ya autentica y aplica ACL: cuenta propia `casillego`, TLS y client IDs únicos
+
+**Contexto.** El contexto de ADR-050 partía de que el broker compartido
+(`mqtt-jmra.com.mx`) no autenticaba ni tenía ACL, y de que tocar su
+configuración arriesgaba a los demás sistemas que lo usan. El 2026-11-12
+el operador del broker (Mosquitto 2.0.21) activó el plugin
+`dynamic-security`: el acceso anónimo queda cerrado y cada sistema tiene
+su propia cuenta con su propio ACL. Hasta este cambio, `api` y `worker`
+seguían entrando con el usuario compartido `planator` por `1883`, sin
+TLS, y con client IDs fijos y genéricos (`'api'` y `'worker'`, en
+`apps/api/src/mqtt/mqtt.module.ts` y
+`apps/worker/src/mqtt/mqtt-client.module.ts`). En un broker compartido
+eso es frágil, porque si otro sistema se conecta con el mismo ID, el
+broker desconecta a uno de los dos y la reconexión automática los deja
+expulsándose mutuamente.
+
+**Decisión.**
+
+1. **Cuenta propia.** `api` y `worker` se autentican como
+   `MQTT_USERNAME=casillego` (contraseña en `MQTT_PASSWORD`, solo en el
+   `.env` del despliegue, nunca en el repo). El ACL del broker solo le
+   permite publicar, recibir y suscribirse en `school-pickup/#`;
+   cualquier otro topic se rechaza. Coincide con el prefijo raíz que ya
+   usan todos los topics (`MQTT_TOPIC_ROOT`), así que no cambia ningún
+   topic.
+2. **Siempre TLS.** `MQTT_URL=mqtts://mqtt-jmra.com.mx:8883`, por nombre
+   de host y nunca por IP: el certificado (Let's Encrypt) es de
+   `mqtt-jmra.com.mx` y `mqtt.js` lo valida con la verificación por
+   omisión de Node. `NodeMqttClient` no desactiva `rejectUnauthorized`,
+   y no debe hacerlo nunca.
+3. **Client IDs configurables y únicos.** `MQTT_CLIENT_ID`, con valores
+   por omisión `casillego-api` y `casillego-worker`. Ambos procesos leen
+   el mismo `.env` raíz, así que la variable **no se define ahí** (los
+   dos procesos acabarían con el mismo ID). Solo se define por proceso
+   (unit de systemd, pm2, etc.) si algún día corren varias instancias, y
+   entonces con un sufijo distinto por instancia (`casillego-api-1`,
+   `casillego-api-2`).
+4. **ADR-050 se mantiene.** Los navegadores siguen sin conectarse directo
+   al broker. El ACL nuevo es por sistema, no por institución: aísla a
+   CasiLlego de los demás sistemas del broker, pero no a una institución
+   de otra. La barrera multi-tenant del tiempo real sigue siendo el
+   `api` (puente WebSocket y `InstitutionMembershipGuard`). Las
+   credenciales MQTT por usuario emitidas por el `api` siguen sin
+   construirse y no hacen falta mientras ningún navegador se conecte.
+
+**Consecuencias.**
+
+- Se cierra la deuda de "nunca anónimo, siempre TLS" que
+  `docs/arquitectura.md` ya enunciaba para `api`/`worker`.
+- Un error de configuración (contraseña equivocada, URL por IP, puerto
+  `1883`) hace fallar el arranque de `api`/`worker`, porque la conexión
+  inicial falla ruidosamente (ver `docs/arquitectura.md`, ciclo de vida
+  de la conexión MQTT). No queda un proceso vivo pero desconectado.
+- En el log del broker, cada proceso aparece con su ID
+  (`casillego-api`, `casillego-worker`) y `u'casillego'`, lo que lo
+  distingue de los demás sistemas.
+- Cambio de código mínimo: dos `clientId` en los módulos MQTT. URL,
+  usuario y contraseña ya venían del `.env`.
+
+## Referencias
+
+- ADR-050 (puente WebSocket; su punto 2, "cero cambios al broker", se
+  refería a que CasiLlego no tocaría el broker; el cambio lo hizo su
+  operador).
+- ADR-031 punto 4 (suscripciones por comodín bajo `school-pickup/`).
+- `docs/arquitectura.md` § "Broker MQTT (Mosquitto)".

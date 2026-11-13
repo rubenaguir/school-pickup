@@ -68,8 +68,27 @@ activación para `approaching`, tono de atención + voz para `arriving`/`arrived
 y para el anuncio manual del gate console.
 
 ### 6. Broker MQTT (Mosquitto)
-Transporte de tiempo real. Expone un listener WSS para los navegadores. El `api`
-y el `worker` se conectan con la librería `mqtt` de Node.
+Transporte de tiempo real. Es infraestructura **externa y compartida** con otros
+sistemas (`mqtt-jmra.com.mx`, Mosquitto 2.0.21). Solo el `api` y el `worker` se
+conectan, con la librería `mqtt` de Node; los navegadores nunca se conectan
+directo (ADR-050), aunque el broker expone también un listener WSS.
+
+Desde 2026-11-12 el broker **autentica y aplica ACL** con el plugin
+`dynamic-security` (ADR-113): el acceso anónimo está cerrado y cada sistema
+tiene su propia cuenta.
+- **Cuenta:** `casillego`, compartida por `api` y `worker`. Solo puede
+  publicar, recibir y suscribirse en `school-pickup/#`; cualquier otro topic lo
+  rechaza el broker.
+- **Transporte:** siempre TLS, `MQTT_URL=mqtts://mqtt-jmra.com.mx:8883`. Se usa
+  el nombre del host, nunca la IP: el certificado (Let's Encrypt) es de ese
+  nombre y `mqtt.js` lo valida (`rejectUnauthorized` nunca se desactiva).
+- **Client ID único por proceso:** en un broker compartido, dos clientes con el
+  mismo ID se desconectan entre sí. `MQTT_CLIENT_ID`, con valores por omisión
+  `casillego-api` y `casillego-worker`. Como ambos procesos leen el mismo `.env`,
+  la variable no se define ahí: solo por proceso, y con un sufijo distinto por
+  instancia si algún día corren varias (`casillego-api-1`, `casillego-api-2`).
+- Credenciales en `.env`: `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD` (ver
+  `.env.example`).
 
 ### 7. PostgreSQL + PostGIS
 Persistencia. PostGIS habilita geocercas y consultas de distancia (detectar
@@ -409,19 +428,26 @@ que es el motivo de que estos tres sean ports y no clases concretas (ADR-017).
   `InstitutionMembershipGuard` en REST, y el snapshot inicial llega por
   `GET /pickup-requests?deliveryPointId=`. Consecuencia práctica: **hoy la
   barrera real de aislamiento multi-tenant de ese topic es el `api`, no el ACL
-  del broker** (que sigue siendo la intención de largo plazo, ver siguiente
-  punto). Contrato completo en
+  del broker**: el ACL que ya aplica el broker (ADR-113) aísla a CasiLlego de
+  los otros sistemas (`school-pickup/#`), no a una institución de otra. Contrato completo en
   `specs/api-contracts/delivery-point-queue-ws.md`. `board` y `parent` siguen
   hablando MQTT directo por ahora; migrarlos a este mismo puente no requiere
   cambios de arquitectura.
-- **ACL por tenant** en el broker: cada cliente solo puede publicar/suscribirse
+- **ACL por sistema en el broker — ya aplicado (ADR-113).** Autenticación
+  obligatoria (sin anónimos) y la cuenta `casillego` limitada a
+  `school-pickup/#`. Ver § "Broker MQTT (Mosquitto)".
+- **ACL por tenant** en el broker (intención de largo plazo, no construida: hoy
+  solo `api`/`worker` se conectan, ADR-050): cada cliente solo puede publicar/suscribirse
   a los topics de la institución a la que pertenece. Un tutor de una institución
   NO debe poder suscribirse a los topics de otra. Cualquier `institution_member`
   de la institución puede suscribirse a cualquiera de los topics de
   delivery-point de su institución (consistente con ADR-011: el acceso a la
   consola de puerta no está restringido por rol dentro del mismo tenant).
-- TLS obligatorio (WSS). Autenticación por usuario/token en el broker, nunca
-  anónimo. Tokens emitidos por el `api` tras el login.
+- TLS obligatorio (`mqtts://` en `api`/`worker`, WSS si algún día se conecta un
+  navegador). Autenticación en el broker, nunca anónimo: hoy con la cuenta de
+  sistema `casillego` (ADR-113). Los tokens por usuario emitidos por el `api`
+  tras el login siguen sin construirse (no hacen falta mientras los navegadores
+  no se conecten directo, ADR-050).
 - A nivel API (REST, no MQTT), el mismo principio de aislamiento por tenant lo
   aplica el `InstitutionMembershipGuard` (ver sección anterior).
 

@@ -792,30 +792,38 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
       `institution_member.*`, `student_guardian.*`,
       `pickup_request.delivery_code_mismatched`) cubren esa definición
       completa. Sin gap encontrado.
-- [ ] **Aviso de privacidad y consentimiento explícito (ADR-099)** — gap
+- [x] **Aviso de privacidad y consentimiento explícito (ADR-099)** — gap
       real confirmado en la auditoría exhaustiva de esta sesión, el más
-      importante encontrado; diseño ya confirmado con el humano, listo
-      para implementar:
-  - [ ] `docs/aviso-privacidad.md`: contenido final (texto corto +
-        integral), ya escrito y revisado
-  - [ ] `users`: columnas `privacy_accepted_at`/`privacy_notice_version`
+      importante encontrado; implementado y verificado contra el código
+      real:
+  - [x] `docs/aviso-privacidad.md`: contenido final (texto corto +
+        integral), ya escrito, revisado y desplegado (última
+        actualización: 29 de agosto de 2026)
+  - [x] `users`: columnas `privacy_accepted_at`/`privacy_notice_version`
         (nullable, ver `specs/entities/user.md`) — solo se completan en
-        registros nuevos, ninguna cuenta existente se toca
-  - [ ] `RegisterGuardianDto`/`RegisterInstitutionDto.admin`:
+        registros nuevos, ninguna cuenta existente se toca —
+        `1788100000000-PrivacyNoticeConsent.ts`
+  - [x] `RegisterGuardianDto`/`RegisterInstitutionDto.admin`:
         `acceptedPrivacyNotice` con `@Equals(true)`, cae en el
         `400 INVALID_PAYLOAD` ya existente si falta o es `false`
-  - [ ] Checkbox obligatorio + enlace al aviso integral (modal) antes del
+  - [x] Checkbox obligatorio + enlace al aviso integral antes del
         botón "Crear cuenta" en `TutorRegisterForm`
         (`apps/parent/src/screens/Login.tsx`) y
-        `RegisterInstitutionForm` (`apps/portal/src/screens/Login.tsx`)
-  - [ ] Contenido embebido como constante compartida en `packages/ui`,
-        consumido por `apps/portal`/`apps/parent`; `apps/board` no lo
-        necesita
-  - [ ] Enlace persistente para releer el aviso: pie de los 3 shells
+        `RegisterInstitutionForm` (`apps/portal/src/screens/Login.tsx`).
+        El enlace abre la ruta `PRIVACY_NOTICE_PATH`
+        (`PrivacyNotice.tsx`) en pestaña nueva, no un modal — aceptado
+        así, ver el addendum de ADR-099
+  - [x] Contenido embebido como componente compartido
+        (`PrivacyNoticeContent`) en `packages/ui`, consumido por
+        `apps/portal`/`apps/parent`; `apps/board` no lo necesita
+  - [x] Enlace persistente para releer el aviso: pie de los 3 shells
         (junto a "Cerrar sesión", ADR-098) y final de las pantallas de
         Perfil (patrón `AppVersionLabel`, ADR-096)
-- [ ] Resolver el backlog técnico de seguridad (ver tabla abajo) o
-      documentar explícitamente por qué se deja fuera del alcance final
+- [x] Resolver el backlog técnico de seguridad (ver tabla abajo) o
+      documentar explícitamente por qué se deja fuera del alcance final —
+      el único ítem de seguridad de la tabla (refresh token stateless,
+      ADR-019 punto 3) quedó resuelto por ADR-103 (`users.token_version`);
+      los ítems abiertos restantes no son de seguridad
 - [x] **2 ADRs retroactivos de infraestructura** — ADR-010 describía "DNS
       en Akky" y "reverse proxy Caddy", ambos falsos en producción hoy
       (DNS en Linode, nginx). **Resuelto — ADR-100**: ambas desviaciones
@@ -834,7 +842,6 @@ distinta da `409 EMAIL_ALREADY_REGISTERED` con el mensaje matizado.
       tuviera sentido; la complejidad de las 3 pantallas ya queda
       capturada en esos ADRs y en ADR-063–066 (Camino A).
       `specs/README.md` actualizado.
-- [ ] Preparar narrativa de defensa apoyada en `docs/decisiones.md`
 - [ ] Pasada de limpieza de prosa en `specs/` — la corrección de nomenclatura
       de tablas (ADR-027, singular→plural) dejó algunas oraciones en español
       con concordancia gramatical rota (ej. "un `users` invitado..."); no
@@ -898,7 +905,7 @@ bug de microsegundos vs. milisegundos de Postgres encontrado y corregido
 durante la verificación en vivo (`MoreThan(pickup.createdAt)` se
 matcheaba a sí mismo sin `id: Not(pickup.id)`).
 
-### Landing page pública en `landing/` (ADR-107)
+### Landing page pública en `landing/` (ADR-107) ✅ completo
 
 - [x] `landing/index.html` — HTML plano sin build, tokens del design
       system existente embebidos, estructura hero/problema/cómo-funciona
@@ -911,33 +918,35 @@ matcheaba a sí mismo sin `id: Not(pickup.id)`).
       requirieron edición (`GaussianBlur` localizado) para quitar
       señalización de una institución específica que el generador
       incluyó pese a la instrucción explícita de evitarlo
-- [ ] Configurar nginx en el VPS para servir `landing/` en el dominio
+- [x] Configurar nginx en el VPS para servir `landing/` en el dominio
       raíz `casillego.com.mx` — fuera del repo, responsabilidad del
-      humano (mismo límite que ADR-010/100 para el resto de la infra)
+      humano (mismo límite que ADR-010/100 para el resto de la infra).
+      Verificado en producción: `https://casillego.com.mx` sirve el
+      mismo `<title>` que `landing/index.html`
 
-### Cierre de los 24 warnings de `@eslint-react` (ADR-110)
+### Cierre de los 24 warnings de `@eslint-react` (ADR-110) ✅ completo
 
-- [ ] 10 — modernización a React 19 (`<Context.Provider>` → `<Context>`,
+- [x] 10 — modernización a React 19 (`<Context.Provider>` → `<Context>`,
       `useContext` → `use`) en `AuthContext.tsx` × 3 apps e
       `InstitutionContext.tsx` × `apps/board`/`apps/portal`
-- [ ] 6 — `set-state-in-effect` documentado con
+- [x] 6 — `set-state-in-effect` documentado con
       `eslint-disable-next-line` en `useInstitutionBoard.ts`/
       `useInstitutionBoardMonitor.ts`/`useRealtimeChannel.ts` — patrón
       intencional, no se reestructura
-- [ ] 2 — `exhaustive-deps`: comentarios de supresión ya existentes,
+- [x] 2 — `exhaustive-deps`: comentarios de supresión ya existentes,
       corregido el nombre de la regla (`react-hooks/exhaustive-deps` →
       `@eslint-react/exhaustive-deps`) en `GeofenceMap.tsx` y
       `useRealtimeChannel.ts`
-- [ ] 2 — `use-state` (naming) documentado con `eslint-disable-next-line`
+- [x] 2 — `use-state` (naming) documentado con `eslint-disable-next-line`
       en `useInstitutionsQueue.ts`/`useInstitutionReports.ts` — el setter
       "raro" evita chocar con la función pública que lo envuelve
-- [ ] 1 — `use-state` (lazy init) corregido de verdad en
+- [x] 1 — `use-state` (lazy init) corregido de verdad en
       `useInstitutionBoard.ts` — `useState(new Set())` →
       `useState(() => new Set())`
-- [ ] 1 — `web-api-no-leaked-timeout` corregido de verdad en
+- [x] 1 — `web-api-no-leaked-timeout` corregido de verdad en
       `useInstitutionBoard.ts` (`flagChanged`) — `Set` de timers
       pendientes, limpiado en el cleanup del efecto
-- [ ] 2 — `web-api-no-leaked-event-listener` corregido de verdad en
+- [x] 2 — `web-api-no-leaked-event-listener` corregido de verdad en
       `useWakeLock.ts` — **bug real, no solo forma**: listener de
       `'release'` sin nombre ni limpieza podía pisar el estado de un
       candado nuevo con el de uno viejo si la visibilidad cambiaba

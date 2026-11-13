@@ -23,6 +23,42 @@ mostrándolo en un tablero estilo "llegadas de aeropuerto".
 > `CLAUDE.md`, y `docs/plan-implementacion.md` para el detalle fase por
 > fase.
 
+## Funcionalidades principales
+
+- Registro de instituciones participantes y aprobación por parte del super-admin.
+- Alta de alumnos y tutores, y asociación alumno↔institución sujeta a aprobación
+  de la institución.
+- Aviso "voy en camino" desde la app del tutor (PWA `parent`), con tracking de
+  ubicación en tiempo real vía MQTT.
+- Cálculo automático de ETA y transición de estados de la recogida
+  (`pending` → `approaching` → `arriving` → `arrived` → `deliver`/`cancel`).
+- Tablero de institución estilo "llegadas de aeropuerto" (PWA `board`, modo
+  kiosko), con voceo por TTS y alertas de atención.
+- Gestión de puntos de entrega, horarios recurrentes y días especiales por
+  institución.
+- Invitación y administración de personal de institución y de tutores
+  autorizados por alumno.
+- Reportes y métricas por institución, y panel de métricas globales para el
+  super-admin.
+- Notificaciones push (Web Push/VAPID) y aviso de privacidad con
+  consentimiento explícito en el registro (LFPDPPP).
+
+## Stack tecnológico
+
+- **Backend**: Node.js + TypeScript, NestJS (procesos `api` y `worker`).
+- **Base de datos**: PostgreSQL + PostGIS, TypeORM con migraciones versionadas.
+- **Tiempo real**: broker MQTT (Mosquitto); MQTT.js sobre WSS desde el
+  navegador, mediado por `apps/api` (los navegadores nunca se conectan
+  directo al broker).
+- **Autenticación**: JWT (access + refresh) con Passport.js.
+- **Frontend**: React 19 + Vite + TypeScript — `portal` (web), `parent` y
+  `board` (PWA).
+- **Correo transaccional**: Resend.
+- **Geolocalización y ETA**: Mapbox (geocoding + directions API).
+- **Notificaciones push**: Web Push / VAPID.
+- **Infraestructura**: VPS Linode, nginx, certbot (Let's Encrypt), systemd
+  (`casillego-api`, `casillego-worker`).
+
 ## Estructura
 
 ```
@@ -124,6 +160,22 @@ implementaciones, seleccionadas por la variable `EMAIL_PROVIDER`:
 El broker es **compartido con otras aplicaciones**, por lo que todos los topics
 de CasiLlego cuelgan del prefijo raíz de proyecto `school-pickup/`. Las constantes y
 helpers de topics viven en `@casillego/shared`.
+
+## Despliegue
+
+El proyecto está desplegado y en funcionamiento:
+
+- **Landing**: https://casillego.com.mx
+- **Portal administrativo** (instituciones / personal / super-admin):
+  https://portal.casillego.com.mx
+- **App del tutor** (PWA, "voy en camino"): https://app.casillego.com.mx
+- **Tablero de institución** (PWA, modo kiosko): https://tablero.casillego.com.mx
+- **API**: https://api.casillego.com.mx (health check: `/api/health`)
+
+Infraestructura: VPS Linode con nginx como reverse proxy y TLS vía
+certbot/Let's Encrypt; `api` y `worker` corren como servicios systemd
+(`casillego-api`, `casillego-worker`). DNS gestionado en el panel de Linode
+(dominio registrado en Akky, con nameservers apuntando a Linode).
 
 ## Notas de PWA (pendiente)
 

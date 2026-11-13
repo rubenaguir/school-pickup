@@ -46,6 +46,12 @@ export class NodeMqttClient implements MqttClient {
 
   constructor(private readonly config: NodeMqttClientConfig) {}
 
+  /**
+   * TLS (`mqtts://`) relies on Node's default certificate validation: the
+   * broker cert is issued for its hostname, so `MQTT_URL` must use the
+   * hostname (never the IP) and `rejectUnauthorized` must never be turned
+   * off here (ADR-113).
+   */
   async connect(): Promise<void> {
     this.client = await mqtt.connectAsync(this.config.url, {
       username: this.config.username,

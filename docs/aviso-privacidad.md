@@ -6,8 +6,7 @@
 > el proyecto pasa a operar con instituciones reales fuera de un entorno
 > de prueba/tesis.
 
-**Última actualización:** [fecha de publicación — se llena al desplegar
-la versión 1 del aviso]
+**Última actualización:** 29 de agosto de 2026
 
 **Versión:** `2026-08`
 
